@@ -47,23 +47,23 @@ void ZoomOutputManager::set_preview_cb(const std::string &source_name,
                                         ZoomPreviewCallback cb)
 {
     std::lock_guard<std::mutex> lk(m_mtx);
-    for (auto *src : m_sources) {
-        if (src && src->output_name() == source_name) {
-            src->set_preview_cb(std::move(cb));
-            return;
-        }
-    }
+    const auto it = std::find_if(m_sources.begin(), m_sources.end(),
+        [&source_name](const ZoomSource *src) {
+            return src && src->output_name() == source_name;
+        });
+    if (it != m_sources.end())
+        (*it)->set_preview_cb(std::move(cb));
 }
 
 void ZoomOutputManager::clear_preview_cb(const std::string &source_name)
 {
     std::lock_guard<std::mutex> lk(m_mtx);
-    for (auto *src : m_sources) {
-        if (src && src->output_name() == source_name) {
-            src->clear_preview_cb();
-            return;
-        }
-    }
+    const auto it = std::find_if(m_sources.begin(), m_sources.end(),
+        [&source_name](const ZoomSource *src) {
+            return src && src->output_name() == source_name;
+        });
+    if (it != m_sources.end())
+        (*it)->clear_preview_cb();
 }
 
 bool ZoomOutputManager::configure_output_ex(const std::string &source_name,
@@ -77,17 +77,20 @@ bool ZoomOutputManager::configure_output_ex(const std::string &source_name,
                                             bool audience_audio)
 {
     std::lock_guard<std::mutex> lk(m_mtx);
-    for (auto *source : m_sources) {
-        if (!source) continue;
-        if (source->output_name() != source_name) continue;
-        source->configure_output_ex(mode, participant_id, spotlight_slot,
-                                    failover_participant_id, isolate_audio,
-                                    audio_mode, video_resolution,
-                                    audience_audio);
-        ZoomIsoRecorder::instance().on_output_updated(source->output_info());
-        return true;
-    }
-    return false;
+    const auto it = std::find_if(m_sources.begin(), m_sources.end(),
+        [&source_name](const ZoomSource *source) {
+            return source && source->output_name() == source_name;
+        });
+    if (it == m_sources.end())
+        return false;
+
+    ZoomSource *source = *it;
+    source->configure_output_ex(mode, participant_id, spotlight_slot,
+                                failover_participant_id, isolate_audio,
+                                audio_mode, video_resolution,
+                                audience_audio);
+    ZoomIsoRecorder::instance().on_output_updated(source->output_info());
+    return true;
 }
 
 void ZoomOutputManager::resubscribe_all()
