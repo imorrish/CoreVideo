@@ -378,6 +378,39 @@ ZoomDock::ZoomDock(QWidget *parent)
                 update_state_indicator();
             });
 
+    auto *exclude_controls = new QHBoxLayout;
+    exclude_controls->setSpacing(8);
+    m_speaker_exclude_combo_1 = new QComboBox(speaker_group);
+    m_speaker_exclude_combo_2 = new QComboBox(speaker_group);
+    m_speaker_exclude_combo_1->setMinimumWidth(160);
+    m_speaker_exclude_combo_2->setMinimumWidth(160);
+    m_speaker_exclude_combo_1->setToolTip(
+        "Keep this participant out of the automatic active speaker slot.");
+    m_speaker_exclude_combo_2->setToolTip(
+        "Keep this participant out of the automatic active speaker slot.");
+    exclude_controls->addWidget(new QLabel("Exclude", speaker_group));
+    exclude_controls->addWidget(m_speaker_exclude_combo_1, 1);
+    exclude_controls->addWidget(m_speaker_exclude_combo_2, 1);
+    speaker_layout->addLayout(exclude_controls);
+    auto save_exclusions = [this]() {
+        auto s = ZoomPluginSettings::load();
+        s.speaker_exclude_participant_1 = m_speaker_exclude_combo_1
+            ? static_cast<uint32_t>(m_speaker_exclude_combo_1->currentData().toUInt())
+            : 0;
+        s.speaker_exclude_participant_2 = m_speaker_exclude_combo_2
+            ? static_cast<uint32_t>(m_speaker_exclude_combo_2->currentData().toUInt())
+            : 0;
+        if (s.speaker_exclude_participant_1 == s.speaker_exclude_participant_2)
+            s.speaker_exclude_participant_2 = 0;
+        s.save();
+        ZoomOutputManager::instance().resubscribe_all();
+        update_state_indicator();
+    };
+    connect(m_speaker_exclude_combo_1, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [save_exclusions](int) { save_exclusions(); });
+    connect(m_speaker_exclude_combo_2, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [save_exclusions](int) { save_exclusions(); });
+
     auto *override_controls = new QHBoxLayout;
     override_controls->setSpacing(8);
     m_speaker_override_combo = new QComboBox(speaker_group);
@@ -775,8 +808,8 @@ void ZoomDock::update_state_indicator()
         m_speaker_label->setText(spk_name);
     }
 
+    const auto settings = ZoomPluginSettings::load();
     if (m_speaker_sensitivity_spin && m_speaker_hold_spin) {
-        const auto settings = ZoomPluginSettings::load();
         std::vector<uint32_t> excluded;
         if (settings.speaker_exclude_participant_1 != 0)
             excluded.push_back(settings.speaker_exclude_participant_1);
@@ -833,6 +866,25 @@ void ZoomDock::update_state_indicator()
             }
             m_speaker_override_combo->blockSignals(false);
         }
+        auto refresh_exclude_combo = [&roster](QComboBox *combo, uint32_t selected) {
+            if (!combo || combo->view()->isVisible())
+                return;
+            combo->blockSignals(true);
+            combo->clear();
+            combo->addItem("No exclusion", 0);
+            for (const auto &p : roster) {
+                if (p.user_id == 0)
+                    continue;
+                combo->addItem(participant_label(p), p.user_id);
+            }
+            const int idx = combo->findData(selected);
+            combo->setCurrentIndex(idx >= 0 ? idx : 0);
+            combo->blockSignals(false);
+        };
+        refresh_exclude_combo(m_speaker_exclude_combo_1,
+                              settings.speaker_exclude_participant_1);
+        refresh_exclude_combo(m_speaker_exclude_combo_2,
+                              settings.speaker_exclude_participant_2);
         if (m_speaker_take_btn && m_speaker_override_combo) {
             m_speaker_take_btn->setEnabled(
                 m_speaker_override_combo->currentData().toUInt() != 0);
