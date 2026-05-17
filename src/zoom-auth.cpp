@@ -40,10 +40,10 @@ void ZoomAuth::fire_state_cbs()
     std::vector<StateCallback> cbs;
     {
         std::lock_guard<std::mutex> lk(m_cbs_mtx);
-        for (auto &[key, cb] : m_state_cbs)
+        for (const auto &[key, cb] : m_state_cbs)
             if (cb) cbs.push_back(cb);
     }
-    for (auto &cb : cbs)
+    for (const auto &cb : cbs)
         cb(m_state);
 }
 
