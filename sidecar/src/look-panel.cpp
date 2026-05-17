@@ -32,9 +32,13 @@ void LookCard::paintEvent(QPaintEvent *)
     // neutral blue if the theme id doesn't match a built-in.
     QColor accent(0x29, 0x79, 0xff);
     if (!m_look.themeId.isEmpty()) {
-        for (const auto &t : ShowTheme::builtIns()) {
-            if (t.id == m_look.themeId) { accent = t.accent; break; }
-        }
+        const auto themes = ShowTheme::builtIns();
+        const auto theme = std::find_if(themes.begin(), themes.end(),
+            [this](const ShowTheme &t) {
+                return t.id == m_look.themeId;
+            });
+        if (theme != themes.end())
+            accent = theme->accent;
     }
 
     const QColor bg     = m_selected ? QColor(0x14, 0x14, 0x22)

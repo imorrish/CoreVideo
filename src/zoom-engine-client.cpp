@@ -671,10 +671,10 @@ void ZoomEngineClient::handle_event(const std::string &line)
     }
     if (cmd == "frame" && callbacks.on_frame) {
         static std::mutex frame_log_mtx;
-        static std::unordered_map<std::string, uint64_t> frame_counts;
         uint64_t frame_count = 0;
         {
             std::lock_guard<std::mutex> lk(frame_log_mtx);
+            static std::unordered_map<std::string, uint64_t> frame_counts;
             frame_count = ++frame_counts[uuid];
         }
         if (frame_count == 1 || frame_count % 120 == 0) {

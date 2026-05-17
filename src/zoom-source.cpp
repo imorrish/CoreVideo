@@ -770,19 +770,7 @@ bool ZoomSource::output_video_from_shared_memory(
     obs_source_frame frame = {};
     frame.timestamp = ts;
 
-    bool hw_ok = false;
-#ifdef COREVIDEO_HW_ACCEL
-    if (m_hw_pipeline.active_mode() != HwAccelMode::None &&
-        obs_w == w && obs_h == h) {
-        hw_ok = m_hw_pipeline.process(obs_y_ptr, obs_u_ptr, obs_v_ptr,
-                                      static_cast<int>(obs_w), static_cast<int>(obs_h),
-                                      static_cast<int>(obs_stride_y),
-                                      static_cast<int>(obs_stride_uv),
-                                      static_cast<int>(obs_stride_uv), frame);
-    }
-#endif
-
-    if (!hw_ok) {
+    auto configure_cpu_frame = [&]() {
         frame.format     = VIDEO_FORMAT_I420;
         frame.width      = obs_w;
         frame.height     = obs_h;
@@ -792,7 +780,23 @@ bool ZoomSource::output_video_from_shared_memory(
         frame.linesize[0] = obs_stride_y;
         frame.linesize[1] = obs_stride_uv;
         frame.linesize[2] = obs_stride_uv;
+    };
+#ifdef COREVIDEO_HW_ACCEL
+    bool hw_ok = false;
+    if (m_hw_pipeline.active_mode() != HwAccelMode::None &&
+        obs_w == w && obs_h == h) {
+        hw_ok = m_hw_pipeline.process(obs_y_ptr, obs_u_ptr, obs_v_ptr,
+                                      static_cast<int>(obs_w), static_cast<int>(obs_h),
+                                      static_cast<int>(obs_stride_y),
+                                      static_cast<int>(obs_stride_uv),
+                                      static_cast<int>(obs_stride_uv), frame);
     }
+
+    if (!hw_ok)
+        configure_cpu_frame();
+#else
+    configure_cpu_frame();
+#endif
     set_yuv_frame_color_info(frame);
 
     obs_source_output_video(source, &frame);
@@ -1065,9 +1069,8 @@ static void *zoom_source_create_common(obs_data_t *settings, obs_source_t *sourc
     ctx->source = source;
     ctx->source_uuid = make_source_uuid();
     ctx->dedicated_active_speaker_source = dedicated_active_speaker;
-    if (dedicated_active_speaker)
-        ctx->m_director_preview_uuid = make_source_uuid();
     if (dedicated_active_speaker) {
+        ctx->m_director_preview_uuid = make_source_uuid();
         obs_data_set_int(settings, PROP_ASSIGNMENT_MODE,
                          static_cast<int>(AssignmentMode::ActiveSpeaker));
         obs_data_set_bool(settings, PROP_ACTIVE_SPEAKER, true);

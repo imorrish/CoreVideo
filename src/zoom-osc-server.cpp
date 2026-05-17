@@ -122,6 +122,8 @@ static QByteArray build_osc(const std::string &address,
     return pkt;
 }
 
+static bool find_output_by_source(const std::string &source, ZoomOutputInfo &out);
+
 // ── ZoomOscServer ────────────────────────────────────────────────────────────
 
 ZoomOscServer &ZoomOscServer::instance()
@@ -325,12 +327,10 @@ void ZoomOscServer::dispatch(const QString &address,
         // Preserve existing isolate_audio/audio_mode by reading current config.
         bool isolate     = false;
         AudioChannelMode mode = AudioChannelMode::Mono;
-        for (const auto &o : ZoomOutputManager::instance().outputs()) {
-            if (o.source_name == source) {
-                isolate = o.isolate_audio;
-                mode    = o.audio_mode;
-                break;
-            }
+        ZoomOutputInfo current;
+        if (find_output_by_source(source, current)) {
+            isolate = current.isolate_audio;
+            mode    = current.audio_mode;
         }
         ZoomOutputManager::instance().configure_output(
             source, pid, active_speaker, isolate, mode);
@@ -347,12 +347,10 @@ void ZoomOscServer::dispatch(const QString &address,
         const std::string source = args[0].s;
         bool isolate     = false;
         AudioChannelMode mode = AudioChannelMode::Mono;
-        for (const auto &o : ZoomOutputManager::instance().outputs()) {
-            if (o.source_name == source) {
-                isolate = o.isolate_audio;
-                mode    = o.audio_mode;
-                break;
-            }
+        ZoomOutputInfo current;
+        if (find_output_by_source(source, current)) {
+            isolate = current.isolate_audio;
+            mode    = current.audio_mode;
         }
         ZoomOutputManager::instance().configure_output(source, 0, true, isolate, mode);
         return;
@@ -382,13 +380,11 @@ void ZoomOscServer::dispatch(const QString &address,
         bool isolate          = false;
         AudioChannelMode amode = AudioChannelMode::Mono;
         uint32_t failover     = 0;
-        for (const auto &o : ZoomOutputManager::instance().outputs()) {
-            if (o.source_name == source) {
-                isolate  = o.isolate_audio;
-                amode    = o.audio_mode;
-                failover = o.failover_participant_id;
-                break;
-            }
+        ZoomOutputInfo current;
+        if (find_output_by_source(source, current)) {
+            isolate  = current.isolate_audio;
+            amode    = current.audio_mode;
+            failover = current.failover_participant_id;
         }
         ZoomOutputManager::instance().configure_output_ex(
             source, mode, pid, slot, failover, isolate, amode);
@@ -408,13 +404,13 @@ void ZoomOscServer::dispatch(const QString &address,
         const AudioChannelMode amode = (args[1].s == "stereo")
                                        ? AudioChannelMode::Stereo
                                        : AudioChannelMode::Mono;
-        for (const auto &o : ZoomOutputManager::instance().outputs()) {
-            if (o.source_name == source) {
-                ZoomOutputManager::instance().configure_output_ex(
-                    source, o.assignment, o.participant_id, o.spotlight_slot,
-                    o.failover_participant_id, o.isolate_audio, amode);
-                return;
-            }
+        ZoomOutputInfo current;
+        if (find_output_by_source(source, current)) {
+            ZoomOutputManager::instance().configure_output_ex(
+                source, current.assignment, current.participant_id,
+                current.spotlight_slot, current.failover_participant_id,
+                current.isolate_audio, amode);
+            return;
         }
         blog(LOG_WARNING, "[obs-zoom-plugin] OSC /zoom/output/audio_mode: unknown source '%s'",
              source.c_str());
@@ -432,13 +428,13 @@ void ZoomOscServer::dispatch(const QString &address,
         }
         const std::string source  = args[0].s;
         const uint32_t failover   = static_cast<uint32_t>(args[1].i);
-        for (const auto &o : ZoomOutputManager::instance().outputs()) {
-            if (o.source_name == source) {
-                ZoomOutputManager::instance().configure_output_ex(
-                    source, o.assignment, o.participant_id, o.spotlight_slot,
-                    failover, o.isolate_audio, o.audio_mode);
-                return;
-            }
+        ZoomOutputInfo current;
+        if (find_output_by_source(source, current)) {
+            ZoomOutputManager::instance().configure_output_ex(
+                source, current.assignment, current.participant_id,
+                current.spotlight_slot, failover, current.isolate_audio,
+                current.audio_mode);
+            return;
         }
         blog(LOG_WARNING, "[obs-zoom-plugin] OSC /zoom/output/failover: unknown source '%s'",
              source.c_str());
@@ -455,12 +451,12 @@ void ZoomOscServer::dispatch(const QString &address,
         }
         const std::string source = args[0].s;
         const bool isolate = args[1].i != 0;
-        for (const auto &o : ZoomOutputManager::instance().outputs()) {
-            if (o.source_name == source) {
-                ZoomOutputManager::instance().configure_output(
-                    source, o.participant_id, o.active_speaker, isolate, o.audio_mode);
-                return;
-            }
+        ZoomOutputInfo current;
+        if (find_output_by_source(source, current)) {
+            ZoomOutputManager::instance().configure_output(
+                source, current.participant_id, current.active_speaker,
+                isolate, current.audio_mode);
+            return;
         }
         blog(LOG_WARNING, "[obs-zoom-plugin] OSC /zoom/isolate_audio: unknown source '%s'",
              source.c_str());
@@ -512,6 +508,19 @@ static std::string meeting_state_str(MeetingState s)
     case MeetingState::Failed:     return "failed";
     }
     return "unknown";
+}
+
+static bool find_output_by_source(const std::string &source, ZoomOutputInfo &out)
+{
+    const auto outputs = ZoomOutputManager::instance().outputs();
+    const auto it = std::find_if(outputs.begin(), outputs.end(),
+        [&source](const ZoomOutputInfo &o) {
+            return o.source_name == source;
+        });
+    if (it == outputs.end())
+        return false;
+    out = *it;
+    return true;
 }
 
 void ZoomOscServer::send_status(const QHostAddress &to, quint16 port)
