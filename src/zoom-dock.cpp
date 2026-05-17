@@ -50,6 +50,7 @@
 #include <util/platform.h>
 #include <algorithm>
 #include <unordered_map>
+#include <vector>
 #if defined(_WIN32)
 #include <windows.h>
 #endif
@@ -775,10 +776,19 @@ void ZoomDock::update_state_indicator()
     }
 
     if (m_speaker_sensitivity_spin && m_speaker_hold_spin) {
+        const auto settings = ZoomPluginSettings::load();
+        std::vector<uint32_t> excluded;
+        if (settings.speaker_exclude_participant_1 != 0)
+            excluded.push_back(settings.speaker_exclude_participant_1);
+        if (settings.speaker_exclude_participant_2 != 0 &&
+            settings.speaker_exclude_participant_2 !=
+                settings.speaker_exclude_participant_1)
+            excluded.push_back(settings.speaker_exclude_participant_2);
         SpeakerDirector::instance().configure(
             static_cast<uint32_t>(m_speaker_sensitivity_spin->value()),
             static_cast<uint32_t>(m_speaker_hold_spin->value()),
-            true);
+            settings.speaker_require_video,
+            excluded);
     }
     if (m_director_speaker_label && m_raw_speaker_label &&
         m_candidate_speaker_label && m_last_speaker_label) {

@@ -166,6 +166,18 @@ ZoomPluginSettings ZoomPluginSettings::load()
     if (config_has_user_value(cfg, SECTION, "SpeakerRequireVideo"))
         s.speaker_require_video =
             config_get_int(cfg, SECTION, "SpeakerRequireVideo") != 0;
+    const int speaker_exclude_1 =
+        config_get_int(cfg, SECTION, "SpeakerExcludeParticipant1");
+    if (config_has_user_value(cfg, SECTION, "SpeakerExcludeParticipant1") &&
+        speaker_exclude_1 >= 0)
+        s.speaker_exclude_participant_1 =
+            static_cast<uint32_t>(speaker_exclude_1);
+    const int speaker_exclude_2 =
+        config_get_int(cfg, SECTION, "SpeakerExcludeParticipant2");
+    if (config_has_user_value(cfg, SECTION, "SpeakerExcludeParticipant2") &&
+        speaker_exclude_2 >= 0)
+        s.speaker_exclude_participant_2 =
+            static_cast<uint32_t>(speaker_exclude_2);
 
     return s;
 }
@@ -246,5 +258,9 @@ void ZoomPluginSettings::save() const
                       static_cast<int>(speaker_hold_ms));
     config_set_int   (cfg, SECTION, "SpeakerRequireVideo",
                       speaker_require_video ? 1 : 0);
+    config_set_int   (cfg, SECTION, "SpeakerExcludeParticipant1",
+                      static_cast<int>(speaker_exclude_participant_1));
+    config_set_int   (cfg, SECTION, "SpeakerExcludeParticipant2",
+                      static_cast<int>(speaker_exclude_participant_2));
     config_save_safe(cfg, "tmp", nullptr);
 }

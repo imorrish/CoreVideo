@@ -9,12 +9,23 @@ SpeakerDirector &SpeakerDirector::instance()
 }
 
 void SpeakerDirector::configure(uint32_t sensitivity_ms, uint32_t hold_ms,
-                                bool require_video)
+                                bool require_video,
+                                std::vector<uint32_t> excluded_participant_ids)
 {
     std::lock_guard<std::mutex> lk(m_mtx);
     m_sensitivity_ms = sensitivity_ms;
     m_hold_ms = hold_ms;
     m_require_video = require_video;
+    excluded_participant_ids.erase(
+        std::remove(excluded_participant_ids.begin(),
+                    excluded_participant_ids.end(), 0),
+        excluded_participant_ids.end());
+    std::sort(excluded_participant_ids.begin(), excluded_participant_ids.end());
+    excluded_participant_ids.erase(
+        std::unique(excluded_participant_ids.begin(),
+                    excluded_participant_ids.end()),
+        excluded_participant_ids.end());
+    m_excluded_participant_ids = std::move(excluded_participant_ids);
 }
 
 void SpeakerDirector::reset()
@@ -26,6 +37,7 @@ void SpeakerDirector::reset()
     m_candidate_speaker_id = 0;
     m_last_speaker_id = 0;
     m_manual_speaker_id = 0;
+    m_excluded_participant_ids.clear();
     m_candidate_since_ms = 0;
     m_last_switch_ms = 0;
 }
@@ -33,6 +45,10 @@ void SpeakerDirector::reset()
 bool SpeakerDirector::participant_allowed_locked(uint32_t participant_id) const
 {
     if (participant_id == 0)
+        return false;
+    if (std::find(m_excluded_participant_ids.begin(),
+                  m_excluded_participant_ids.end(),
+                  participant_id) != m_excluded_participant_ids.end())
         return false;
 
     const auto it = std::find_if(m_roster.begin(), m_roster.end(),
@@ -178,6 +194,7 @@ SpeakerDirectorSnapshot SpeakerDirector::snapshot(uint64_t now_ms) const
     s.hold_remaining_ms = held_for >= m_hold_ms ? 0 : m_hold_ms - held_for;
     s.sensitivity_ms = m_sensitivity_ms;
     s.hold_ms = m_hold_ms;
+    s.excluded_participant_ids = m_excluded_participant_ids;
     s.require_video = m_require_video;
     s.manual_active = m_manual_speaker_id != 0;
     return s;

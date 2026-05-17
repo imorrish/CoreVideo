@@ -15,6 +15,7 @@ struct SpeakerDirectorSnapshot {
     uint64_t hold_remaining_ms = 0;
     uint32_t sensitivity_ms = 500;
     uint32_t hold_ms = 2000;
+    std::vector<uint32_t> excluded_participant_ids;
     bool require_video = true;
     bool manual_active = false;
 };
@@ -24,7 +25,8 @@ public:
     static SpeakerDirector &instance();
 
     void configure(uint32_t sensitivity_ms, uint32_t hold_ms,
-                   bool require_video = true);
+                   bool require_video = true,
+                   std::vector<uint32_t> excluded_participant_ids = {});
     bool update_roster(const std::vector<ParticipantInfo> &roster,
                        uint32_t raw_speaker_id,
                        uint64_t now_ms);
@@ -51,6 +53,7 @@ private:
     uint32_t m_candidate_speaker_id = 0;
     uint32_t m_last_speaker_id = 0;
     uint32_t m_manual_speaker_id = 0;
+    std::vector<uint32_t> m_excluded_participant_ids;
     uint64_t m_candidate_since_ms = 0;
     uint64_t m_last_switch_ms = 0;
     uint32_t m_sensitivity_ms = 500;

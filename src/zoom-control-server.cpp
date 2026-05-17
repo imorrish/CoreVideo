@@ -20,6 +20,7 @@
 #include <cmath>
 #include <cstdint>
 #include <limits>
+#include <vector>
 
 // Timing-safe string equality — prevents token leakage via timing side-channel.
 // noinline prevents the compiler from inlining this and then optimising away
@@ -261,6 +262,10 @@ static QJsonObject speaker_director_to_json()
     obj["sensitivity_ms"] = static_cast<double>(s.sensitivity_ms);
     obj["hold_ms"] = static_cast<double>(s.hold_ms);
     obj["require_video"] = s.require_video;
+    QJsonArray excluded;
+    for (const uint32_t id : s.excluded_participant_ids)
+        excluded.append(static_cast<double>(id));
+    obj["excluded_participant_ids"] = excluded;
     return obj;
 }
 
@@ -365,12 +370,28 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
             return;
         }
         const bool require_video = req.value("require_video").toBool(true);
-        SpeakerDirector::instance().configure(sensitivity_ms, hold_ms, require_video);
         auto settings = ZoomPluginSettings::load();
         settings.speaker_sensitivity_ms = sensitivity_ms;
         settings.speaker_hold_ms = hold_ms;
         settings.speaker_require_video = require_video;
+        if (req.contains("excluded_participant_ids") &&
+            req.value("excluded_participant_ids").isArray()) {
+            const QJsonArray excluded = req.value("excluded_participant_ids").toArray();
+            settings.speaker_exclude_participant_1 = excluded.size() > 0
+                ? static_cast<uint32_t>(excluded.at(0).toInt(0)) : 0;
+            settings.speaker_exclude_participant_2 = excluded.size() > 1
+                ? static_cast<uint32_t>(excluded.at(1).toInt(0)) : 0;
+        }
         settings.save();
+        std::vector<uint32_t> excluded;
+        if (settings.speaker_exclude_participant_1 != 0)
+            excluded.push_back(settings.speaker_exclude_participant_1);
+        if (settings.speaker_exclude_participant_2 != 0 &&
+            settings.speaker_exclude_participant_2 !=
+                settings.speaker_exclude_participant_1)
+            excluded.push_back(settings.speaker_exclude_participant_2);
+        SpeakerDirector::instance().configure(sensitivity_ms, hold_ms,
+                                              require_video, excluded);
         write_response(socket, {
             {"ok", true},
             {"speaker_director", speaker_director_to_json()}

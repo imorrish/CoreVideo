@@ -17,6 +17,8 @@
 #define PROP_ACTIVE_SPEAKER       "active_speaker_mode"
 #define PROP_SPEAKER_SENSITIVITY  "speaker_sensitivity_ms"
 #define PROP_SPEAKER_HOLD         "speaker_hold_ms"
+#define PROP_SPEAKER_EXCLUDE_1    "speaker_exclude_participant_1"
+#define PROP_SPEAKER_EXCLUDE_2    "speaker_exclude_participant_2"
 #define PROP_VIDEO_LOSS_MODE      "video_loss_mode"
 #define PROP_ISOLATE_AUDIO        "isolate_audio"
 #define PROP_AUDIENCE_AUDIO       "audience_audio"
@@ -89,6 +91,28 @@ static uint32_t effective_participant_id(uint32_t configured_participant_id,
 static bool is_active_speaker_assignment(AssignmentMode mode)
 {
     return mode == AssignmentMode::ActiveSpeaker;
+}
+
+static std::vector<uint32_t> speaker_exclusions_from_settings(
+    const ZoomPluginSettings &settings)
+{
+    std::vector<uint32_t> ids;
+    if (settings.speaker_exclude_participant_1 != 0)
+        ids.push_back(settings.speaker_exclude_participant_1);
+    if (settings.speaker_exclude_participant_2 != 0 &&
+        settings.speaker_exclude_participant_2 !=
+            settings.speaker_exclude_participant_1)
+        ids.push_back(settings.speaker_exclude_participant_2);
+    return ids;
+}
+
+static void configure_speaker_director_from_settings(
+    const ZoomPluginSettings &settings)
+{
+    SpeakerDirector::instance().configure(
+        settings.speaker_sensitivity_ms, settings.speaker_hold_ms,
+        settings.speaker_require_video,
+        speaker_exclusions_from_settings(settings));
 }
 
 static uint32_t width_for_resolution(VideoResolution res)
@@ -245,6 +269,19 @@ void ZoomSource::apply_settings(obs_data_t *settings)
     speaker_sensitivity_ms = static_cast<uint32_t>(
         obs_data_get_int(settings, PROP_SPEAKER_SENSITIVITY));
     speaker_hold_ms = static_cast<uint32_t>(obs_data_get_int(settings, PROP_SPEAKER_HOLD));
+    if (dedicated_active_speaker_source ||
+        obs_data_get_int(settings, PROP_ASSIGNMENT_MODE) ==
+            static_cast<int>(AssignmentMode::ActiveSpeaker)) {
+        ZoomPluginSettings plugin_settings = ZoomPluginSettings::load();
+        plugin_settings.speaker_sensitivity_ms = speaker_sensitivity_ms;
+        plugin_settings.speaker_hold_ms = speaker_hold_ms;
+        plugin_settings.speaker_exclude_participant_1 = static_cast<uint32_t>(
+            obs_data_get_int(settings, PROP_SPEAKER_EXCLUDE_1));
+        plugin_settings.speaker_exclude_participant_2 = static_cast<uint32_t>(
+            obs_data_get_int(settings, PROP_SPEAKER_EXCLUDE_2));
+        plugin_settings.save();
+        configure_speaker_director_from_settings(plugin_settings);
+    }
     isolate_audio = obs_data_get_bool(settings, PROP_ISOLATE_AUDIO);
     audience_audio = obs_data_get_bool(settings, PROP_AUDIENCE_AUDIO);
     // isolate wins if both were saved together (legacy scenes).
@@ -470,9 +507,7 @@ void ZoomSource::subscribe()
         const bool use_active_speaker = is_active_speaker_assignment(mode);
         if (use_active_speaker) {
             const ZoomPluginSettings settings = ZoomPluginSettings::load();
-            SpeakerDirector::instance().configure(
-                settings.speaker_sensitivity_ms, settings.speaker_hold_ms,
-                settings.speaker_require_video);
+            configure_speaker_director_from_settings(settings);
         }
         uint32_t target = effective_participant_id(participant_id,
                                                     use_active_speaker);
@@ -574,9 +609,7 @@ void ZoomSource::maybe_update_director_subscription()
         m_director_preview_uuid = make_source_uuid();
 
     const ZoomPluginSettings settings = ZoomPluginSettings::load();
-    SpeakerDirector::instance().configure(
-        settings.speaker_sensitivity_ms, settings.speaker_hold_ms,
-        settings.speaker_require_video);
+    configure_speaker_director_from_settings(settings);
 
     const uint32_t directed_id = ZoomEngineClient::instance().active_speaker_id();
     const uint32_t current_id =
@@ -1202,6 +1235,28 @@ static obs_properties_t *zoom_source_get_properties(void *data)
     obs_properties_add_int(props, PROP_SPEAKER_HOLD,
         obs_module_text("ZoomSource.SpeakerHold"), 0, 10000, 100);
 
+    obs_property_t *exclude_1 = obs_properties_add_list(
+        props, PROP_SPEAKER_EXCLUDE_1,
+        obs_module_text("ZoomSource.SpeakerExclude1"),
+        OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+    obs_property_t *exclude_2 = obs_properties_add_list(
+        props, PROP_SPEAKER_EXCLUDE_2,
+        obs_module_text("ZoomSource.SpeakerExclude2"),
+        OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+    obs_property_list_add_int(exclude_1,
+        obs_module_text("ZoomSource.SpeakerExcludeNone"), 0);
+    obs_property_list_add_int(exclude_2,
+        obs_module_text("ZoomSource.SpeakerExcludeNone"), 0);
+    for (const auto &p : ZoomEngineClient::instance().roster()) {
+        std::string label = p.display_name.empty()
+            ? "ID " + std::to_string(p.user_id)
+            : p.display_name + " (" + std::to_string(p.user_id) + ")";
+        obs_property_list_add_int(exclude_1, label.c_str(),
+                                  static_cast<long long>(p.user_id));
+        obs_property_list_add_int(exclude_2, label.c_str(),
+                                  static_cast<long long>(p.user_id));
+    }
+
     // ── ZoomISO-style assignment options ─────────────────────────────────────
     obs_property_t *amode = obs_properties_add_list(props, PROP_ASSIGNMENT_MODE,
         obs_module_text("ZoomSource.AssignmentMode"),
@@ -1313,8 +1368,6 @@ static obs_properties_t *zoom_source_get_properties(void *data)
     if (ctx->dedicated_active_speaker_source) {
         obs_property_set_visible(participant, false);
         obs_property_set_visible(obs_properties_get(props, PROP_ACTIVE_SPEAKER), false);
-        obs_property_set_visible(obs_properties_get(props, PROP_SPEAKER_SENSITIVITY), false);
-        obs_property_set_visible(obs_properties_get(props, PROP_SPEAKER_HOLD), false);
         obs_property_set_visible(amode, false);
         obs_property_set_visible(obs_properties_get(props, PROP_SPOTLIGHT_SLOT), false);
         obs_property_set_visible(obs_properties_get(props, PROP_FAILOVER_PARTICIPANT), false);
@@ -1328,6 +1381,11 @@ static void zoom_source_get_defaults(obs_data_t *settings)
     obs_data_set_default_bool(settings, PROP_ACTIVE_SPEAKER, false);
     obs_data_set_default_int(settings, PROP_SPEAKER_SENSITIVITY, 300);
     obs_data_set_default_int(settings, PROP_SPEAKER_HOLD, 2000);
+    const ZoomPluginSettings plugin_settings = ZoomPluginSettings::load();
+    obs_data_set_default_int(settings, PROP_SPEAKER_EXCLUDE_1,
+                             plugin_settings.speaker_exclude_participant_1);
+    obs_data_set_default_int(settings, PROP_SPEAKER_EXCLUDE_2,
+                             plugin_settings.speaker_exclude_participant_2);
     obs_data_set_default_bool(settings, PROP_ISOLATE_AUDIO, false);
     obs_data_set_default_bool(settings, PROP_AUDIENCE_AUDIO, false);
     obs_data_set_default_int(settings, PROP_PARTICIPANT_ID, 0);

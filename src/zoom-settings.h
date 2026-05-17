@@ -34,6 +34,8 @@ struct ZoomPluginSettings {
     // Active speaker director defaults.
     uint32_t            speaker_sensitivity_ms = 500;
     uint32_t            speaker_hold_ms = 2000;
+    uint32_t            speaker_exclude_participant_1 = 0;
+    uint32_t            speaker_exclude_participant_2 = 0;
     bool                speaker_require_video = true;
 
     static ZoomPluginSettings load();
