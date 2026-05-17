@@ -1,5 +1,6 @@
 #include "obs-utils.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 
@@ -18,15 +19,16 @@ std::string strip_whitespace(const std::string &s)
 bool all_digits(const std::string &s)
 {
     if (s.empty()) return false;
-    for (char c : s)
-        if (c < '0' || c > '9') return false;
-    return true;
+    return std::all_of(s.begin(), s.end(), [](char c) {
+        return c >= '0' && c <= '9';
+    });
 }
 
 std::string lower_ascii(std::string s)
 {
-    for (char &c : s)
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    std::transform(s.begin(), s.end(), s.begin(), [](char c) {
+        return static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    });
     return s;
 }
 

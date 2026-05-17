@@ -13,6 +13,7 @@ extern "C" {
 
 #include <media-io/video-io.h>
 #include <obs-module.h>
+#include <algorithm>
 #include <cstring>
 
 struct BackendSpec {
@@ -72,16 +73,16 @@ bool HwVideoPipeline::init(HwAccelMode mode)
         return false;
     }
 
-    for (const auto &b : kBackends) {
-        if (b.mode == mode) {
-            if (try_init(b.dev_type, b.scale_str)) {
-                m_active_mode = mode;
-                blog(LOG_INFO, "[obs-zoom-plugin] HW accel: using %s", b.scale_str);
-                return true;
-            }
-            blog(LOG_WARNING, "[obs-zoom-plugin] HW accel: requested backend unavailable");
-            return false;
+    const auto it = std::find_if(std::begin(kBackends), std::end(kBackends),
+        [mode](const BackendSpec &b) { return b.mode == mode; });
+    if (it != std::end(kBackends)) {
+        if (try_init(it->dev_type, it->scale_str)) {
+            m_active_mode = mode;
+            blog(LOG_INFO, "[obs-zoom-plugin] HW accel: using %s", it->scale_str);
+            return true;
         }
+        blog(LOG_WARNING, "[obs-zoom-plugin] HW accel: requested backend unavailable");
+        return false;
     }
     return false;
 }
