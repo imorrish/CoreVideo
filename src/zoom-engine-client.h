@@ -48,6 +48,10 @@ public:
                    bool isolate_audio,
                    bool audience_audio = false,
                    VideoResolution video_resolution = VideoResolution::P720);
+    void subscribe_audio(const std::string &source_uuid,
+                         uint32_t participant_id,
+                         bool isolate_audio,
+                         bool audience_audio);
     void unsubscribe(const std::string &source_uuid);
 
     MeetingState state() const { return m_state.load(std::memory_order_acquire); }

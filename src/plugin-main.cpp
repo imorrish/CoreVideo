@@ -2,6 +2,7 @@
 #include <obs-frontend-api.h>
 #include <util/platform.h>
 #include "zoom-source.h"
+#include "zoom-participant-audio-source.h"
 #include "zoom-engine-client.h"
 #include "zoom-reconnect.h"
 #include "zoom-settings.h"
@@ -158,6 +159,7 @@ bool obs_module_load(void)
 #endif
 
     zoom_source_register();
+    zoom_participant_audio_source_register();
 
     ZoomPluginSettings s = ZoomPluginSettings::load();
     ZoomReconnectManager::instance().set_policy(s.reconnect_policy);

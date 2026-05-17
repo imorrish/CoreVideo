@@ -161,6 +161,7 @@ if(COREVIDEO_BUILD_PLUGIN)
     add_library(obs-zoom-plugin MODULE
         src/plugin-main.cpp
         src/zoom-source.cpp
+        src/zoom-participant-audio-source.cpp
         src/zoom-engine-client.cpp
         src/speaker-director.cpp
         src/zoom-reconnect.cpp

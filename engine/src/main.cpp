@@ -1153,6 +1153,18 @@ int main()
         } else if (line.find(IPC_CMD_STOP_MEDIA) != std::string::npos) {
             meeting_event.stop_raw_media("manual_stop");
 
+        } else if (line.find(IPC_CMD_SUBSCRIBE_AUDIO) != std::string::npos) {
+            std::string uuid = json_str(line, "source_uuid");
+            uint32_t    pid  = json_uint(line, "participant_id");
+            const bool isolate_audio =
+                line.find(R"("isolate_audio":true)") != std::string::npos;
+            const bool audience_audio =
+                line.find(R"("audience_audio":true)") != std::string::npos;
+            if (is_valid_source_uuid(uuid)) {
+                EngineAudio::instance().init(e2p, uuid, pid,
+                                             isolate_audio, audience_audio);
+            }
+
         } else if (line.find(IPC_CMD_SUBSCRIBE) != std::string::npos) {
             std::string uuid = json_str(line, "source_uuid");
             uint32_t    pid  = json_uint(line, "participant_id");

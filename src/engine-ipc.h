@@ -8,6 +8,7 @@
 #define IPC_CMD_JOIN        "join"
 #define IPC_CMD_LEAVE       "leave"
 #define IPC_CMD_SUBSCRIBE   "subscribe"
+#define IPC_CMD_SUBSCRIBE_AUDIO "subscribe_audio"
 #define IPC_CMD_UNSUBSCRIBE "unsubscribe"
 #define IPC_CMD_START_MEDIA "start_media"
 #define IPC_CMD_STOP_MEDIA  "stop_media"
