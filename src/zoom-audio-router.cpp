@@ -139,10 +139,10 @@ void ZoomAudioRouter::onMixedAudioRawDataReceived(AudioRawData *data)
     std::vector<MixedSink> sinks;
     {
         std::lock_guard<std::mutex> lk(m_mtx);
-        for (auto &[key, cb] : m_mixed_sinks)
+        for (const auto &[key, cb] : m_mixed_sinks)
             if (cb) sinks.push_back(cb);
     }
-    for (auto &cb : sinks)
+    for (const auto &cb : sinks)
         cb(data);
 }
 
@@ -152,17 +152,17 @@ void ZoomAudioRouter::onOneWayAudioRawDataReceived(AudioRawData *data, uint32_t 
     std::vector<ParticipantSink> participant_sinks;
     {
         std::lock_guard<std::mutex> lk(m_mtx);
-        for (auto &[key, cb] : m_one_way_sinks)
+        for (const auto &[key, cb] : m_one_way_sinks)
             if (cb) one_way_sinks.push_back(cb);
         auto it = m_participant_sinks.find(user_id);
         if (it != m_participant_sinks.end()) {
-            for (auto &[key, cb] : it->second)
+            for (const auto &[key, cb] : it->second)
                 if (cb) participant_sinks.push_back(cb);
         }
     }
-    for (auto &cb : one_way_sinks)
+    for (const auto &cb : one_way_sinks)
         cb(data, user_id);
-    for (auto &cb : participant_sinks)
+    for (const auto &cb : participant_sinks)
         cb(data);
 }
 
@@ -172,10 +172,10 @@ void ZoomAudioRouter::onShareAudioRawDataReceived(AudioRawData *data,
     std::vector<ShareAudioSink> sinks;
     {
         std::lock_guard<std::mutex> lk(m_mtx);
-        for (auto &[key, cb] : m_share_audio_sinks)
+        for (const auto &[key, cb] : m_share_audio_sinks)
             if (cb) sinks.push_back(cb);
     }
-    for (auto &cb : sinks)
+    for (const auto &cb : sinks)
         cb(data, share_user_id);
 }
 
@@ -186,9 +186,9 @@ void ZoomAudioRouter::onOneWayInterpreterAudioRawDataReceived(AudioRawData *data
     std::vector<InterpSink> sinks;
     {
         std::lock_guard<std::mutex> lk(m_mtx);
-        for (auto &[key, cb] : m_interp_sinks)
+        for (const auto &[key, cb] : m_interp_sinks)
             if (cb) sinks.push_back(cb);
     }
-    for (auto &cb : sinks)
+    for (const auto &cb : sinks)
         cb(data, lang);
 }

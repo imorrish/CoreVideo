@@ -163,7 +163,7 @@ void ZoomMeeting::fire_state_cb()
     auto *payload = new Payload{std::move(cbs), snap};
     obs_queue_task(OBS_TASK_UI, [](void *p) {
         auto *d = static_cast<Payload *>(p);
-        for (auto &cb : d->cbs)
+        for (const auto &cb : d->cbs)
             cb(d->state);
         delete d;
     }, payload, false);

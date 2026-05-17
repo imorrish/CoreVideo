@@ -69,11 +69,11 @@ uint32_t SpeakerDirector::choose_candidate_locked(uint32_t raw_speaker_id) const
     if (participant_allowed_locked(raw_speaker_id))
         return raw_speaker_id;
 
-    for (const auto &p : m_roster) {
-        if (p.is_talking && participant_allowed_locked(p.user_id))
-            return p.user_id;
-    }
-    return 0;
+    const auto it = std::find_if(m_roster.begin(), m_roster.end(),
+        [this](const ParticipantInfo &p) {
+            return p.is_talking && participant_allowed_locked(p.user_id);
+        });
+    return it != m_roster.end() ? it->user_id : 0;
 }
 
 bool SpeakerDirector::promote_locked(uint32_t participant_id, uint64_t now_ms)

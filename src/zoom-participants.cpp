@@ -103,7 +103,7 @@ void ZoomParticipants::fire()
     std::vector<RosterCallback> callbacks;
     {
         std::lock_guard<std::mutex> lk(m_mtx);
-        for (auto &[key, cb] : m_cbs)
+        for (const auto &[key, cb] : m_cbs)
             if (cb) callbacks.push_back(cb);
     }
     if (callbacks.empty()) return;
@@ -112,7 +112,7 @@ void ZoomParticipants::fire()
     auto *p = new Payload{std::move(callbacks)};
     obs_queue_task(OBS_TASK_UI, [](void *ptr) {
         auto *d = static_cast<Payload *>(ptr);
-        for (auto &cb : d->cbs) cb();
+        for (const auto &cb : d->cbs) cb();
         delete d;
     }, p, false);
 }

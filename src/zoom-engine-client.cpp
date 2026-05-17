@@ -583,7 +583,7 @@ void ZoomEngineClient::handle_event(const std::string &line)
             for (const auto &entry : m_error_callbacks)
                 if (entry.second) error_callbacks.push_back(entry.second);
         }
-        for (auto &cb : error_callbacks) cb(error_message);
+        for (const auto &cb : error_callbacks) cb(error_message);
         // Permanent failures: auth, license, host-ended.
         if (cmd == "auth_fail" || reason == "auth_fail") {
             m_state.store(MeetingState::Failed, std::memory_order_release);
@@ -640,7 +640,7 @@ void ZoomEngineClient::handle_event(const std::string &line)
             for (const auto &entry : m_roster_callbacks)
                 if (entry.second) callbacks.push_back(entry.second);
         }
-        for (auto &cb : callbacks) cb();
+        for (const auto &cb : callbacks) cb();
         return;
     }
     if (cmd == "active_speaker") {
@@ -656,7 +656,7 @@ void ZoomEngineClient::handle_event(const std::string &line)
             for (const auto &entry : m_roster_callbacks)
                 if (entry.second) callbacks.push_back(entry.second);
         }
-        for (auto &cb : callbacks) cb();
+        for (const auto &cb : callbacks) cb();
         return;
     }
 
@@ -748,7 +748,7 @@ void ZoomEngineClient::clear_last_error()
         for (const auto &entry : m_error_callbacks)
             if (entry.second) callbacks.push_back(entry.second);
     }
-    for (auto &cb : callbacks) cb(std::string());
+    for (const auto &cb : callbacks) cb(std::string());
 }
 
 std::vector<ParticipantInfo> ZoomEngineClient::roster() const
