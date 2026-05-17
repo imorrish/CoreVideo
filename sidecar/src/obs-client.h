@@ -167,6 +167,7 @@ public:
                               bool retryAfterCreate = true);
     void applyLookLayerOrder(const QString &sceneName,
                              const LayoutTemplate &tmpl,
+                             const QStringList &sourceNames,
                              const TileStyle &tileStyle,
                              bool hasBackgroundImage,
                              int overlayCount);

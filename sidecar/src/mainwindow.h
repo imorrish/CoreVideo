@@ -97,6 +97,7 @@ private:
     void provisionLookScenes();
     void repairCoreVideoDuplicates();
     void refreshObsAuditInventory();
+    void reconcileObsSceneGraph();
     void renderLookToOBS(const Look &look, bool makeProgram);
     void reconcileParticipantSlots(const QVector<ParticipantInfo> &participants);
     void syncZoomOutputAssignments();

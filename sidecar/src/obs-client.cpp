@@ -101,14 +101,43 @@ static QString coreVideoSlotSceneName(int index)
     return QStringLiteral("CoreVideo Slot %1").arg(index + 1);
 }
 
+static bool isCoreVideoScreenShareSource(const QString &sourceName)
+{
+    return sourceName.compare(QStringLiteral("Zoom Screen Share"), Qt::CaseInsensitive) == 0;
+}
+
+static QString coreVideoScreenShareSceneName()
+{
+    return QStringLiteral("CoreVideo Screen Share");
+}
+
+static QString coreVideoNestedSceneName(int index, const QString &sourceName)
+{
+    return isCoreVideoScreenShareSource(sourceName)
+        ? coreVideoScreenShareSceneName()
+        : coreVideoSlotSceneName(index);
+}
+
 static QString coreVideoSlotPlaceholderName(int index)
 {
     return QStringLiteral("CoreVideo Placeholder Slot %1").arg(index + 1);
 }
 
+static QString coreVideoScreenSharePlaceholderName()
+{
+    return QStringLiteral("CoreVideo Placeholder Screen Share");
+}
+
+static QString coreVideoNestedPlaceholderName(int index, const QString &sourceName)
+{
+    return isCoreVideoScreenShareSource(sourceName)
+        ? coreVideoScreenSharePlaceholderName()
+        : coreVideoSlotPlaceholderName(index);
+}
+
 static QString coreVideoInputKindForSource(const QString &sourceName)
 {
-    return sourceName.compare(QStringLiteral("Zoom Screen Share"), Qt::CaseInsensitive) == 0
+    return isCoreVideoScreenShareSource(sourceName)
         ? QStringLiteral("zoom_share_source")
         : QStringLiteral("zoom_participant_source");
 }
@@ -577,6 +606,7 @@ OBSClient::coreVideoSceneAudit(const QStringList &participantSources,
         expectedInputs.insert(source);
         expectedScenes.insert(coreVideoSlotSceneName(i));
         expectedSceneItems[kCoreVideoSourcesScene].insert(source);
+        expectedInputs.insert(coreVideoSlotPlaceholderName(i));
         expectedSceneItems[coreVideoSlotSceneName(i)].insert(coreVideoSlotPlaceholderName(i));
         expectedSceneItems[coreVideoSlotSceneName(i)].insert(source);
     }
@@ -586,6 +616,19 @@ OBSClient::coreVideoSceneAudit(const QStringList &participantSources,
             continue;
 
         expectedScenes.insert(plan.sceneName);
+        for (int i = 0; i < plan.sourceNames.size(); ++i) {
+            const QString source = plan.sourceNames.value(i).trimmed();
+            if (source.isEmpty())
+                continue;
+            const QString nestedScene = coreVideoNestedSceneName(i, source);
+            const QString placeholder = coreVideoNestedPlaceholderName(i, source);
+            expectedInputs.insert(source);
+            expectedSceneItems[kCoreVideoSourcesScene].insert(source);
+            expectedScenes.insert(nestedScene);
+            expectedInputs.insert(placeholder);
+            expectedSceneItems[nestedScene].insert(placeholder);
+            expectedSceneItems[nestedScene].insert(source);
+        }
         for (const QString &layer : plan.designLayerNames) {
             if (!layer.trimmed().isEmpty())
                 expectedInputs.insert(layer.trimmed());
@@ -595,7 +638,7 @@ OBSClient::coreVideoSceneAudit(const QStringList &participantSources,
         for (const TemplateSlot &slot : plan.tmpl.slotList) {
             if (slot.index < 0 || slot.index >= plan.sourceNames.size())
                 continue;
-            items.insert(coreVideoSlotSceneName(slot.index));
+            items.insert(coreVideoNestedSceneName(slot.index, plan.sourceNames.value(slot.index)));
         }
         for (const QString &layer : plan.designLayerNames)
             items.insert(layer.trimmed());
@@ -913,7 +956,10 @@ void OBSClient::loadSceneTemplate(const QString        &sceneName,
     }
 
     ensureCoreVideoSources(kCoreVideoSourcesScene, sourceNames);
-    const QStringList slotSceneNames = coreVideoSlotSceneNames(sourceNames.size());
+    QStringList slotSceneNames;
+    slotSceneNames.reserve(sourceNames.size());
+    for (int i = 0; i < sourceNames.size(); ++i)
+        slotSceneNames << coreVideoNestedSceneName(i, sourceNames.value(i));
 
     QJsonArray requests;
     enqueueCreateSceneIfMissing(requests, sceneName);
@@ -989,11 +1035,11 @@ void OBSClient::loadSceneTemplate(const QString        &sceneName,
             setCurrentScene(sceneName);
         requestSceneList();
     });
-    QTimer::singleShot(3600, this, [this, sceneName, tmpl, tileStyle, backgroundImagePath, overlays]() {
-        applyLookLayerOrder(sceneName, tmpl, tileStyle, !backgroundImagePath.trimmed().isEmpty(), overlays.size());
+    QTimer::singleShot(3600, this, [this, sceneName, tmpl, sourceNames, tileStyle, backgroundImagePath, overlays]() {
+        applyLookLayerOrder(sceneName, tmpl, sourceNames, tileStyle, !backgroundImagePath.trimmed().isEmpty(), overlays.size());
     });
-    QTimer::singleShot(4400, this, [this, sceneName, tmpl, tileStyle, backgroundImagePath, overlays]() {
-        applyLookLayerOrder(sceneName, tmpl, tileStyle, !backgroundImagePath.trimmed().isEmpty(), overlays.size());
+    QTimer::singleShot(4400, this, [this, sceneName, tmpl, sourceNames, tileStyle, backgroundImagePath, overlays]() {
+        applyLookLayerOrder(sceneName, tmpl, sourceNames, tileStyle, !backgroundImagePath.trimmed().isEmpty(), overlays.size());
         requestSceneItems(sceneName);
     });
 }
@@ -1008,7 +1054,7 @@ void OBSClient::ensureCoreVideoSources(const QString &sceneName,
     enqueueCreateSceneIfMissing(requests, sceneName);
 
     for (int i = 0; i < sourceNames.size(); ++i) {
-        enqueueCreateSceneIfMissing(requests, coreVideoSlotSceneName(i));
+        enqueueCreateSceneIfMissing(requests, coreVideoNestedSceneName(i, sourceNames.value(i)));
     }
 
     const QVector<double> placeholderColors = {
@@ -1017,8 +1063,8 @@ void OBSClient::ensureCoreVideoSources(const QString &sceneName,
     };
     for (int i = 0; i < sourceNames.size(); ++i) {
         enqueueCreateInputIfMissing(requests,
-                                    coreVideoSlotSceneName(i),
-                                    coreVideoSlotPlaceholderName(i),
+                                    coreVideoNestedSceneName(i, sourceNames.value(i)),
+                                    coreVideoNestedPlaceholderName(i, sourceNames.value(i)),
                                     QStringLiteral("color_source_v3"),
                                     QJsonObject{
                                         {"color", placeholderColors.value(i % placeholderColors.size())},
@@ -1051,7 +1097,7 @@ void OBSClient::ensureCoreVideoSources(const QString &sceneName,
     QTimer::singleShot(600, this, [this, sceneName, sourceNames]() {
         requestSceneItems(sceneName);
         for (int i = 0; i < sourceNames.size(); ++i)
-            requestSceneItems(coreVideoSlotSceneName(i));
+            requestSceneItems(coreVideoNestedSceneName(i, sourceNames.value(i)));
         requestSceneList();
         requestInputList();
     });
@@ -1086,12 +1132,12 @@ void OBSClient::ensureCoreVideoSources(const QString &sceneName,
         for (int i = 0; i < sourceNames.size(); ++i) {
             const QString sourceName = sourceNames[i].trimmed();
             if (sourceName.isEmpty()) continue;
-            const QString slotScene = coreVideoSlotSceneName(i);
+            const QString slotScene = coreVideoNestedSceneName(i, sourceName);
             if (!m_itemCache.contains(slotScene)) {
                 requestSceneItems(slotScene);
                 continue;
             }
-            const QString placeholderName = coreVideoSlotPlaceholderName(i);
+            const QString placeholderName = coreVideoNestedPlaceholderName(i, sourceName);
             if (resolveItemId(slotScene, placeholderName) < 0) {
                 const QString linkKey = slotScene + QStringLiteral("\n") + placeholderName;
                 if (!requestedLinks->contains(linkKey)) {
@@ -1124,6 +1170,64 @@ void OBSClient::ensureCoreVideoSources(const QString &sceneName,
             requestedLinks->insert(linkKey);
         }
 
+        for (int i = 0; i < sourceNames.size(); ++i) {
+            const QString sourceName = sourceNames[i].trimmed();
+            if (sourceName.isEmpty()) continue;
+            const QString slotScene = coreVideoNestedSceneName(i, sourceName);
+            if (!m_itemCache.contains(slotScene))
+                continue;
+
+            const QString placeholderName = coreVideoNestedPlaceholderName(i, sourceName);
+            for (const SceneItem &item : m_sceneItems.value(slotScene)) {
+                const bool isExpected = item.sourceName == sourceName
+                    || item.sourceName == placeholderName;
+                const bool isCoreVideoMedia = item.sourceName.startsWith(QStringLiteral("Zoom Participant "))
+                    || item.sourceName == QStringLiteral("Zoom Screen Share");
+                if (!isExpected && !isCoreVideoMedia)
+                    continue;
+
+                const bool shouldEnable = isExpected;
+                if (item.enabled != shouldEnable) {
+                    requests.append(QJsonObject{
+                        {"requestType", "SetSceneItemEnabled"},
+                        {"requestId",   nextId()},
+                        {"requestData", QJsonObject{
+                            {"sceneName",        slotScene},
+                            {"sceneItemId",      item.sceneItemId},
+                            {"sceneItemEnabled", shouldEnable},
+                        }},
+                    });
+                }
+
+                if (!isExpected)
+                    continue;
+                requests.append(QJsonObject{
+                    {"requestType", "SetSceneItemTransform"},
+                    {"requestId",   nextId()},
+                    {"requestData", QJsonObject{
+                        {"sceneName",   slotScene},
+                        {"sceneItemId", item.sceneItemId},
+                        {"sceneItemTransform", QJsonObject{
+                            {"positionX",    0},
+                            {"positionY",    0},
+                            {"boundsWidth",  1920},
+                            {"boundsHeight", 1080},
+                            {"boundsType",   "OBS_BOUNDS_STRETCH"},
+                        }},
+                    }},
+                });
+                requests.append(QJsonObject{
+                    {"requestType", "SetSceneItemIndex"},
+                    {"requestId",   nextId()},
+                    {"requestData", QJsonObject{
+                        {"sceneName",      slotScene},
+                        {"sceneItemId",    item.sceneItemId},
+                        {"sceneItemIndex", item.sourceName == placeholderName ? 0 : 1},
+                    }},
+                });
+            }
+        }
+
         if (requests.isEmpty()) return;
         sendOp(8, QJsonObject{
             {"requestId",     nextId()},
@@ -1133,8 +1237,9 @@ void OBSClient::ensureCoreVideoSources(const QString &sceneName,
         m_itemCache.remove(sceneName);
         m_sceneItems.remove(sceneName);
         for (int i = 0; i < sourceNames.size(); ++i) {
-            m_itemCache.remove(coreVideoSlotSceneName(i));
-            m_sceneItems.remove(coreVideoSlotSceneName(i));
+            const QString nestedScene = coreVideoNestedSceneName(i, sourceNames.value(i));
+            m_itemCache.remove(nestedScene);
+            m_sceneItems.remove(nestedScene);
         }
         emit log(QStringLiteral("Linked %1 CoreVideo source items into shared and slot scenes.")
                      .arg(requests.size()));
@@ -1145,14 +1250,14 @@ void OBSClient::ensureCoreVideoSources(const QString &sceneName,
     QTimer::singleShot(1400, this, [this, sceneName, sourceNames]() {
         requestSceneItems(sceneName);
         for (int i = 0; i < sourceNames.size(); ++i)
-            requestSceneItems(coreVideoSlotSceneName(i));
+            requestSceneItems(coreVideoNestedSceneName(i, sourceNames.value(i)));
         requestSceneList();
         requestInputList();
     });
     QTimer::singleShot(3200, this, [this, sceneName, sourceNames]() {
         requestSceneItems(sceneName);
         for (int i = 0; i < sourceNames.size(); ++i)
-            requestSceneItems(coreVideoSlotSceneName(i));
+            requestSceneItems(coreVideoNestedSceneName(i, sourceNames.value(i)));
         requestSceneList();
         requestInputList();
     });
@@ -1167,6 +1272,7 @@ void OBSClient::removeStaleCoreVideoDuplicates(const QStringList &participantSou
 
     QSet<QString> canonicalScenes;
     canonicalScenes.insert(kCoreVideoSourcesScene);
+    canonicalScenes.insert(coreVideoScreenShareSceneName());
     for (int i = 0; i < participantSources.size(); ++i)
         canonicalScenes.insert(coreVideoSlotSceneName(i));
     for (const QString &scene : lookScenes) {
@@ -1186,7 +1292,7 @@ void OBSClient::removeStaleCoreVideoDuplicates(const QStringList &participantSou
 
     QJsonArray requests;
     const QRegularExpression staleScenePattern(
-        QStringLiteral("^(CoreVideo Sources|CoreVideo Slot \\d+|CoreVideo - .+) \\d+$"));
+        QStringLiteral("^(CoreVideo Sources|CoreVideo Slot \\d+|CoreVideo Screen Share|CoreVideo - .+) \\d+$"));
     const QRegularExpression staleInputPattern(
         QStringLiteral("^(Zoom Participant \\d+|CoreVideo Overlay(?: - .+)?) \\d+$"));
 
@@ -1933,6 +2039,7 @@ void OBSClient::applyTileDecorations(const QString &sceneName,
 
 void OBSClient::applyLookLayerOrder(const QString &sceneName,
                                     const LayoutTemplate &tmpl,
+                                    const QStringList &sourceNames,
                                     const TileStyle &tileStyle,
                                     bool hasBackgroundImage,
                                     int overlayCount)
@@ -1957,8 +2064,12 @@ void OBSClient::applyLookLayerOrder(const QString &sceneName,
         for (const auto &slot : tmpl.slotList)
             bottomToTop << coreVideoBorderSourceName(sceneName, slot.index);
     }
-    for (const auto &slot : tmpl.slotList)
-        bottomToTop << coreVideoSlotSceneName(slot.index);
+    for (const auto &slot : tmpl.slotList) {
+        const QString sourceName = slot.index >= 0 && slot.index < sourceNames.size()
+            ? sourceNames.value(slot.index)
+            : QString();
+        bottomToTop << coreVideoNestedSceneName(slot.index, sourceName);
+    }
     if (tileStyle.opacity < 0.99) {
         for (const auto &slot : tmpl.slotList)
             bottomToTop << coreVideoDimSourceName(sceneName, slot.index);

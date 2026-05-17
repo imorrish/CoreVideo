@@ -452,7 +452,7 @@ void MainWindow::buildTopBar(QWidget *parent)
     m_sceneSyncStatusLabel = new QLabel("Sync idle", m_topBar);
     m_sceneSyncStatusLabel->setStyleSheet("color: #8080a0; font-size: 11px; background: transparent;");
 
-    m_engineBtn = new QPushButton("Scene Sync OFF", m_topBar);
+    m_engineBtn = new QPushButton("Sync OBS", m_topBar);
     m_engineBtn->setObjectName("engineOffBtn");
     m_engineBtn->setFixedHeight(34);
 
@@ -869,7 +869,7 @@ void MainWindow::provisionLookScenes()
         return;
 
     obsRenderer().provisionLooks(allLooks());
-    onObsLog("Control ON: provisioning shared sources and Look scenes in OBS.");
+    onObsLog("Provisioning shared sources and Look scenes in OBS.");
     QTimer::singleShot(3600, this, &MainWindow::updateSceneSyncStatus);
 }
 
@@ -890,10 +890,70 @@ void MainWindow::refreshObsAuditInventory()
 
     m_obsClient->refreshInventory();
     m_obsClient->requestSceneItems(QStringLiteral("CoreVideo Sources"));
+    m_obsClient->requestSceneItems(QStringLiteral("CoreVideo Screen Share"));
     for (int i = 0; i < 8; ++i)
         m_obsClient->requestSceneItems(QStringLiteral("CoreVideo Slot %1").arg(i + 1));
     for (const QString &scene : lookSceneNames())
         m_obsClient->requestSceneItems(scene);
+}
+
+void MainWindow::reconcileObsSceneGraph()
+{
+    if (!m_obsClient || !m_obsClient->isConnected()) {
+        onObsLog("Sync OBS skipped: OBS is not connected.");
+        return;
+    }
+
+    m_obsSyncState = ObsSyncState::Applying;
+    m_lastSyncError.clear();
+    m_lastRenderedLookName = "All Looks";
+    m_lastRenderedSceneName = "CoreVideo scene graph";
+    if (m_sceneSyncStatusLabel) {
+        m_sceneSyncStatusLabel->setText("Syncing OBS");
+        m_sceneSyncStatusLabel->setToolTip("Reconciling CoreVideo sources, slot scenes, Look scenes, layer ordering, and stale design layers.");
+        m_sceneSyncStatusLabel->setStyleSheet("color: #e0a020; font-size: 11px; background: transparent;");
+    }
+
+    const auto before = m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), lookRenderPlans());
+    if (before.inventoryReady) {
+        onObsLog(QStringLiteral("Sync OBS audit before: %1/%2 scenes, %3/%4 inputs, %5/%6 items.")
+                     .arg(before.presentScenes).arg(before.expectedScenes)
+                     .arg(before.presentInputs).arg(before.expectedInputs)
+                     .arg(before.presentSceneItems).arg(before.expectedSceneItems));
+    } else {
+        onObsLog("Sync OBS: inventory not ready; refreshing OBS before reconcile.");
+    }
+
+    refreshObsAuditInventory();
+    provisionPlaceholderSources();
+    provisionLookScenes();
+
+    QTimer::singleShot(4600, this, [this]() {
+        repairCoreVideoDuplicates();
+        refreshObsAuditInventory();
+    });
+    QTimer::singleShot(6200, this, [this]() {
+        refreshObsAuditInventory();
+        const auto after = m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), lookRenderPlans());
+        if (after.isClean()) {
+            m_obsSyncState = ObsSyncState::Synced;
+            onObsLog("Sync OBS complete: OBS scene graph matches the Sidecar Look catalog.");
+        } else {
+            m_obsSyncState = ObsSyncState::Dirty;
+            QStringList detail;
+            if (!after.missingScenes.isEmpty())
+                detail << QStringLiteral("%1 missing scene(s)").arg(after.missingScenes.size());
+            if (!after.missingInputs.isEmpty())
+                detail << QStringLiteral("%1 missing input(s)").arg(after.missingInputs.size());
+            if (!after.missingSceneItems.isEmpty())
+                detail << QStringLiteral("%1 missing scene item(s)").arg(after.missingSceneItems.size());
+            if (!after.staleDesignLayers.isEmpty())
+                detail << QStringLiteral("%1 stale design layer(s)").arg(after.staleDesignLayers.size());
+            onObsLog(QStringLiteral("Sync OBS finished with remaining drift: %1.")
+                         .arg(detail.isEmpty() ? QStringLiteral("inventory still loading") : detail.join(", ")));
+        }
+        updateSceneSyncStatus();
+    });
 }
 
 void MainWindow::renderLookToOBS(const Look &look, bool makeProgram)
@@ -1072,7 +1132,7 @@ void MainWindow::openParticipantMappingWindow()
     auto *refreshBtn = new QPushButton("Refresh Zoom/OBS", dlg);
     auto *sourceBtn = new QPushButton("Create Source Scene", dlg);
     auto *looksBtn = new QPushButton("Create Sources + Looks", dlg);
-    auto *auditRepairBtn = new QPushButton("Audit + Repair", dlg);
+    auto *auditRepairBtn = new QPushButton("Sync OBS", dlg);
     auto *repairBtn = new QPushButton("Repair Duplicates", dlg);
     auto *openSourcesBtn = new QPushButton("Open Source Scene", dlg);
     actions->addWidget(refreshBtn);
@@ -1155,10 +1215,8 @@ void MainWindow::openParticipantMappingWindow()
         refreshStatus();
     });
     connect(auditRepairBtn, &QPushButton::clicked, dlg, [this, refreshStatus]() {
-        provisionLookScenes();
-        repairCoreVideoDuplicates();
-        onObsLog("Audit repair requested: re-provisioning CoreVideo sources, Look scenes, and duplicate cleanup.");
-        QTimer::singleShot(4200, this, [this, refreshStatus]() {
+        reconcileObsSceneGraph();
+        QTimer::singleShot(6600, this, [this, refreshStatus]() {
             refreshObsAuditInventory();
             updateSceneSyncStatus();
             refreshStatus();
@@ -1551,17 +1609,19 @@ void MainWindow::onRenderPreview()
 
 void MainWindow::onEngineToggle()
 {
-    m_engineOn = !m_engineOn;
-    m_engineBtn->setObjectName(m_engineOn ? "engineOnBtn" : "engineOffBtn");
-    m_engineBtn->setText(m_engineOn ? "Scene Sync ON" : "Scene Sync OFF");
+    m_engineOn = true;
+    m_engineBtn->setObjectName("engineOnBtn");
+    m_engineBtn->setText("Syncing");
     m_engineBtn->style()->unpolish(m_engineBtn);
     m_engineBtn->style()->polish(m_engineBtn);
-    if (m_engineOn) {
-        if (m_obsClient && m_obsClient->isConnected())
-            m_obsClient->refreshInventory();
-        provisionLookScenes();
-    }
-    updateSceneSyncStatus();
+    reconcileObsSceneGraph();
+    QTimer::singleShot(6500, this, [this]() {
+        m_engineOn = false;
+        m_engineBtn->setObjectName("engineOffBtn");
+        m_engineBtn->setText("Sync OBS");
+        m_engineBtn->style()->unpolish(m_engineBtn);
+        m_engineBtn->style()->polish(m_engineBtn);
+    });
 }
 
 void MainWindow::onObsConnect()
@@ -1930,6 +1990,8 @@ void MainWindow::populateCommandPalette()
     });
     cp->addCommand("Re-apply current PGM to OBS", "OBS",
                    [this]() { onApplyLayout(); });
+    cp->addCommand("Sync OBS scene graph", "OBS",
+                   [this]() { reconcileObsSceneGraph(); });
     cp->addCommand("Repair CoreVideo duplicate OBS scenes", "OBS",
                    [this]() { repairCoreVideoDuplicates(); });
 
