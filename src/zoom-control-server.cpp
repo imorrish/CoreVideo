@@ -160,9 +160,11 @@ void ZoomControlServer::poll_and_push()
     if (spk != m_last_speaker) {
         m_last_speaker = spk;
         QString name;
-        for (const auto &p : ZoomEngineClient::instance().roster()) {
-            if (p.user_id == spk) { name = QString::fromStdString(p.display_name); break; }
-        }
+        const auto roster = ZoomEngineClient::instance().roster();
+        const auto speaker = std::find_if(roster.begin(), roster.end(),
+            [spk](const ParticipantInfo &p) { return p.user_id == spk; });
+        if (speaker != roster.end())
+            name = QString::fromStdString(speaker->display_name);
         push_event({
             {"event",   "active_speaker"},
             {"user_id", static_cast<double>(spk)},
@@ -649,8 +651,11 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
                     {"state", meeting_state_to_string(ZoomEngineClient::instance().state())}});
         const uint32_t spk = ZoomEngineClient::instance().active_speaker_id();
         QString spkName;
-        for (const auto &p : ZoomEngineClient::instance().roster())
-            if (p.user_id == spk) { spkName = QString::fromStdString(p.display_name); break; }
+        const auto roster = ZoomEngineClient::instance().roster();
+        const auto speaker = std::find_if(roster.begin(), roster.end(),
+            [spk](const ParticipantInfo &p) { return p.user_id == spk; });
+        if (speaker != roster.end())
+            spkName = QString::fromStdString(speaker->display_name);
         push_event({{"event", "active_speaker"},
                     {"user_id", static_cast<double>(spk)},
                     {"name",    spkName},

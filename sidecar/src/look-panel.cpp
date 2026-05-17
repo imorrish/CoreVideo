@@ -67,18 +67,18 @@ void LookCard::paintEvent(QPaintEvent *)
         : QColor(0x10, 0x10, 0x18);
     p.fillRect(program, canvasColor);
     if (!m_look.backgroundImagePath.isEmpty()) {
-        const QPixmap bg(m_look.backgroundImagePath);
-        if (!bg.isNull()) {
+        const QPixmap backgroundPixmap(m_look.backgroundImagePath);
+        if (!backgroundPixmap.isNull()) {
             p.save();
             p.setClipRect(program);
-            const QSizeF src = bg.size();
+            const QSizeF src = backgroundPixmap.size();
             const double scale = std::max(program.width() / src.width(),
                                           program.height() / src.height());
             const QSizeF draw(src.width() * scale, src.height() * scale);
             const QRectF target(program.center().x() - draw.width() * 0.5,
                                 program.center().y() - draw.height() * 0.5,
                                 draw.width(), draw.height());
-            p.drawPixmap(target, bg, QRectF(QPointF(0, 0), src));
+            p.drawPixmap(target, backgroundPixmap, QRectF(QPointF(0, 0), src));
             p.restore();
         }
     }

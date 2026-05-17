@@ -114,8 +114,9 @@ ParticipantSubscription::~ParticipantSubscription()
 void ParticipantSubscription::add_source(const std::string &source_uuid, IpcFd e2p_fd)
 {
     std::lock_guard<std::mutex> lock(m_targets_mtx);
-    if (m_targets.find(source_uuid) == m_targets.end())
-        m_targets.emplace(source_uuid, std::make_unique<SourceTarget>(e2p_fd));
+    const auto [it, inserted] = m_targets.emplace(source_uuid, nullptr);
+    if (inserted)
+        it->second = std::make_unique<SourceTarget>(e2p_fd);
 }
 
 void ParticipantSubscription::remove_source(const std::string &source_uuid)
