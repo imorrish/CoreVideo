@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QColor>
+#include <algorithm>
 
 // A SlotAssignment binds a participant to a slot in the active template.
 // Participant id < 0 means "empty / unfilled."
@@ -76,9 +77,11 @@ struct Look {
     // Look up the participant id assigned to a given slot, or -1.
     int participantInSlot(int slotIndex) const
     {
-        for (const auto &s : slotAssignments)
-            if (s.slotIndex == slotIndex) return s.participantId;
-        return -1;
+        const auto slot = std::find_if(slotAssignments.begin(), slotAssignments.end(),
+            [slotIndex](const SlotAssignment &s) {
+                return s.slotIndex == slotIndex;
+            });
+        return slot != slotAssignments.end() ? slot->participantId : -1;
     }
 
     // Parse the disk format. Caller is responsible for resolving templateId

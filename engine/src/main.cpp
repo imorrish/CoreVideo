@@ -320,12 +320,10 @@ static const char *meeting_fail_name(int code)
 static bool is_valid_source_uuid(const std::string &uuid)
 {
     if (uuid.empty() || uuid.size() > 64) return false;
-    for (char c : uuid) {
-        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-              (c >= '0' && c <= '9') || c == '-' || c == '_'))
-            return false;
-    }
-    return true;
+    return std::all_of(uuid.begin(), uuid.end(), [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+               (c >= '0' && c <= '9') || c == '-' || c == '_';
+    });
 }
 
 struct ParticipantInfo {
@@ -412,12 +410,13 @@ public:
             if (lst) {
                 for (int i = 0; i < lst->GetCount(); ++i) {
                     const uint32_t uid = lst->GetItem(i);
-                    for (auto &p : m_roster) {
-                        if (p.user_id == uid) {
-                            p.is_talking = true;
-                            break;
-                        }
-                    }
+                    const auto participant = std::find_if(
+                        m_roster.begin(), m_roster.end(),
+                        [uid](const ParticipantInfo &p) {
+                            return p.user_id == uid;
+                        });
+                    if (participant != m_roster.end())
+                        participant->is_talking = true;
                 }
             }
         }
@@ -506,8 +505,10 @@ private:
         std::lock_guard<std::mutex> lk(m_mtx);
         m_roster = std::move(new_roster);
         m_active_speaker = 0;
-        for (const auto &p : m_roster)
-            if (p.is_talking) { m_active_speaker = p.user_id; break; }
+        const auto active = std::find_if(m_roster.begin(), m_roster.end(),
+            [](const ParticipantInfo &p) { return p.is_talking; });
+        if (active != m_roster.end())
+            m_active_speaker = active->user_id;
     }
 
     void send_roster()

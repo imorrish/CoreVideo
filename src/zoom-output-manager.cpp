@@ -35,7 +35,7 @@ std::vector<ZoomOutputInfo> ZoomOutputManager::outputs() const
 
     std::vector<ZoomOutputInfo> out;
     out.reserve(sources.size());
-    for (auto *source : sources) {
+    for (const auto *source : sources) {
         if (!source) continue;
         ZoomOutputInfo info = source->output_info();
         out.push_back(info);

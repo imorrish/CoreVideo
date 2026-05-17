@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QSet>
+#include <algorithm>
 
 LookLibrary &LookLibrary::instance()
 {
@@ -16,7 +17,7 @@ void LookLibrary::loadBuiltIn()
     if (m_loaded) return;
     m_loaded = true;
 
-    auto &tm = TemplateManager::instance();
+    const auto &tm = TemplateManager::instance();
 
     QDir dir(":/looks/data/looks");
     const auto entries = dir.entryList(QStringList() << "*.json", QDir::Files,
@@ -39,9 +40,9 @@ void LookLibrary::loadBuiltIn()
 
 const Look *LookLibrary::findById(const QString &id) const
 {
-    for (const auto &l : m_looks)
-        if (l.id == id) return &l;
-    return nullptr;
+    const auto look = std::find_if(m_looks.begin(), m_looks.end(),
+        [&id](const Look &l) { return l.id == id; });
+    return look != m_looks.end() ? &(*look) : nullptr;
 }
 
 QStringList LookLibrary::categories() const

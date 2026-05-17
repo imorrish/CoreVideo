@@ -191,9 +191,10 @@ void ZoomParticipants::onUserNamesChanged(ZOOMSDK::IList<unsigned int> *lst)
             auto *u = m_ctrl->GetUserByUserID(uid);
             if (!u) continue;
             auto info = user_to_info(u);
-            for (auto &p : m_roster) {
-                if (p.user_id == uid) { p = info; break; }
-            }
+            const auto participant = std::find_if(m_roster.begin(), m_roster.end(),
+                [uid](const ParticipantInfo &p) { return p.user_id == uid; });
+            if (participant != m_roster.end())
+                *participant = info;
         }
     }
     fire();
@@ -237,12 +238,10 @@ void ZoomParticipants::onUserActiveAudioChange(ZOOMSDK::IList<unsigned int> *lst
         if (lst) {
             for (int i = 0; i < lst->GetCount(); ++i) {
                 const uint32_t uid = lst->GetItem(i);
-                for (auto &p : m_roster) {
-                    if (p.user_id == uid) {
-                        p.is_talking = true;
-                        break;
-                    }
-                }
+                const auto participant = std::find_if(m_roster.begin(), m_roster.end(),
+                    [uid](const ParticipantInfo &p) { return p.user_id == uid; });
+                if (participant != m_roster.end())
+                    participant->is_talking = true;
             }
         }
     }
@@ -283,12 +282,12 @@ void ZoomParticipants::onUserVideoStatusChange(unsigned int userId,
     {
         std::lock_guard<std::mutex> lk(m_mtx);
         const bool on = (status == ZOOMSDK::Video_ON);
-        for (auto &p : m_roster) {
-            if (p.user_id == static_cast<uint32_t>(userId)) {
-                p.has_video = on;
-                break;
-            }
-        }
+        const auto participant = std::find_if(m_roster.begin(), m_roster.end(),
+            [userId](const ParticipantInfo &p) {
+                return p.user_id == static_cast<uint32_t>(userId);
+            });
+        if (participant != m_roster.end())
+            participant->has_video = on;
     }
     fire();
 }

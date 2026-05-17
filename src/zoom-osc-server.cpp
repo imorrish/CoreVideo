@@ -10,6 +10,7 @@
 #include <QMetaObject>
 #include <QUdpSocket>
 #include <obs-module.h>
+#include <algorithm>
 #include <cstring>
 
 // ── OSC wire-format helpers ──────────────────────────────────────────────────
@@ -625,9 +626,11 @@ void ZoomOscServer::poll_and_push()
     if (spk != m_last_speaker) {
         m_last_speaker = spk;
         std::string name;
-        for (const auto &p : ZoomEngineClient::instance().roster()) {
-            if (p.user_id == spk) { name = p.display_name; break; }
-        }
+        const auto roster = ZoomEngineClient::instance().roster();
+        const auto speaker = std::find_if(roster.begin(), roster.end(),
+            [spk](const ParticipantInfo &p) { return p.user_id == spk; });
+        if (speaker != roster.end())
+            name = speaker->display_name;
         std::vector<OscArg> a(2);
         a[0].type = OscArg::Int32;  a[0].i = static_cast<int32_t>(spk);
         a[1].type = OscArg::String; a[1].s = name;
