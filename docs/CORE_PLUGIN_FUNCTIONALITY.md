@@ -23,7 +23,7 @@ test independently from the Zoom SDK.
 
 The CoreVideo plugin is operated from inside OBS. These diagrams mirror the
 current core plugin controls: the Zoom Control dock, regular OBS scenes/sources,
-the inline output assignment table, the separate profile-oriented Zoom Output
+the Active Speaker Director controls, the separate profile-oriented Zoom Output
 Manager, and the Zoom Participant source properties. Exact styling can vary by
 OBS theme and platform, but the controls and labels should match the current
 plugin.
@@ -31,15 +31,14 @@ plugin.
 ![CoreVideo OBS workspace with Zoom Control dock](images/corevideo-obs-workspace.svg)
 
 The Zoom Control dock joins and leaves meetings, starts and stops raw media,
-shows meeting state, lists participants, and applies source assignments without
-leaving OBS.
+shows meeting state, lists participants, exposes Active Speaker Director
+controls, and opens the Output Manager for source assignment without leaving OBS.
 
 ![CoreVideo Output Manager](images/corevideo-output-manager.svg)
 
-The dock's inline output table is the primary day-to-day assignment surface. The
-separate Zoom Output Manager remains available for profile save/load workflows
-and exposes the same requested resolution, observed signal, frame rate, and audio
-routing information.
+The dedicated Zoom Output Manager is the primary assignment surface. It supports
+profile save/load workflows and exposes requested resolution, observed signal,
+frame rate, assignment mode, and audio routing information for each output.
 
 ![CoreVideo Zoom Participant source properties](images/corevideo-source-properties.svg)
 
@@ -75,6 +74,53 @@ different assignment mode:
 
 Each output reports observed resolution and frame rate through the output
 manager and TCP `list_outputs` command.
+
+For a single directed speaker-follow output, add the dedicated **CoreVideo Active
+Speaker** OBS source. It follows the central Active Speaker Director and uses a
+two-slot handoff internally: the current participant remains visible while the
+next participant warms on a hidden slot, then the source cuts only after a valid
+frame is available.
+
+## Active Speaker Director
+
+The Active Speaker Director is controlled from the Zoom Control dock. It is not
+just a pass-through of Zoom's raw active-speaker event; it builds CoreVideo's own
+production decision from the raw speaker signal.
+
+The dock shows:
+
+- Directed speaker: the participant currently being sent to active-speaker
+  outputs.
+- Raw speaker: the latest speaker reported by Zoom.
+- Candidate speaker: the participant waiting out the sensitivity timer.
+- Last speaker: the previously directed participant.
+- Manual take/release: an operator supersede that holds a participant on air
+  until released.
+
+Timing controls:
+
+| Setting | Default | Behavior |
+|---|---|---|
+| Sensitivity | 500 ms | Candidate must keep speaking this long before switching. |
+| Hold | 2000 ms | Minimum time to stay on the current directed speaker after a cut. |
+
+TCP examples:
+
+```json
+{"cmd":"speaker_director_status"}
+```
+
+```json
+{"cmd":"speaker_director_configure","sensitivity_ms":650,"hold_ms":2500}
+```
+
+```json
+{"cmd":"speaker_director_take","participant_id":123456}
+```
+
+```json
+{"cmd":"speaker_director_release"}
+```
 
 ## Audio Routing
 
@@ -182,6 +228,24 @@ Assign a source to active speaker:
 
 ```json
 {"cmd":"assign_output_ex","source":"Zoom Participant 2","mode":"active_speaker","audio_channels":"mono","video_resolution":"1080p"}
+```
+
+Inspect and control the Active Speaker Director:
+
+```json
+{"cmd":"speaker_director_status"}
+```
+
+```json
+{"cmd":"speaker_director_configure","sensitivity_ms":650,"hold_ms":2500}
+```
+
+```json
+{"cmd":"speaker_director_take","participant_id":123456}
+```
+
+```json
+{"cmd":"speaker_director_release"}
 ```
 
 Assign a source to spotlight slot 1:

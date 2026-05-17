@@ -32,14 +32,14 @@ CoreVideo integrates the Zoom Meeting SDK into OBS â€” no screen capture or
 - **Auto ISO recording** â€” record assigned participant/active-speaker/spotlight outputs to separate FFmpeg-encoded MP4 files with matching PCM WAV audio, plus optional main OBS program recording
 - **Assignment modes** â€” each source independently follows: a fixed participant, the active speaker, a ZoomISO-style spotlight slot (1â€¦N), or the active screen share
 - **Failover participant** â€” configure a secondary participant that activates automatically when the primary leaves
-- **Active speaker mode** â€” configurable sensitivity + hold-time debounce, liveness guard, supersede logic
+- **Active Speaker Director** â€” configurable sensitivity + hold-time switching, manual take/release supersede, and a dedicated `CoreVideo Active Speaker` OBS source for clean speaker-follow output
 - **Spotlight / ZoomISO** â€” subscribe a source to spotlight slot N; engine resolves which participant is spotlighted
 - **Screen share capture** â€” source subscribes to the active meeting screen-share feed
 - **Zoom interpretation audio channel capture** â€” dedicated OBS source for existing Zoom interpretation audio channels
 - **Per-participant audio sources** â€” standalone OBS audio source per meeting participant
 - **Webinar support** â€” join Zoom Webinars using the dedicated SDK entry point (Webinar checkbox in control dock)
 - **Participant roster** â€” live list with video, mute, talking, host, co-host, raised hand, spotlight slot, and screen-sharing state
-- **Control dock** â€” dockable Qt panel with animated status dot, join/leave, token-type selector, recovery countdown, and inline output table; persists last meeting ID and display name across sessions
+- **Control dock** â€” dockable Qt panel with animated status dot, join/leave, token-type selector, recovery countdown, Active Speaker Director controls, and a routing section that opens the dedicated Output Manager; persists last meeting ID and display name across sessions
 - **Auto-reconnect** â€” exponential back-off recovery after engine crash, network drop, or unexpected disconnect
 - **OBS hotkeys** â€” per-source hotkeys to enable/disable active speaker mode
 - **TCP control API** â€” JSON server on `127.0.0.1:19870` for scripts and dashboards; includes `oauth_callback` command for custom URL scheme forwarding
@@ -210,7 +210,7 @@ echo '{"cmd":"assign_output","source":"Zoom Participant 1","participant_id":123,
 echo '{"cmd":"oauth_callback","url":"corevideo://oauth/callback?code=...&state=..."}' | nc 127.0.0.1 19870
 ```
 
-Commands: `help`, `status`, `list_participants`, `list_outputs`, `assign_output`, `assign_output_ex`, `join`, `leave`, `oauth_callback`, `iso_recording_start`, `iso_recording_stop`, `iso_recording_status`.
+Commands: `help`, `status`, `list_participants`, `list_outputs`, `assign_output`, `assign_output_ex`, `join`, `leave`, `oauth_callback`, `iso_recording_start`, `iso_recording_stop`, `iso_recording_status`, `speaker_director_status`, `speaker_director_configure`, `speaker_director_take`, `speaker_director_release`.
 
 ### Auto ISO Recording
 
@@ -248,7 +248,12 @@ Each active source segment writes one `*.mp4` video file and one matching `*.wav
 
 ## Active Speaker Mode
 
-Enable **Follow active speaker** on any Zoom Participant source to automatically switch the video (and audio) feed to whoever is currently speaking.
+CoreVideo has two active-speaker workflows:
+
+- Set a normal **Zoom Participant** source to **Active Speaker** assignment mode when that source should follow the directed speaker.
+- Add the dedicated **CoreVideo Active Speaker** source when you want a single speaker-follow OBS source. It uses a two-slot handoff internally: the current participant stays visible while the next participant warms on a hidden slot, then the source cuts only after a valid frame is available.
+
+The **Active Speaker Director** in the Zoom Control dock decides which participant is directed. It tracks the raw Zoom speaker, candidate speaker, directed speaker, last directed speaker, and any manual supersede.
 
 ### Debounce
 
@@ -256,7 +261,7 @@ Two independent timers prevent rapid camera cuts:
 
 | Parameter | Default | Description |
 |---|---|---|
-| **Sensitivity** (`speaker_sensitivity_ms`) | 300 ms | New speaker must hold the floor continuously for this long before the switch fires. A different speaker speaking resets the clock. |
+| **Sensitivity** (`speaker_sensitivity_ms`) | 500 ms | New speaker must hold the floor continuously for this long before the switch fires. A different speaker speaking resets the clock. |
 | **Hold** (`speaker_hold_ms`) | 2 000 ms | After any switch, no further switch occurs for at least this long. |
 
 The effective delay before each switch is `max(hold_remaining, sensitivity_remaining)`. If the delay is zero the switch fires immediately; otherwise a background thread sleeps for the delay and re-evaluates on the OBS UI thread.
@@ -271,6 +276,22 @@ The effective delay before each switch is `max(hold_remaining, sensitivity_remai
 ### Audio isolation interaction
 
 When **Isolate Audio** is also enabled, every speaker switch sends an updated `subscribe` command to the engine with the new participant ID and `isolate_audio=true`, so the audio track always follows the same participant as the video.
+
+### Director TCP controls
+
+```sh
+# Inspect directed/raw/candidate/last/manual speaker state.
+echo '{"cmd":"speaker_director_status"}' | nc 127.0.0.1 19870
+
+# Update director timing.
+echo '{"cmd":"speaker_director_configure","sensitivity_ms":650,"hold_ms":2500}' | nc 127.0.0.1 19870
+
+# Manually take a participant until released.
+echo '{"cmd":"speaker_director_take","participant_id":123456}' | nc 127.0.0.1 19870
+
+# Return to automatic speaker direction.
+echo '{"cmd":"speaker_director_release"}' | nc 127.0.0.1 19870
+```
 
 ## Output Profiles
 
@@ -288,7 +309,8 @@ Use **OBS â†’ Tools â†’ Zoom Output Manager** to save, load, and delet
 OBS Studio
 â””â”€â”€ obs-zoom-plugin  (no Zoom SDK dependency)
     â”œâ”€â”€ ZoomDock              â€” dockable Qt panel: animated CvStatusDot, join/leave,
-    â”‚                           token-type selector, recovery countdown, output table;
+    â”‚                           token-type selector, recovery countdown,
+    â”‚                           Active Speaker Director controls, routing actions;
     â”‚                           CvBanner first-run credentials notice; persists last
     â”‚                           meeting ID + display name
     â”œâ”€â”€ ZoomOAuthManager      â€” OAuth 2.0 PKCE: begin_authorization, handle_redirect_url,
@@ -305,6 +327,8 @@ OBS Studio
     â”‚                           failover_participant_id, HwVideoPipeline, OBS hotkeys
     â”œâ”€â”€ HwVideoPipeline       â€” optional FFmpeg I420â†’NV12 (CUDA/VAAPI/VideoToolbox/QSV)
     â”œâ”€â”€ ZoomAudioRouter       â€” SDK audio fan-out to all registered sinks
+    â”œâ”€â”€ SpeakerDirector       â€” directed active speaker state, debounce,
+    â”‚                           manual take/release, clean source handoff
     â”œâ”€â”€ ZoomOutputManager     â€” central source registry for runtime reconfiguration
     â”œâ”€â”€ ZoomOutputProfile     â€” named JSON profile persistence
     â”œâ”€â”€ ZoomControlServer     â€” TCP JSON API on port 19870 (hardened token auth);

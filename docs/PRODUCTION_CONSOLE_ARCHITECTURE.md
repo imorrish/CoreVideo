@@ -47,10 +47,15 @@ The plugin receives live participant metadata from `ZoomObsEngine`, including
 display name, participant ID, video state, audio state, active speaker state,
 spotlight index, and screen-share state. That data feeds:
 
-- `ZoomDock` roster and output table.
+- `ZoomDock` roster, routing actions, and Active Speaker Director controls.
 - `ZoomOutputManager` source assignment and runtime reconfiguration.
 - TCP `list_participants` and `list_outputs` responses.
 - Active-speaker, spotlight-slot, screen-share, and fixed-participant modes.
+
+The dedicated `CoreVideo Active Speaker` OBS source follows the central speaker
+director rather than raw Zoom speaker events. It keeps the current participant
+visible while the next speaker warms on a hidden slot, then cuts after a valid
+frame is available.
 
 ## Automation Surface
 
@@ -60,6 +65,9 @@ The plugin exposes facts and commands rather than presentation decisions:
 - OSC port `19871` for broadcast controllers.
 - OBS hotkeys for source-level active-speaker enable/disable.
 - Output profiles for saving and restoring source-to-participant mappings.
+- Active Speaker Director TCP commands:
+  `speaker_director_status`, `speaker_director_configure`,
+  `speaker_director_take`, and `speaker_director_release`.
 
 Presentation systems should treat these APIs as the contract: assign sources,
 query state, start/stop ISO recording, and let OBS render the program scene.

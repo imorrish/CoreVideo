@@ -267,7 +267,7 @@
       <div class="card"><div class="card-icon">🔊</div><h4>Per-Participant Audio</h4>
         <p>Standalone OBS audio source per meeting participant; audio mixed into OBS audio mixer.</p></div>
       <div class="card"><div class="card-icon">🎛️</div><h4>Control Dock</h4>
-        <p>Dockable Qt panel with join/leave, state indicator, active speaker label, recovery countdown, and output table.</p></div>
+        <p>Dockable Qt panel with join/leave, state indicator, Active Speaker Director controls, recovery countdown, and Output Manager launch.</p></div>
       <div class="card"><div class="card-icon">🌐</div><h4>TCP Control API</h4>
         <p>JSON server on port 19870 — query, join, leave, assign outputs from scripts or dashboards.</p></div>
       <div class="card"><div class="card-icon">🎛️</div><h4>OSC Control API</h4>
@@ -1027,6 +1027,15 @@ flowchart LR
       video subscription (and optionally the isolated audio feed) to the new speaker.
       A two-timer debounce prevents rapid camera cuts caused by brief interruptions.
     </p>
+    <p>
+      The current build also includes a central <strong>Active Speaker Director</strong>
+      in the Zoom Control dock and a dedicated <strong>CoreVideo Active Speaker</strong>
+      OBS source. The director tracks the raw Zoom speaker, candidate speaker,
+      directed speaker, last directed speaker, and manual take/release state.
+      The dedicated source follows the directed speaker and uses a two-slot handoff:
+      the current participant stays visible while the next participant warms on a
+      hidden slot, then the source cuts only after a valid frame is available.
+    </p>
 
     <h3>Debounce Algorithm</h3>
     <p>
@@ -1038,7 +1047,7 @@ flowchart LR
     <ul>
       <li><strong>Sensitivity guard</strong> — the candidate speaker must hold the
           floor continuously for at least <code>speaker_sensitivity_ms</code>
-          (default 300 ms). A new candidate resets this clock.</li>
+          (default 500 ms). A new candidate resets this clock.</li>
       <li><strong>Hold guard</strong> — after any switch, no further switch may
           occur for at least <code>speaker_hold_ms</code> (default 2 000 ms),
           regardless of who speaks.</li>
@@ -1119,9 +1128,14 @@ sequenceDiagram
     <h3>Timing Parameters</h3>
     <table>
       <tr><th>Parameter</th><th>Default</th><th>Range</th><th>Description</th></tr>
-      <tr><td><code>speaker_sensitivity_ms</code></td><td>300 ms</td><td>0 – 3 000 ms (step 50)</td><td>New speaker must hold the floor this long before the switch fires</td></tr>
+      <tr><td><code>speaker_sensitivity_ms</code></td><td>500 ms</td><td>0 – 3 000 ms (step 50)</td><td>New speaker must hold the floor this long before the switch fires</td></tr>
       <tr><td><code>speaker_hold_ms</code></td><td>2 000 ms</td><td>0 – 10 000 ms (step 100)</td><td>Minimum time to stay on current speaker after any switch</td></tr>
     </table>
+    <p>
+      The Zoom Control dock exposes these values through the Active Speaker
+      Director controls. Operators can also manually take a participant to air
+      and release that supersede when automatic direction should resume.
+    </p>
 
     <h3>Safety Mechanisms</h3>
     <ul>
@@ -1162,6 +1176,15 @@ sequenceDiagram
       talking (<code>●</code>) and video (<code>[video]</code>) indicators,
       and updates when the <strong>Refresh</strong> button is pressed.
     </p>
+
+    <h3>Director TCP Controls</h3>
+    <table>
+      <tr><th>Command</th><th>Request</th><th>Use</th></tr>
+      <tr><td><code>speaker_director_status</code></td><td><code>{"cmd":"speaker_director_status"}</code></td><td>Returns directed, raw, candidate, last, manual, sensitivity, and hold state</td></tr>
+      <tr><td><code>speaker_director_configure</code></td><td><code>{"cmd":"speaker_director_configure","sensitivity_ms":650,"hold_ms":2500}</code></td><td>Updates director timing</td></tr>
+      <tr><td><code>speaker_director_take</code></td><td><code>{"cmd":"speaker_director_take","participant_id":123}</code></td><td>Manually holds a participant as the directed speaker</td></tr>
+      <tr><td><code>speaker_director_release</code></td><td><code>{"cmd":"speaker_director_release"}</code></td><td>Returns to automatic speaker direction</td></tr>
+    </table>
   </section>
 
   <!-- ══ AUTO-RECONNECT ═══════════════════════════════════════ -->
@@ -1264,13 +1287,13 @@ sequenceDiagram
       <li><strong>Cancel Recovery</strong> button — calls <code>ZoomReconnectManager::cancel()</code></li>
     </ul>
 
-    <h3>Output Table</h3>
+    <h3>Routing Section</h3>
     <p>
-      The dock embeds the primary inline output table for quick edits. It shows
-      preview thumbnails, OBS output source names, assignment mode, requested
-      resolution, observed signal, audio mode, and isolated-audio state. The
-      separate <strong>Tools → Zoom Output Manager</strong> dialog remains available
-      for saving, loading, and deleting output profiles.
+      The dock no longer embeds the full output table. Its routing section opens
+      the dedicated <strong>Tools → Zoom Output Manager</strong> dialog, which is
+      the primary assignment surface for saving, loading, deleting profiles, and
+      reviewing requested resolution, observed signal, frame rate, audio mode,
+      and isolated-audio state.
     </p>
   </section>
 
@@ -1330,6 +1353,10 @@ sequenceDiagram
       <tr><td><code>list_participants</code></td><td><code>{"cmd":"list_participants"}</code></td><td><code>participants</code> array</td></tr>
       <tr><td><code>list_outputs</code></td><td><code>{"cmd":"list_outputs"}</code></td><td><code>outputs</code> array</td></tr>
       <tr><td><code>assign_output</code></td><td><code>{"cmd":"assign_output","source":"…","participant_id":N,"active_speaker":false,"isolate_audio":true,"audio_channels":"stereo"}</code></td><td><code>ok</code>, <code>error</code></td></tr>
+      <tr><td><code>speaker_director_status</code></td><td><code>{"cmd":"speaker_director_status"}</code></td><td><code>speaker_director</code> object with directed/raw/candidate/manual/timing state</td></tr>
+      <tr><td><code>speaker_director_configure</code></td><td><code>{"cmd":"speaker_director_configure","sensitivity_ms":650,"hold_ms":2500}</code></td><td><code>speaker_director</code> object after applying timing changes</td></tr>
+      <tr><td><code>speaker_director_take</code></td><td><code>{"cmd":"speaker_director_take","participant_id":N}</code></td><td><code>speaker_director</code> object with manual supersede enabled</td></tr>
+      <tr><td><code>speaker_director_release</code></td><td><code>{"cmd":"speaker_director_release"}</code></td><td><code>speaker_director</code> object with automatic direction restored</td></tr>
       <tr><td><code>join</code></td><td><code>{"cmd":"join","meeting_id":"…","passcode":"…","display_name":"OBS"}</code></td><td><code>ok</code></td></tr>
       <tr><td><code>leave</code></td><td><code>{"cmd":"leave"}</code></td><td><code>ok</code></td></tr>
       <tr><td><code>oauth_callback</code></td><td><code>{"cmd":"oauth_callback","url":"corevideo://oauth/callback?code=…&amp;state=…"}</code></td><td><code>ok</code> or <code>error</code> — forwards the OS URL-scheme callback to <code>ZoomOAuthManager::handle_redirect_url()</code>. Token check is bypassed for this command; OAuth state/verifier still guard against replay.</td></tr>

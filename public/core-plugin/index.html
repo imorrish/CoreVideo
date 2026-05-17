@@ -20,11 +20,11 @@
 <p>CoreVideo keeps all Zoom Meeting SDK access inside the lightweight <code>ZoomObsEngine</code> helper process. The OBS plugin starts the engine, joins the meeting, and sends subscription requests over JSON IPC. Video and audio payloads move through named shared memory so large frames are not copied through the IPC pipe.</p>
 <p>The plugin-side <code>ZoomSource</code> reads the shared memory frame, outputs it into OBS, and forwards the same copied buffer to optional plugin-side services such as ISO recording. This keeps the engine minimal and makes OBS/plugin features easier to test independently from the Zoom SDK.</p>
 <h2>What It Looks Like in OBS</h2>
-<p>The CoreVideo plugin is operated from inside OBS. These diagrams mirror the current core plugin controls: the Zoom Control dock, regular OBS scenes/sources, the inline output assignment table, the separate profile-oriented Zoom Output Manager, and the Zoom Participant source properties. Exact styling can vary by OBS theme and platform, but the controls and labels should match the current plugin.</p>
+<p>The CoreVideo plugin is operated from inside OBS. These diagrams mirror the current core plugin controls: the Zoom Control dock, regular OBS scenes/sources, the Active Speaker Director controls, the separate profile-oriented Zoom Output Manager, and the Zoom Participant source properties. Exact styling can vary by OBS theme and platform, but the controls and labels should match the current plugin.</p>
 <figure class="doc-image"><img src="images/corevideo-obs-workspace.svg" alt="CoreVideo OBS workspace with Zoom Control dock"></figure>
-<p>The Zoom Control dock joins and leaves meetings, starts and stops raw media, shows meeting state, lists participants, and applies source assignments without leaving OBS.</p>
+<p>The Zoom Control dock joins and leaves meetings, starts and stops raw media, shows meeting state, lists participants, exposes Active Speaker Director controls, and opens the Output Manager for source assignment without leaving OBS.</p>
 <figure class="doc-image"><img src="images/corevideo-output-manager.svg" alt="CoreVideo Output Manager"></figure>
-<p>The dock's inline output table is the primary day-to-day assignment surface. The separate Zoom Output Manager remains available for profile save/load workflows and exposes the same requested resolution, observed signal, frame rate, and audio routing information.</p>
+<p>The dedicated Zoom Output Manager is the primary assignment surface. It supports profile save/load workflows and exposes requested resolution, observed signal, frame rate, assignment mode, and audio routing information for each output.</p>
 <figure class="doc-image"><img src="images/corevideo-source-properties.svg" alt="CoreVideo Zoom Participant source properties"></figure>
 <p>Each Zoom Participant source can be configured independently for fixed participants, active speaker, spotlight slot, screen share, isolated audio, audience audio, resolution, video-loss behavior, and hardware conversion.</p>
 <h2>Joining Meetings</h2>
@@ -34,6 +34,18 @@
 <p>Add one or more <strong>Zoom Participant</strong> sources in OBS. Each source can follow a different assignment mode:</p>
 <table><thead><tr><th>Mode</th><th>Behavior</th><th>Common Use</th></tr></thead><tbody><tr><td>Participant</td><td>Fixed Zoom participant ID</td><td>Dedicated guest ISO</td></tr><tr><td>Active Speaker</td><td>Follows the current active speaker</td><td>Host/speaker-follow shot</td></tr><tr><td>Spotlight Slot</td><td>Follows Zoom spotlight position 1..N</td><td>ZoomISO-style production</td></tr><tr><td>Screen Share</td><td>Follows active screen share</td><td>Slides/demo capture</td></tr></tbody></table>
 <p>Each output reports observed resolution and frame rate through the output manager and TCP <code>list_outputs</code> command.</p>
+<p>For a single directed speaker-follow output, add the dedicated <strong>CoreVideo Active Speaker</strong> OBS source. It follows the central Active Speaker Director and uses a two-slot handoff internally: the current participant remains visible while the next participant warms on a hidden slot, then the source cuts only after a valid frame is available.</p>
+<h2>Active Speaker Director</h2>
+<p>The Active Speaker Director is controlled from the Zoom Control dock. It is not just a pass-through of Zoom's raw active-speaker event; it builds CoreVideo's own production decision from the raw speaker signal.</p>
+<p>The dock shows:</p>
+<ul><li>Directed speaker: the participant currently being sent to active-speaker outputs.</li><li>Raw speaker: the latest speaker reported by Zoom.</li><li>Candidate speaker: the participant waiting out the sensitivity timer.</li><li>Last speaker: the previously directed participant.</li><li>Manual take/release: an operator supersede that holds a participant on air until released.</li></ul>
+<p>Timing controls:</p>
+<table><thead><tr><th>Setting</th><th>Default</th><th>Behavior</th></tr></thead><tbody><tr><td>Sensitivity</td><td>500 ms</td><td>Candidate must keep speaking this long before switching.</td></tr><tr><td>Hold</td><td>2000 ms</td><td>Minimum time to stay on the current directed speaker after a cut.</td></tr></tbody></table>
+<p>TCP examples:</p>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_status&quot;}</code></pre>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_configure&quot;,&quot;sensitivity_ms&quot;:650,&quot;hold_ms&quot;:2500}</code></pre>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_take&quot;,&quot;participant_id&quot;:123456}</code></pre>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_release&quot;}</code></pre>
 <h2>Audio Routing</h2>
 <p>CoreVideo supports three audio modes for participant outputs:</p>
 <table><thead><tr><th>Routing</th><th>Behavior</th></tr></thead><tbody><tr><td>Mixed</td><td>Full meeting mix</td></tr><tr><td>Isolated</td><td>Only the assigned participant's one-way audio</td></tr><tr><td>Audience</td><td>Residual one-way audio for participants not assigned to isolated outputs</td></tr></tbody></table>
@@ -68,6 +80,11 @@
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;assign_output_ex&quot;,&quot;source&quot;:&quot;Zoom Participant 1&quot;,&quot;mode&quot;:&quot;participant&quot;,&quot;participant_id&quot;:123456,&quot;isolate_audio&quot;:true,&quot;audio_channels&quot;:&quot;mono&quot;,&quot;video_resolution&quot;:&quot;1080p&quot;}</code></pre>
 <p>Assign a source to active speaker:</p>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;assign_output_ex&quot;,&quot;source&quot;:&quot;Zoom Participant 2&quot;,&quot;mode&quot;:&quot;active_speaker&quot;,&quot;audio_channels&quot;:&quot;mono&quot;,&quot;video_resolution&quot;:&quot;1080p&quot;}</code></pre>
+<p>Inspect and control the Active Speaker Director:</p>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_status&quot;}</code></pre>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_configure&quot;,&quot;sensitivity_ms&quot;:650,&quot;hold_ms&quot;:2500}</code></pre>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_take&quot;,&quot;participant_id&quot;:123456}</code></pre>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_release&quot;}</code></pre>
 <p>Assign a source to spotlight slot 1:</p>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;assign_output_ex&quot;,&quot;source&quot;:&quot;Zoom Participant 3&quot;,&quot;mode&quot;:&quot;spotlight&quot;,&quot;spotlight_slot&quot;:1,&quot;audio_channels&quot;:&quot;mono&quot;,&quot;video_resolution&quot;:&quot;1080p&quot;}</code></pre>
 <h2>OSC Control Examples</h2>
