@@ -44,6 +44,29 @@ static bool json_to_uint32(const QJsonObject &obj, const char *key, uint32_t &ou
     return true;
 }
 
+static QString assignment_mode_to_string(AssignmentMode mode)
+{
+    switch (mode) {
+    case AssignmentMode::ActiveSpeaker: return QStringLiteral("active_speaker");
+    case AssignmentMode::SpotlightIndex: return QStringLiteral("spotlight");
+    case AssignmentMode::ScreenShare: return QStringLiteral("screen_share");
+    case AssignmentMode::Participant:
+    default: return QStringLiteral("participant");
+    }
+}
+
+static AssignmentMode assignment_mode_from_string(const QString &value,
+                                                  bool legacy_active)
+{
+    if (value == QStringLiteral("active_speaker") || legacy_active)
+        return AssignmentMode::ActiveSpeaker;
+    if (value == QStringLiteral("spotlight"))
+        return AssignmentMode::SpotlightIndex;
+    if (value == QStringLiteral("screen_share"))
+        return AssignmentMode::ScreenShare;
+    return AssignmentMode::Participant;
+}
+
 namespace ZoomOutputProfile {
 
 std::vector<std::string> list()
@@ -69,6 +92,9 @@ bool save(const std::string &name, const std::vector<ZoomOutputInfo> &outputs)
         obj["source"]         = QString::fromStdString(o.source_name);
         obj["display_name"]   = QString::fromStdString(o.display_name);
         obj["participant_id"] = static_cast<double>(o.participant_id);
+        obj["assignment_mode"] = assignment_mode_to_string(o.assignment);
+        obj["spotlight_slot"] = static_cast<double>(o.spotlight_slot);
+        obj["failover_participant_id"] = static_cast<double>(o.failover_participant_id);
         obj["active_speaker"] = o.active_speaker;
         obj["isolate_audio"]  = o.isolate_audio;
         obj["audio_channels"] = o.audio_mode == AudioChannelMode::Stereo
@@ -108,7 +134,14 @@ std::vector<ZoomOutputInfo> load(const std::string &name)
         o.source_name    = obj.value("source").toString().toStdString();
         o.display_name   = obj.value("display_name").toString().toStdString();
         json_to_uint32(obj, "participant_id", o.participant_id);
-        o.active_speaker = obj.value("active_speaker").toBool(false);
+        o.assignment = assignment_mode_from_string(
+            obj.value("assignment_mode").toString(),
+            obj.value("active_speaker").toBool(false));
+        json_to_uint32(obj, "spotlight_slot", o.spotlight_slot);
+        json_to_uint32(obj, "failover_participant_id", o.failover_participant_id);
+        if (o.spotlight_slot == 0)
+            o.spotlight_slot = 1;
+        o.active_speaker = o.assignment == AssignmentMode::ActiveSpeaker;
         o.isolate_audio  = obj.value("isolate_audio").toBool(false);
         o.audio_mode     = obj.value("audio_channels").toString() == "stereo"
                            ? AudioChannelMode::Stereo : AudioChannelMode::Mono;

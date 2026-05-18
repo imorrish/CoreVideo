@@ -1217,6 +1217,11 @@ static const char *zoom_active_speaker_source_get_name(void *)
     return obs_module_text("ZoomActiveSpeakerSource.Name");
 }
 
+static const char *zoom_share_source_get_name(void *)
+{
+    return obs_module_text("ZoomShareSource.Name");
+}
+
 static void *zoom_source_create_common(obs_data_t *settings, obs_source_t *source,
                                        bool dedicated_active_speaker)
 {
@@ -1316,6 +1321,16 @@ static void *zoom_active_speaker_source_create(obs_data_t *settings,
                                                obs_source_t *source)
 {
     return zoom_source_create_common(settings, source, true);
+}
+
+static void *zoom_share_source_create(obs_data_t *settings, obs_source_t *source)
+{
+    obs_data_set_int(settings, PROP_ASSIGNMENT_MODE,
+                     static_cast<int>(AssignmentMode::ScreenShare));
+    obs_data_set_int(settings, PROP_PARTICIPANT_ID, 0);
+    obs_data_set_string(settings, PROP_OUTPUT_DISPLAY_NAME,
+                        "Zoom Screen Share");
+    return zoom_source_create_common(settings, source, false);
 }
 
 static void zoom_source_destroy(void *data)
@@ -1586,6 +1601,16 @@ static void zoom_active_speaker_source_get_defaults(obs_data_t *settings)
                                 "CoreVideo Active Speaker");
 }
 
+static void zoom_share_source_get_defaults(obs_data_t *settings)
+{
+    zoom_source_get_defaults(settings);
+    obs_data_set_default_int(settings, PROP_ASSIGNMENT_MODE,
+                             static_cast<int>(AssignmentMode::ScreenShare));
+    obs_data_set_default_int(settings, PROP_PARTICIPANT_ID, 0);
+    obs_data_set_default_string(settings, PROP_OUTPUT_DISPLAY_NAME,
+                                "Zoom Screen Share");
+}
+
 void zoom_source_register()
 {
     obs_source_info info = {};
@@ -1610,4 +1635,11 @@ void zoom_source_register()
     active_info.create = zoom_active_speaker_source_create;
     active_info.get_defaults = zoom_active_speaker_source_get_defaults;
     obs_register_source(&active_info);
+
+    obs_source_info share_info = info;
+    share_info.id = "zoom_share_source";
+    share_info.get_name = zoom_share_source_get_name;
+    share_info.create = zoom_share_source_create;
+    share_info.get_defaults = zoom_share_source_get_defaults;
+    obs_register_source(&share_info);
 }

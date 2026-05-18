@@ -133,6 +133,41 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
     return text;
 }
 
+static QString assignment_data_for_output(const ZoomOutputInfo &output)
+{
+    switch (output.assignment) {
+    case AssignmentMode::ActiveSpeaker:
+        return QStringLiteral("active");
+    case AssignmentMode::ScreenShare:
+        return QStringLiteral("screenshare");
+    case AssignmentMode::SpotlightIndex:
+        return QStringLiteral("spotlight:%1").arg(output.spotlight_slot);
+    case AssignmentMode::Participant:
+    default:
+        return QStringLiteral("user:%1").arg(output.participant_id);
+    }
+}
+
+static AssignmentMode assignment_mode_from_data(const QString &data,
+                                                uint32_t &participant_id,
+                                                uint32_t &spotlight_slot)
+{
+    participant_id = 0;
+    spotlight_slot = 1;
+    if (data == QStringLiteral("active"))
+        return AssignmentMode::ActiveSpeaker;
+    if (data == QStringLiteral("screenshare"))
+        return AssignmentMode::ScreenShare;
+    if (data.startsWith(QStringLiteral("spotlight:"))) {
+        const uint slot = data.mid(10).toUInt();
+        spotlight_slot = slot > 0 ? slot : 1;
+        return AssignmentMode::SpotlightIndex;
+    }
+    if (data.startsWith(QStringLiteral("user:")))
+        participant_id = data.mid(5).toUInt();
+    return AssignmentMode::Participant;
+}
+
 ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     : QDialog(parent)
 {
@@ -310,12 +345,11 @@ void ZoomOutputDialog::refresh()
 
         auto *assignment = new QComboBox(m_table);
         assignment->addItem("Active speaker", "active");
+        assignment->addItem("Screen share", "screenshare");
         assignment->addItem("None", "user:0");
         for (const auto &p : roster)
             assignment->addItem(participant_label(p), QString("user:%1").arg(p.user_id));
-        const QString current_assignment = output.active_speaker
-            ? "active"
-            : QString("user:%1").arg(output.participant_id);
+        const QString current_assignment = assignment_data_for_output(output);
         const int assignment_index = assignment->findData(current_assignment);
         if (assignment_index >= 0) assignment->setCurrentIndex(assignment_index);
         m_table->setCellWidget(row, ColumnAssignment, assignment);
@@ -421,8 +455,12 @@ void ZoomOutputDialog::save_profile()
         ZoomOutputInfo o;
         o.source_name    = name_item->data(Qt::UserRole).toString().toStdString();
         const QString ad = assignment->currentData().toString();
-        o.active_speaker = (ad == "active");
-        o.participant_id = ad.startsWith("user:") ? ad.mid(5).toUInt() : 0;
+        uint32_t participant_id = 0;
+        uint32_t spotlight_slot = 1;
+        o.assignment = assignment_mode_from_data(ad, participant_id, spotlight_slot);
+        o.active_speaker = (o.assignment == AssignmentMode::ActiveSpeaker);
+        o.participant_id = participant_id;
+        o.spotlight_slot = spotlight_slot;
         o.isolate_audio  = isolate->isChecked();
         o.audio_mode     = static_cast<AudioChannelMode>(audio->currentData().toInt());
         o.video_resolution =
@@ -463,9 +501,7 @@ void ZoomOutputDialog::load_profile()
             auto *isolate    = qobject_cast<QCheckBox *>(m_table->cellWidget(row, ColumnIsolate));
             if (!assignment || !resolution || !audio || !isolate) continue;
 
-            const QString ad = o.active_speaker
-                ? "active"
-                : QString("user:%1").arg(o.participant_id);
+            const QString ad = assignment_data_for_output(o);
             const int idx = assignment->findData(ad);
             if (idx >= 0) assignment->setCurrentIndex(idx);
             const int res_idx = resolution->findData(
@@ -507,17 +543,17 @@ void ZoomOutputDialog::apply()
         const std::string source_name =
             name_item->data(Qt::UserRole).toString().toStdString();
         const QString assignment_data = assignment->currentData().toString();
-        const bool active_speaker = assignment_data == "active";
         uint32_t participant_id = 0;
-        if (assignment_data.startsWith("user:"))
-            participant_id = assignment_data.mid(5).toUInt();
+        uint32_t spotlight_slot = 1;
+        const AssignmentMode assignment_mode =
+            assignment_mode_from_data(assignment_data, participant_id, spotlight_slot);
         const auto audio_mode = static_cast<AudioChannelMode>(
             audio->currentData().toInt());
         const auto video_resolution = static_cast<VideoResolution>(
             resolution->currentData().toInt());
 
-        ZoomOutputManager::instance().configure_output(
-            source_name, participant_id, active_speaker,
+        ZoomOutputManager::instance().configure_output_ex(
+            source_name, assignment_mode, participant_id, spotlight_slot, 0,
             isolate->isChecked(), audio_mode, video_resolution);
     }
     refresh();
