@@ -1079,26 +1079,41 @@ static void *zoom_source_create_common(obs_data_t *settings, obs_source_t *sourc
     ctx->apply_settings(settings);
 
     ZoomEngineClient::instance().register_source(ctx->source_uuid, {
-        [ctx](uint32_t w, uint32_t h, uint32_t participant_id) {
+        [ctx, gate = ctx->m_callback_gate](uint32_t w, uint32_t h,
+                                           uint32_t participant_id) {
+            std::lock_guard<std::mutex> callback_lock(gate->mtx);
+            if (!gate->alive) return;
             ctx->on_engine_frame(w, h, participant_id);
         },
-        [ctx](uint32_t byte_len, uint32_t participant_id) {
+        [ctx, gate = ctx->m_callback_gate](uint32_t byte_len,
+                                           uint32_t participant_id) {
+            std::lock_guard<std::mutex> callback_lock(gate->mtx);
+            if (!gate->alive) return;
             ctx->on_engine_audio(byte_len, participant_id);
         }
     });
     if (dedicated_active_speaker) {
         ZoomEngineClient::instance().register_source(ctx->m_director_preview_uuid, {
-            [ctx](uint32_t w, uint32_t h, uint32_t participant_id) {
+            [ctx, gate = ctx->m_callback_gate](uint32_t w, uint32_t h,
+                                               uint32_t participant_id) {
+                std::lock_guard<std::mutex> callback_lock(gate->mtx);
+                if (!gate->alive) return;
                 ctx->on_director_preview_frame(w, h, participant_id);
             },
-            [ctx](uint32_t, uint32_t) {
+            [gate = ctx->m_callback_gate](uint32_t, uint32_t) {
+                std::lock_guard<std::mutex> callback_lock(gate->mtx);
+                if (!gate->alive) return;
                 // Audio cuts follow the committed current slot. The preview
                 // slot is video-only so it can warm a frame before the cut.
             }
         });
     }
     ZoomEngineClient::instance().add_roster_callback(ctx,
-        [ctx]() { ctx->on_roster_changed(); });
+        [ctx, gate = ctx->m_callback_gate]() {
+            std::lock_guard<std::mutex> callback_lock(gate->mtx);
+            if (!gate->alive) return;
+            ctx->on_roster_changed();
+        });
     ZoomOutputManager::instance().register_source(ctx);
 
     const ZoomPluginSettings s = ZoomPluginSettings::load();
@@ -1151,6 +1166,10 @@ static void *zoom_active_speaker_source_create(obs_data_t *settings,
 static void zoom_source_destroy(void *data)
 {
     auto *ctx = static_cast<ZoomSource *>(data);
+    {
+        std::lock_guard<std::mutex> callback_lock(ctx->m_callback_gate->mtx);
+        ctx->m_callback_gate->alive = false;
+    }
     if (ctx->m_hk_active_on_id  != OBS_INVALID_HOTKEY_ID) obs_hotkey_unregister(ctx->m_hk_active_on_id);
     if (ctx->m_hk_active_off_id != OBS_INVALID_HOTKEY_ID) obs_hotkey_unregister(ctx->m_hk_active_off_id);
     ZoomOutputManager::instance().unregister_source(ctx);

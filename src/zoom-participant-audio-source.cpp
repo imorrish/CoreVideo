@@ -14,6 +14,7 @@
 #include <atomic>
 #include <cstring>
 #include <mutex>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,11 @@ static std::string make_audio_source_uuid()
 }
 
 struct CoreVideoAudioSource {
+    struct CallbackGate {
+        std::mutex mtx;
+        bool alive = true;
+    };
+
     obs_source_t *source = nullptr;
     std::string source_uuid;
     CoreVideoAudioKind kind = CoreVideoAudioKind::Participant;
@@ -52,6 +58,8 @@ struct CoreVideoAudioSource {
     std::vector<uint8_t> audio_buf;
     std::vector<int16_t> stereo_buf;
     uint64_t frame_count = 0;
+    std::shared_ptr<CallbackGate> callback_gate =
+        std::make_shared<CallbackGate>();
 };
 
 static uint32_t target_participant_id(const CoreVideoAudioSource *ctx)
@@ -241,12 +249,19 @@ static void *audio_create_common(obs_data_t *settings, obs_source_t *source,
 
     ZoomEngineClient::instance().register_source(ctx->source_uuid, {
         {},
-        [ctx](uint32_t byte_len, uint32_t participant_id) {
+        [ctx, gate = ctx->callback_gate](uint32_t byte_len,
+                                         uint32_t participant_id) {
+            std::lock_guard<std::mutex> callback_lock(gate->mtx);
+            if (!gate->alive) return;
             output_audio_frame(ctx, byte_len, participant_id);
         }
     });
     ZoomEngineClient::instance().add_roster_callback(ctx,
-        [ctx]() { maybe_resubscribe_for_roster(ctx); });
+        [ctx, gate = ctx->callback_gate]() {
+            std::lock_guard<std::mutex> callback_lock(gate->mtx);
+            if (!gate->alive) return;
+            maybe_resubscribe_for_roster(ctx);
+        });
 
     return ctx;
 }
@@ -269,6 +284,10 @@ static void *audience_audio_create(obs_data_t *settings, obs_source_t *source)
 static void audio_destroy(void *data)
 {
     auto *ctx = static_cast<CoreVideoAudioSource *>(data);
+    {
+        std::lock_guard<std::mutex> callback_lock(ctx->callback_gate->mtx);
+        ctx->callback_gate->alive = false;
+    }
     ZoomEngineClient::instance().remove_roster_callback(ctx);
     unsubscribe_audio(ctx);
     ZoomEngineClient::instance().unregister_source(ctx->source_uuid);

@@ -29,6 +29,32 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 static QPointer<ZoomDock> g_dock;
 static QPointer<ZoomIsoPanel> g_iso_panel;
+static bool g_frontend_callback_registered = false;
+
+static ZoomDock *ensure_zoom_dock();
+static ZoomIsoPanel *ensure_iso_panel();
+
+static void shutdown_corevideo()
+{
+    if (g_dock)
+        g_dock->prepare_shutdown();
+    if (g_iso_panel)
+        g_iso_panel->prepare_shutdown();
+    ZoomControlServer::instance().stop();
+    ZoomOscServer::instance().stop();
+    ZoomIsoRecorder::instance().stop();
+    ZoomEngineClient::instance().stop();
+}
+
+static void frontend_event_callback(enum obs_frontend_event event, void *)
+{
+    if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
+        ensure_zoom_dock();
+        ensure_iso_panel();
+    }
+    if (event == OBS_FRONTEND_EVENT_EXIT)
+        shutdown_corevideo();
+}
 
 static void configure_qt_plugin_paths()
 {
@@ -189,20 +215,8 @@ bool obs_module_load(void)
         show_iso_panel();
     }, nullptr);
 
-    obs_frontend_add_event_callback(
-        [](enum obs_frontend_event event, void *) {
-            if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
-                ensure_zoom_dock();
-                ensure_iso_panel();
-            }
-            if (event == OBS_FRONTEND_EVENT_EXIT) {
-                if (g_dock)
-                    g_dock->prepare_shutdown();
-                if (g_iso_panel)
-                    g_iso_panel->prepare_shutdown();
-                ZoomEngineClient::instance().stop();
-            }
-        }, nullptr);
+    obs_frontend_add_event_callback(frontend_event_callback, nullptr);
+    g_frontend_callback_registered = true;
 
     blog(LOG_INFO, "[obs-zoom-plugin] Plugin loaded successfully");
     return true;
@@ -211,8 +225,11 @@ bool obs_module_load(void)
 void obs_module_unload(void)
 {
     blog(LOG_INFO, "[obs-zoom-plugin] Unloading plugin");
-    ZoomControlServer::instance().stop();
-    ZoomOscServer::instance().stop();
-    ZoomIsoRecorder::instance().stop();
-    ZoomEngineClient::instance().stop();
+    if (g_frontend_callback_registered) {
+        obs_frontend_remove_event_callback(frontend_event_callback, nullptr);
+        g_frontend_callback_registered = false;
+    }
+    shutdown_corevideo();
+    g_dock.clear();
+    g_iso_panel.clear();
 }
