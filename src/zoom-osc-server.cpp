@@ -236,6 +236,21 @@ void ZoomOscServer::dispatch(const QString &address,
         return;
     }
 
+    // /zoom/upgrade_low_quality_outputs [,i force]
+    if (address == "/zoom/upgrade_low_quality_outputs") {
+        const bool force = !args.empty() && args[0].type == OscArg::Int32 &&
+            args[0].i != 0;
+        const uint32_t upgraded =
+            ZoomOutputManager::instance().upgrade_low_quality_sources(force);
+        std::vector<OscArg> reply(1);
+        reply[0].type = OscArg::Int32;
+        reply[0].i = static_cast<int32_t>(upgraded);
+        m_socket->writeDatagram(build_osc("/zoom/upgrade_low_quality_outputs/result",
+                                          "i", reply),
+                                sender, sender_port);
+        return;
+    }
+
     // /zoom/list_participants  →  reply with current roster
     if (address == "/zoom/list_participants") {
         send_participants(sender, sender_port);

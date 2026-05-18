@@ -122,6 +122,14 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
         .arg(output.observed_fps, 0, 'f', 2);
     if (output_signal_below_requested(output))
         text += QStringLiteral(" CoreVideo is using the best available Zoom feed.");
+    if (output.quality_upgrade_attempts > 0) {
+        text += QString(" Quality upgrade attempts: %1.")
+            .arg(output.quality_upgrade_attempts);
+    }
+    if (output.quality_upgrade_cooldown_ms > 0) {
+        text += QString(" Next quality retry in %1 ms.")
+            .arg(output.quality_upgrade_cooldown_ms);
+    }
     return text;
 }
 
@@ -195,6 +203,8 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     auto *refresh_button = buttons->addButton("Refresh", QDialogButtonBox::ActionRole);
     auto *recover_button = buttons->addButton("Recover Stale Feeds",
                                               QDialogButtonBox::ActionRole);
+    auto *quality_button = buttons->addButton("Retry Quality Upgrade",
+                                              QDialogButtonBox::ActionRole);
 
     if (auto *apply_btn = buttons->button(QDialogButtonBox::Apply))
         apply_btn->setProperty("role", "primary");
@@ -202,6 +212,10 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     connect(refresh_button, &QPushButton::clicked, this, [this]() { refresh(); });
     connect(recover_button, &QPushButton::clicked, this, [this]() {
         ZoomOutputManager::instance().recover_stale_sources(true);
+        refresh();
+    });
+    connect(quality_button, &QPushButton::clicked, this, [this]() {
+        ZoomOutputManager::instance().upgrade_low_quality_sources(true);
         refresh();
     });
     connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked,

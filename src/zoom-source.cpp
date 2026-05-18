@@ -47,6 +47,8 @@ static constexpr uint64_t kPreviewIntervalNs = 200'000'000ULL;
 static constexpr uint64_t kStaleVideoNs = 3'000'000'000ULL;
 static constexpr uint64_t kNoSignalRecoverNs = 5'000'000'000ULL;
 static constexpr uint64_t kStaleRecoverCooldownNs = 10'000'000'000ULL;
+static constexpr uint64_t kQualityUpgradeStableNs = 10'000'000'000ULL;
+static constexpr uint64_t kQualityUpgradeCooldownNs = 30'000'000'000ULL;
 
 static AudioChannelMode audio_mode_from_data(obs_data_t *s)
 {
@@ -397,6 +399,16 @@ ZoomOutputInfo ZoomSource::output_info() const
                     (kStaleRecoverCooldownNs - recover_age_ns) / 1'000'000ULL;
             }
         }
+        const uint64_t last_upgrade_ns =
+            m_last_quality_upgrade_ns.load(std::memory_order_relaxed);
+        if (last_upgrade_ns != 0) {
+            const uint64_t upgrade_age_ns =
+                now_ns > last_upgrade_ns ? now_ns - last_upgrade_ns : 0;
+            if (upgrade_age_ns < kQualityUpgradeCooldownNs) {
+                info.quality_upgrade_cooldown_ms =
+                    (kQualityUpgradeCooldownNs - upgrade_age_ns) / 1'000'000ULL;
+            }
+        }
     }
     const uint64_t last_subscribe_ns =
         m_last_subscribe_ns.load(std::memory_order_relaxed);
@@ -404,6 +416,8 @@ ZoomOutputInfo ZoomSource::output_info() const
         info.subscribed_age_ms = (now_ns - last_subscribe_ns) / 1'000'000ULL;
     info.stale_recovery_attempts =
         m_stale_recover_attempts.load(std::memory_order_relaxed);
+    info.quality_upgrade_attempts =
+        m_quality_upgrade_attempts.load(std::memory_order_relaxed);
     info.assignment = mode;
     info.spotlight_slot = spotlight_slot.load(std::memory_order_acquire);
     info.failover_participant_id = failover_participant_id.load(std::memory_order_acquire);
@@ -582,6 +596,8 @@ void ZoomSource::unsubscribe()
     m_last_subscribe_ns.store(0, std::memory_order_relaxed);
     m_last_stale_recover_ns.store(0, std::memory_order_relaxed);
     m_stale_recover_attempts.store(0, std::memory_order_relaxed);
+    m_last_quality_upgrade_ns.store(0, std::memory_order_relaxed);
+    m_quality_upgrade_attempts.store(0, std::memory_order_relaxed);
 }
 
 bool ZoomSource::recover_stale_video(uint64_t now_ns, bool force)
@@ -629,6 +645,57 @@ bool ZoomSource::recover_stale_video(uint64_t now_ns, bool force)
          output_name().c_str(), source_uuid.c_str(),
          static_cast<unsigned long long>(age_ns / 1'000'000ULL),
          attempt);
+    subscribe();
+    return true;
+}
+
+bool ZoomSource::upgrade_low_quality_video(uint64_t now_ns, bool force)
+{
+    if (!m_active.load(std::memory_order_acquire) ||
+        !m_subscribed.load(std::memory_order_acquire))
+        return false;
+
+    const uint32_t observed_w = m_width.load(std::memory_order_relaxed);
+    const uint32_t observed_h = m_height.load(std::memory_order_relaxed);
+    if (observed_w == 0 || observed_h == 0 || observed_h >= 1080)
+        return false;
+
+    const uint32_t requested_w = width_for_resolution(resolution);
+    const uint32_t requested_h = height_for_resolution(resolution);
+    if (requested_h <= observed_h + 8 || requested_w <= observed_w + 8)
+        return false;
+
+    const uint64_t last_frame_ns =
+        m_last_frame_ns.load(std::memory_order_acquire);
+    if (last_frame_ns == 0 || now_ns <= last_frame_ns ||
+        now_ns - last_frame_ns > kStaleVideoNs)
+        return false;
+
+    const uint64_t last_subscribe_ns =
+        m_last_subscribe_ns.load(std::memory_order_acquire);
+    if (!force && (last_subscribe_ns == 0 || now_ns <= last_subscribe_ns ||
+        now_ns - last_subscribe_ns < kQualityUpgradeStableNs))
+        return false;
+
+    const uint64_t last_upgrade_ns =
+        m_last_quality_upgrade_ns.load(std::memory_order_acquire);
+    if (!force && last_upgrade_ns != 0 &&
+        now_ns - last_upgrade_ns < kQualityUpgradeCooldownNs)
+        return false;
+
+    uint64_t expected = last_upgrade_ns;
+    if (!m_last_quality_upgrade_ns.compare_exchange_strong(
+            expected, now_ns, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return false;
+    }
+
+    const uint32_t attempt =
+        m_quality_upgrade_attempts.fetch_add(1, std::memory_order_relaxed) + 1;
+    blog(LOG_INFO,
+         "[obs-zoom-plugin] Retrying Zoom video quality upgrade: source=%s uuid=%s observed=%ux%u requested=%ux%u attempt=%u",
+         output_name().c_str(), source_uuid.c_str(), observed_w, observed_h,
+         requested_w, requested_h, attempt);
     subscribe();
     return true;
 }

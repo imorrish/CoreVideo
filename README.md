@@ -210,7 +210,7 @@ echo '{"cmd":"assign_output","source":"Zoom Participant 1","participant_id":123,
 echo '{"cmd":"oauth_callback","url":"corevideo://oauth/callback?code=...&state=..."}' | nc 127.0.0.1 19870
 ```
 
-Commands: `help`, `status`, `list_participants`, `list_outputs`, `assign_output`, `assign_output_ex`, `recover_stale_outputs`, `join`, `leave`, `oauth_callback`, `iso_recording_start`, `iso_recording_stop`, `iso_recording_status`, `speaker_director_status`, `speaker_director_configure`, `speaker_director_take`, `speaker_director_release`.
+Commands: `help`, `status`, `list_participants`, `list_outputs`, `assign_output`, `assign_output_ex`, `recover_stale_outputs`, `upgrade_low_quality_outputs`, `join`, `leave`, `oauth_callback`, `iso_recording_start`, `iso_recording_stop`, `iso_recording_status`, `speaker_director_status`, `speaker_director_configure`, `speaker_director_take`, `speaker_director_release`.
 
 ### Auto ISO Recording
 
@@ -239,6 +239,7 @@ Each active source segment writes one `*.mp4` video file and one matching `*.wav
 | `/zoom/list_participants` | - | Reply: one `/zoom/participant` per user |
 | `/zoom/list_outputs` | - | Reply: one `/zoom/output` per source |
 | `/zoom/recover_stale_outputs` | `[,i]` | Retry stale video outputs; optional `1` forces cooldown bypass |
+| `/zoom/upgrade_low_quality_outputs` | `[,i]` | Retry outputs below requested resolution; skips feeds already at 1080p |
 | `/zoom/join` | `,sss` | meeting_id, passcode, display_name |
 | `/zoom/leave` | - | Leave meeting |
 | `/zoom/assign_output` | `,si[i]` | source, participant_id, [active_speaker] |

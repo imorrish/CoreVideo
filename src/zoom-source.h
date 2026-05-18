@@ -74,6 +74,7 @@ struct ZoomSource {
     void subscribe();
     void unsubscribe();
     bool recover_stale_video(uint64_t now_ns, bool force = false);
+    bool upgrade_low_quality_video(uint64_t now_ns, bool force = false);
     void activate();
     void deactivate();
     void on_roster_changed();
@@ -127,6 +128,8 @@ private:
     std::atomic<uint64_t> m_last_subscribe_ns{0};
     std::atomic<uint64_t> m_last_stale_recover_ns{0};
     std::atomic<uint32_t> m_stale_recover_attempts{0};
+    std::atomic<uint64_t> m_last_quality_upgrade_ns{0};
+    std::atomic<uint32_t> m_quality_upgrade_attempts{0};
     std::vector<int16_t> m_stereo_buf;
     ZoomPreviewCallback m_preview_cb;
     uint64_t m_preview_last_ns = 0;

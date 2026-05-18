@@ -113,6 +113,18 @@ uint32_t ZoomOutputManager::recover_stale_sources(bool force)
     return recovered;
 }
 
+uint32_t ZoomOutputManager::upgrade_low_quality_sources(bool force)
+{
+    const uint64_t now_ns = os_gettime_ns();
+    uint32_t upgraded = 0;
+    std::lock_guard<std::mutex> lk(m_mtx);
+    for (auto *src : m_sources) {
+        if (src && src->upgrade_low_quality_video(now_ns, force))
+            ++upgraded;
+    }
+    return upgraded;
+}
+
 void ZoomOutputManager::clear_all_preview_cbs()
 {
     std::lock_guard<std::mutex> lk(m_mtx);

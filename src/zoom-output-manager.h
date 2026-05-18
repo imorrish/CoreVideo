@@ -25,6 +25,8 @@ struct ZoomOutputInfo {
     bool video_stale = false;
     uint32_t stale_recovery_attempts = 0;
     uint64_t stale_recovery_cooldown_ms = 0;
+    uint32_t quality_upgrade_attempts = 0;
+    uint64_t quality_upgrade_cooldown_ms = 0;
     uint64_t subscribed_age_ms = 0;
     AssignmentMode   assignment = AssignmentMode::Participant;
     uint32_t         spotlight_slot = 1;     // used when assignment == SpotlightIndex
@@ -95,6 +97,7 @@ public:
     // Re-send subscribe commands for all active sources after engine recovery.
     void resubscribe_all();
     uint32_t recover_stale_sources(bool force = false);
+    uint32_t upgrade_low_quality_sources(bool force = false);
 
     // Preview callbacks — call from the UI thread only.
     void set_preview_cb(const std::string &source_name,

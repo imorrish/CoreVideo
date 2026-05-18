@@ -220,13 +220,22 @@ List outputs:
 
 Output snapshots include requested resolution, observed resolution/FPS, stale
 state, last frame age, subscribed age for outputs still waiting on their first
-frame, recovery attempts, and the remaining automatic recovery cooldown.
+frame, recovery attempts, automatic quality-upgrade attempts, and remaining
+retry cooldowns.
 
 Force a retry for stale outputs:
 
 ```json
 {"cmd":"recover_stale_outputs","force":true}
 ```
+
+Force a quality retry for live outputs below their requested resolution:
+
+```json
+{"cmd":"upgrade_low_quality_outputs","force":true}
+```
+
+Quality retries are skipped when a feed is already observed at 1080p.
 
 Assign a source to a fixed participant with isolated mono audio:
 
@@ -277,6 +286,12 @@ Retry stale video outputs:
 
 ```text
 /zoom/recover_stale_outputs 1
+```
+
+Retry low-quality video outputs:
+
+```text
+/zoom/upgrade_low_quality_outputs 1
 ```
 
 Assign a source:

@@ -269,27 +269,58 @@ void EngineVideo::subscribe(uint32_t participant_id,
     auto it = m_subs.find(participant_id);
     if (it != m_subs.end() && it->second) {
         if (it->second->active()) {
-            it->second->add_source(source_uuid, e2p_fd);
-            m_source_participants[source_uuid] = {
-                participant_id,
-                it->second->resolution()
-            };
             if (resolution > it->second->resolution()) {
+                auto targets = it->second->sources();
+                targets.emplace_back(source_uuid, e2p_fd);
                 EngineIpc::write(
-                    R"({"cmd":"debug","stage":"video_existing_subscription_lower_resolution","source_uuid":")" +
+                    R"({"cmd":"debug","stage":"video_upgrade_subscription","source_uuid":")" +
+                    source_uuid + R"(","participant_id":)" +
+                    std::to_string(participant_id) + R"(,"requested":)" +
+                    std::to_string(resolution) + R"(,"previous":)" +
+                    std::to_string(it->second->resolution()) + R"(,"active_targets":)" +
+                    std::to_string(targets.size()) + "}");
+
+                m_subs.erase(it);
+                for (const auto &target : targets)
+                    m_source_participants.erase(target.first);
+
+                it = m_subs.emplace(
+                    participant_id,
+                    std::make_unique<ParticipantSubscription>(
+                        participant_id, targets.front().first,
+                        targets.front().second, resolution)).first;
+                if (!it->second || it->second->empty()) {
+                    m_subs.erase(it);
+                    return;
+                }
+                for (size_t i = 1; i < targets.size(); ++i)
+                    it->second->add_source(targets[i].first, targets[i].second);
+                for (const auto &target : targets) {
+                    m_source_participants[target.first] = {
+                        participant_id,
+                        it->second->resolution()
+                    };
+                }
+                EngineIpc::write(
+                    R"({"cmd":"debug","stage":"video_subscription_upgraded","source_uuid":")" +
                     source_uuid + R"(","participant_id":)" +
                     std::to_string(participant_id) + R"(,"requested":)" +
                     std::to_string(resolution) + R"(,"actual":)" +
                     std::to_string(it->second->resolution()) + R"(,"active_targets":)" +
                     std::to_string(it->second->target_count()) + "}");
-            } else {
-                EngineIpc::write(
-                    R"({"cmd":"debug","stage":"video_source_attached_existing_subscription","source_uuid":")" +
-                    source_uuid + R"(","participant_id":)" +
-                    std::to_string(participant_id) + R"(,"resolution":)" +
-                    std::to_string(it->second->resolution()) + R"(,"active_targets":)" +
-                    std::to_string(it->second->target_count()) + "}");
+                return;
             }
+            it->second->add_source(source_uuid, e2p_fd);
+            m_source_participants[source_uuid] = {
+                participant_id,
+                it->second->resolution()
+            };
+            EngineIpc::write(
+                R"({"cmd":"debug","stage":"video_source_attached_existing_subscription","source_uuid":")" +
+                source_uuid + R"(","participant_id":)" +
+                std::to_string(participant_id) + R"(,"resolution":)" +
+                std::to_string(it->second->resolution()) + R"(,"active_targets":)" +
+                std::to_string(it->second->target_count()) + "}");
             return;
         }
         m_subs.erase(it);

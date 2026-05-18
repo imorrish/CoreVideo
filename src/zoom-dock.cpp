@@ -293,6 +293,14 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
     if (output_signal_below_requested(output)) {
         text += QStringLiteral(" Zoom delivered a lower feed, so CoreVideo is using the best available live feed.");
     }
+    if (output.quality_upgrade_attempts > 0) {
+        text += QString(" Quality upgrade attempts: %1.")
+            .arg(output.quality_upgrade_attempts);
+    }
+    if (output.quality_upgrade_cooldown_ms > 0) {
+        text += QString(" Next quality retry in %1 ms.")
+            .arg(output.quality_upgrade_cooldown_ms);
+    }
     return text;
 }
 
@@ -641,6 +649,7 @@ ZoomDock::ZoomDock(QWidget *parent)
         if (SpeakerDirector::instance().tick(os_gettime_ns() / 1000000ULL))
             ZoomOutputManager::instance().resubscribe_all();
         ZoomOutputManager::instance().recover_stale_sources();
+        ZoomOutputManager::instance().upgrade_low_quality_sources();
         update_state_indicator();
     });
     m_refresh_timer->start();

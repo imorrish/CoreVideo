@@ -239,6 +239,10 @@ static QJsonObject output_to_json(const ZoomOutputInfo &o)
         static_cast<double>(o.stale_recovery_attempts);
     obj["stale_recovery_cooldown_ms"] =
         static_cast<double>(o.stale_recovery_cooldown_ms);
+    obj["quality_upgrade_attempts"] =
+        static_cast<double>(o.quality_upgrade_attempts);
+    obj["quality_upgrade_cooldown_ms"] =
+        static_cast<double>(o.quality_upgrade_cooldown_ms);
     obj["subscribed_age_ms"] = static_cast<double>(o.subscribed_age_ms);
     obj["signal_below_requested"] = output_signal_below_requested(o);
     obj["signal_missing_or_stale"] = output_signal_missing_or_stale(o);
@@ -329,6 +333,7 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
         for (const char *c : {"help", "status", "list_participants", "list_outputs",
                               "assign_output", "assign_output_ex",
                               "recover_stale_outputs",
+                              "upgrade_low_quality_outputs",
                               "speaker_director_status",
                               "speaker_director_configure",
                               "speaker_director_take",
@@ -461,6 +466,17 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
         write_response(socket, {
             {"ok", true},
             {"recovered", static_cast<double>(recovered)}
+        });
+        return;
+    }
+
+    if (cmd == "upgrade_low_quality_outputs") {
+        const bool force = req.value("force").toBool(false);
+        const uint32_t upgraded =
+            ZoomOutputManager::instance().upgrade_low_quality_sources(force);
+        write_response(socket, {
+            {"ok", true},
+            {"upgraded", static_cast<double>(upgraded)}
         });
         return;
     }
