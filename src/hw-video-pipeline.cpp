@@ -62,12 +62,14 @@ bool HwVideoPipeline::init(HwAccelMode mode)
         return false;
 
     if (mode == HwAccelMode::Auto) {
-        for (const auto &b : kBackends) {
-            if (try_init(b.dev_type, b.scale_str)) {
-                m_active_mode = b.mode;
-                blog(LOG_INFO, "[obs-zoom-plugin] HW accel: using %s", b.scale_str);
-                return true;
-            }
+        const auto it = std::find_if(std::begin(kBackends), std::end(kBackends),
+            [this](const BackendSpec &b) {
+                return try_init(b.dev_type, b.scale_str);
+            });
+        if (it != std::end(kBackends)) {
+            m_active_mode = it->mode;
+            blog(LOG_INFO, "[obs-zoom-plugin] HW accel: using %s", it->scale_str);
+            return true;
         }
         blog(LOG_WARNING, "[obs-zoom-plugin] HW accel: no backend available, falling back to CPU");
         return false;

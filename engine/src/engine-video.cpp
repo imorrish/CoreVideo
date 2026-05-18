@@ -9,6 +9,7 @@
 #include <limits>
 #include <atomic>
 #include <algorithm>
+#include <iterator>
 #include <tuple>
 #include <vector>
 
@@ -378,12 +379,17 @@ void EngineVideo::resubscribe_all()
     std::vector<std::tuple<std::string, uint32_t, IpcFd, uint32_t>> current;
     for (const auto &entry : m_subs) {
         if (entry.second) {
-            for (const auto &source : entry.second->sources()) {
-                current.emplace_back(source.first,
-                                     entry.second->participant_id(),
-                                     source.second,
-                                     entry.second->resolution());
-            }
+            const uint32_t participant_id = entry.second->participant_id();
+            const uint32_t resolution = entry.second->resolution();
+            const auto sources = entry.second->sources();
+            std::transform(sources.begin(), sources.end(),
+                           std::back_inserter(current),
+                           [participant_id, resolution](const auto &source) {
+                               return std::make_tuple(source.first,
+                                                      participant_id,
+                                                      source.second,
+                                                      resolution);
+                           });
         }
     }
 

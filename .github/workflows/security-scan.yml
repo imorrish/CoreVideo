@@ -30,6 +30,15 @@ jobs:
           python3 -m pip install --user flawfinder
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
+      - name: Prepare generated headers for Cppcheck
+        run: |
+          mkdir -p security-reports/cppcheck-generated
+          cmake -S . -B security-reports/cppcheck-build \
+            -DCOREVIDEO_BUILD_PLUGIN=OFF \
+            -DCOREVIDEO_BUILD_ENGINE=OFF \
+            -DCOREVIDEO_BUILD_SIDECAR=OFF
+          : > security-reports/cppcheck-generated/overlay-panel.moc
+
       - name: Run Cppcheck
         continue-on-error: true
         run: |
@@ -38,6 +47,8 @@ jobs:
             --enable=warning,style,performance,portability,information \
             --inline-suppr \
             -Isrc \
+            -Isecurity-reports/cppcheck-build \
+            -Isecurity-reports/cppcheck-generated \
             -Iengine/src \
             -Isidecar/src \
             --suppress=missingInclude:src/zoom-source.h \
@@ -52,6 +63,8 @@ jobs:
             --enable=warning,style,performance,portability,information \
             --inline-suppr \
             -Isrc \
+            -Isecurity-reports/cppcheck-build \
+            -Isecurity-reports/cppcheck-generated \
             -Iengine/src \
             -Isidecar/src \
             --suppress=missingInclude:src/zoom-source.h \
