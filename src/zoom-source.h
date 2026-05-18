@@ -17,6 +17,11 @@
 void zoom_source_register();
 
 struct ZoomSource {
+    struct CallbackGate {
+        std::mutex mtx;
+        bool alive = true;
+    };
+
     obs_source_t *source = nullptr;
     std::string source_uuid;
     std::string m_director_preview_uuid;
@@ -89,6 +94,8 @@ struct ZoomSource {
     // Per-source OBS hotkey IDs.
     obs_hotkey_id m_hk_active_on_id  = OBS_INVALID_HOTKEY_ID;
     obs_hotkey_id m_hk_active_off_id = OBS_INVALID_HOTKEY_ID;
+    std::shared_ptr<CallbackGate> m_callback_gate =
+        std::make_shared<CallbackGate>();
 
 private:
     void output_placeholder_frame(bool color_bars);
