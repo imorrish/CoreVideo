@@ -121,6 +121,11 @@ public:
                                             const QStringList &lookScenes) const;
     CoreVideoSceneAudit coreVideoSceneAudit(const QStringList &participantSources,
                                             const QVector<LookRenderPlan> &plans) const;
+#ifdef COREVIDEO_TESTING
+    void seedAuditCacheForTesting(const QSet<QString> &scenes,
+                                  const QSet<QString> &inputs,
+                                  const QHash<QString, QVector<SceneItem>> &sceneItems);
+#endif
 
     // ── Virtual camera ───────────────────────────────────────────────────────
     void requestVirtualCamStatus();

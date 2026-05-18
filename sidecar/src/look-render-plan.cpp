@@ -38,8 +38,12 @@ QStringList nestedSceneNamesForSources(const QStringList &sourceNames)
 {
     QStringList scenes;
     scenes.reserve(sourceNames.size());
-    for (int i = 0; i < sourceNames.size(); ++i)
-        scenes << QStringLiteral("CoreVideo Slot %1 - %2").arg(i + 1).arg(sourceNames.value(i));
+    for (int i = 0; i < sourceNames.size(); ++i) {
+        const QString source = sourceNames.value(i).trimmed();
+        scenes << (source.compare(QStringLiteral("Zoom Screen Share"), Qt::CaseInsensitive) == 0
+            ? QStringLiteral("CoreVideo Screen Share")
+            : QStringLiteral("CoreVideo Slot %1").arg(i + 1));
+    }
     return scenes;
 }
 

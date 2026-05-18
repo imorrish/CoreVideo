@@ -84,10 +84,23 @@ if(BUILD_TESTING)
     target_include_directories(CoreVideoSidecarRendererConfigTest PRIVATE src)
     target_link_libraries(CoreVideoSidecarRendererConfigTest PRIVATE Qt6::Core Qt6::Gui)
 
+    add_executable(CoreVideoSidecarObsAuditTest
+        tests/obs-audit-test.cpp
+        src/obs-client.cpp
+        src/simple-websocket.cpp
+        src/look-render-plan.cpp
+        src/layout-template.cpp
+    )
+    target_compile_definitions(CoreVideoSidecarObsAuditTest PRIVATE COREVIDEO_TESTING)
+    target_include_directories(CoreVideoSidecarObsAuditTest PRIVATE src)
+    target_link_libraries(CoreVideoSidecarObsAuditTest PRIVATE Qt6::Core Qt6::Gui Qt6::Network)
+
     add_test(NAME CoreVideoSidecarCatalog
         COMMAND CoreVideoSidecarCatalogTest "${CMAKE_CURRENT_SOURCE_DIR}/data")
     add_test(NAME CoreVideoSidecarRendererConfig
         COMMAND CoreVideoSidecarRendererConfigTest)
+    add_test(NAME CoreVideoSidecarObsAudit
+        COMMAND CoreVideoSidecarObsAuditTest)
     add_executable(CoreVideoSidecarLowerThirdTest
         tests/lower-third-test.cpp
         src/lower-third-controller.cpp
@@ -107,6 +120,9 @@ if(BUILD_TESTING)
         set_tests_properties(CoreVideoSidecarRendererConfig PROPERTIES
             ENVIRONMENT_MODIFICATION
                 "PATH=path_list_prepend:$<TARGET_FILE_DIR:CoreVideoSidecarRendererConfigTest>;PATH=path_list_prepend:${_qt_runtime_dir}")
+        set_tests_properties(CoreVideoSidecarObsAudit PROPERTIES
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:CoreVideoSidecarObsAuditTest>;PATH=path_list_prepend:${_qt_runtime_dir}")
         set_tests_properties(CoreVideoSidecarLowerThirds PROPERTIES
             ENVIRONMENT_MODIFICATION
                 "PATH=path_list_prepend:$<TARGET_FILE_DIR:CoreVideoSidecarLowerThirdTest>;PATH=path_list_prepend:${_qt_runtime_dir}")

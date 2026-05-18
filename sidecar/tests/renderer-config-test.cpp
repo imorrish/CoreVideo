@@ -64,10 +64,10 @@ int main()
         return fail("grid source names did not match slot count");
     if (nestedSceneNamesForSources(gridPlan.sourceNames)
         != QStringList({
-            "CoreVideo Slot 1 - Zoom Participant 1",
-            "CoreVideo Slot 2 - Zoom Participant 2",
-            "CoreVideo Slot 3 - Zoom Participant 3",
-            "CoreVideo Slot 4 - Zoom Participant 4",
+            "CoreVideo Slot 1",
+            "CoreVideo Slot 2",
+            "CoreVideo Slot 3",
+            "CoreVideo Slot 4",
         })) {
         return fail("grid nested scene names did not match OBS slot scene contract");
     }
@@ -98,8 +98,8 @@ int main()
         return fail("speaker screenshare look did not map to participant plus share sources");
     if (nestedSceneNamesForSources(sharePlan.sourceNames)
         != QStringList({
-            "CoreVideo Slot 1 - Zoom Participant 1",
-            "CoreVideo Slot 2 - Zoom Screen Share",
+            "CoreVideo Slot 1",
+            "CoreVideo Screen Share",
         })) {
         return fail("speaker screenshare nested scene names did not preserve participant/share mapping");
     }

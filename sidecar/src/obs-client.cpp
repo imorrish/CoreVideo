@@ -780,6 +780,27 @@ OBSClient::coreVideoSceneAudit(const QStringList &participantSources,
     return audit;
 }
 
+#ifdef COREVIDEO_TESTING
+void OBSClient::seedAuditCacheForTesting(const QSet<QString> &scenes,
+                                         const QSet<QString> &inputs,
+                                         const QHash<QString, QVector<SceneItem>> &sceneItems)
+{
+    m_knownScenes = scenes;
+    m_knownInputs = inputs;
+    m_sceneItems = sceneItems;
+    m_itemCache.clear();
+    for (auto it = m_sceneItems.constBegin(); it != m_sceneItems.constEnd(); ++it) {
+        QHash<QString, int> items;
+        for (const SceneItem &item : it.value())
+            items.insert(item.sourceName, item.sceneItemId);
+        m_itemCache.insert(it.key(), items);
+    }
+    m_receivedSceneList = true;
+    m_receivedInputList = true;
+    m_inventoryReadyEmitted = true;
+}
+#endif
+
 void OBSClient::enqueueCreateSceneIfMissing(QJsonArray &requests, const QString &sceneName)
 {
     const QString name = sceneName.trimmed();
