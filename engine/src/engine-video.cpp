@@ -8,6 +8,7 @@
 #include <cstring>
 #include <limits>
 #include <atomic>
+#include <algorithm>
 #include <tuple>
 #include <vector>
 
@@ -321,10 +322,10 @@ void EngineVideo::resubscribe_all()
 
     m_subs.clear();
     m_source_participants.clear();
-    for (const auto &entry : current) {
+    std::for_each(current.begin(), current.end(), [this](const auto &entry) {
         const auto &[source_uuid, participant_id, e2p_fd, resolution] = entry;
         subscribe(participant_id, source_uuid, e2p_fd, resolution);
-    }
+    });
 }
 
 void EngineVideo::unsubscribe_all()

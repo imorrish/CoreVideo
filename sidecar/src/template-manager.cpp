@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <algorithm>
 
 TemplateManager &TemplateManager::instance()
 {
@@ -48,17 +49,24 @@ void TemplateManager::loadFile(const QString &path)
     if (!t.isValid()) return;
 
     // Replace existing if same id, otherwise append
-    for (auto &existing : m_templates) {
-        if (existing.id == t.id) { existing = t; return; }
+    const auto existing = std::find_if(m_templates.begin(), m_templates.end(),
+        [&t](const LayoutTemplate &tmpl) {
+            return tmpl.id == t.id;
+        });
+    if (existing != m_templates.end()) {
+        *existing = t;
+        return;
     }
     m_templates.append(t);
 }
 
 const LayoutTemplate *TemplateManager::findById(const QString &id) const
 {
-    for (const auto &t : m_templates)
-        if (t.id == id) return &t;
-    return nullptr;
+    const auto tmpl = std::find_if(m_templates.begin(), m_templates.end(),
+        [&id](const LayoutTemplate &t) {
+            return t.id == id;
+        });
+    return tmpl != m_templates.end() ? &(*tmpl) : nullptr;
 }
 
 bool TemplateManager::save(const LayoutTemplate &tmpl, const QString &dir)

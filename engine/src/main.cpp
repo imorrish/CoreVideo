@@ -1069,19 +1069,17 @@ int main()
                     std::to_string(static_cast<int>(err)) + "}");
                 continue;
             }
-            if (auth_svc) {
-                auth_svc->SetEvent(&auth_event);
-                g_wide_jwt = to_zstr(jwt); // persists for async SDKAuth call
-                ZOOMSDK::AuthContext ctx;
-                ctx.jwt_token = g_wide_jwt.c_str();
-                EngineIpc::write(R"({"cmd":"debug","stage":"before_sdk_auth"})");
-                err = auth_svc->SDKAuth(ctx);
-                EngineIpc::write(R"({"cmd":"debug","stage":"after_sdk_auth","code":)" +
+            auth_svc->SetEvent(&auth_event);
+            g_wide_jwt = to_zstr(jwt); // persists for async SDKAuth call
+            ZOOMSDK::AuthContext ctx;
+            ctx.jwt_token = g_wide_jwt.c_str();
+            EngineIpc::write(R"({"cmd":"debug","stage":"before_sdk_auth"})");
+            err = auth_svc->SDKAuth(ctx);
+            EngineIpc::write(R"({"cmd":"debug","stage":"after_sdk_auth","code":)" +
+                std::to_string(static_cast<int>(err)) + "}");
+            if (err != ZOOMSDK::SDKERR_SUCCESS) {
+                EngineIpc::write(R"({"cmd":"auth_fail","stage":"sdk_auth","code":)" +
                     std::to_string(static_cast<int>(err)) + "}");
-                if (err != ZOOMSDK::SDKERR_SUCCESS) {
-                    EngineIpc::write(R"({"cmd":"auth_fail","stage":"sdk_auth","code":)" +
-                        std::to_string(static_cast<int>(err)) + "}");
-                }
             }
 
         } else if (line.find(IPC_CMD_JOIN) != std::string::npos) {
