@@ -90,5 +90,18 @@ int main()
     if (sharePlan.makeProgram)
         return fail("preview intent was not preserved");
 
+    Look custom = grid;
+    custom.id = "custom-grid";
+    custom.templateId = "4-up-grid";
+    custom.tmpl.slotList[0].x = 0.125;
+    custom.tmpl.slotList[0].width = 0.625;
+    const Look roundTrip = Look::fromJson(custom.toJson());
+    if (!roundTrip.tmpl.isValid())
+        return fail("custom look did not preserve embedded template geometry");
+    if (!qFuzzyCompare(roundTrip.tmpl.slotList[0].x + 1.0, 1.125)
+        || !qFuzzyCompare(roundTrip.tmpl.slotList[0].width + 1.0, 1.625)) {
+        return fail("custom look embedded slot geometry changed during serialization");
+    }
+
     return 0;
 }

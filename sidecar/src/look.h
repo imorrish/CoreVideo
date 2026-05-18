@@ -97,6 +97,8 @@ struct Look {
         l.themeId     = obj.value("theme").toString();
         l.backgroundImagePath = obj.value("backgroundImage").toString();
         l.tileStyle = TileStyle::fromJson(obj.value("tileStyle").toObject());
+        if (obj.contains("customTemplate"))
+            l.tmpl = LayoutTemplate::fromJson(obj.value("customTemplate").toObject());
         const auto arr = obj.value("slots").toArray();
         for (const auto &v : arr) {
             const auto o = v.toObject();
@@ -134,6 +136,8 @@ struct Look {
             {"slots",       slotArray},
             {"overlays",    ov},
         };
+        if (tmpl.isValid())
+            obj["customTemplate"] = tmpl.toJson();
         if (!backgroundImagePath.isEmpty())
             obj["backgroundImage"] = backgroundImagePath;
         return obj;

@@ -543,8 +543,10 @@ void MainWindow::loadCustomLooks()
     auto &tm = TemplateManager::instance();
     for (const auto &v : doc.array()) {
         Look look = Look::fromJson(v.toObject());
-        if (const auto *t = tm.findById(look.templateId))
-            look.tmpl = *t;
+        if (!look.tmpl.isValid()) {
+            if (const auto *t = tm.findById(look.templateId))
+                look.tmpl = *t;
+        }
         if (look.isValid())
             m_customLooks.append(look);
     }
@@ -1638,6 +1640,68 @@ void MainWindow::onDesignLookRequested()
     layout->addWidget(inspectorTitle);
     layout->addWidget(inspectorHint);
 
+    LayoutTemplate editedTemplate = m_working.tmpl;
+    auto *slotSelector = new QComboBox(&dlg);
+    for (const TemplateSlot &slot : editedTemplate.slotList) {
+        const QString label = slot.label.trimmed().isEmpty()
+            ? QStringLiteral("Slot %1").arg(slot.index + 1)
+            : QStringLiteral("Slot %1 - %2").arg(slot.index + 1).arg(slot.label);
+        slotSelector->addItem(label, slot.index);
+    }
+
+    auto makeGeometrySpin = [&dlg]() {
+        auto *spin = new QDoubleSpinBox(&dlg);
+        spin->setRange(0.0, 1.0);
+        spin->setDecimals(3);
+        spin->setSingleStep(0.01);
+        return spin;
+    };
+    auto *slotX = makeGeometrySpin();
+    auto *slotY = makeGeometrySpin();
+    auto *slotW = makeGeometrySpin();
+    auto *slotH = makeGeometrySpin();
+
+    auto selectedSlotPosition = [&]() {
+        const int index = slotSelector->currentData().toInt();
+        for (int i = 0; i < editedTemplate.slotList.size(); ++i) {
+            if (editedTemplate.slotList[i].index == index)
+                return i;
+        }
+        return -1;
+    };
+    auto loadSelectedSlot = [&]() {
+        const int pos = selectedSlotPosition();
+        const bool ok = pos >= 0;
+        for (auto *spin : {slotX, slotY, slotW, slotH})
+            spin->blockSignals(true);
+        if (ok) {
+            const TemplateSlot &slot = editedTemplate.slotList[pos];
+            slotX->setValue(slot.x);
+            slotY->setValue(slot.y);
+            slotW->setValue(slot.width);
+            slotH->setValue(slot.height);
+        }
+        for (auto *spin : {slotX, slotY, slotW, slotH})
+            spin->blockSignals(false);
+    };
+    auto applySelectedSlot = [&]() {
+        const int pos = selectedSlotPosition();
+        if (pos < 0)
+            return;
+        TemplateSlot &slot = editedTemplate.slotList[pos];
+        slot.x = qBound(0.0, slotX->value(), 0.99);
+        slot.y = qBound(0.0, slotY->value(), 0.99);
+        slot.width = qBound(0.01, slotW->value(), 1.0 - slot.x);
+        slot.height = qBound(0.01, slotH->value(), 1.0 - slot.y);
+        designerPreview->setTemplate(editedTemplate);
+    };
+    connect(slotSelector, &QComboBox::currentIndexChanged, &dlg, loadSelectedSlot);
+    connect(slotX, qOverload<double>(&QDoubleSpinBox::valueChanged), &dlg, applySelectedSlot);
+    connect(slotY, qOverload<double>(&QDoubleSpinBox::valueChanged), &dlg, applySelectedSlot);
+    connect(slotW, qOverload<double>(&QDoubleSpinBox::valueChanged), &dlg, applySelectedSlot);
+    connect(slotH, qOverload<double>(&QDoubleSpinBox::valueChanged), &dlg, applySelectedSlot);
+    loadSelectedSlot();
+
     auto *borderWidth = new QDoubleSpinBox(&dlg);
     borderWidth->setRange(0.0, 16.0);
     borderWidth->setSingleStep(0.5);
@@ -1709,6 +1773,18 @@ void MainWindow::onDesignLookRequested()
         row->addWidget(control);
         layout->addLayout(row);
     };
+    auto addTitle = [&](const QString &text) {
+        auto *label = new QLabel(text, &dlg);
+        label->setStyleSheet("QLabel { color: #ffffff; font-weight: 800; padding-top: 8px; }");
+        layout->addWidget(label);
+    };
+    addTitle(QStringLiteral("Layout"));
+    addRow(QStringLiteral("Slot"), slotSelector);
+    addRow(QStringLiteral("X"), slotX);
+    addRow(QStringLiteral("Y"), slotY);
+    addRow(QStringLiteral("Width"), slotW);
+    addRow(QStringLiteral("Height"), slotH);
+    addTitle(QStringLiteral("Style"));
     addRow(QStringLiteral("Canvas color"), canvasColor);
     addRow(QStringLiteral("Border width"), borderWidth);
     addRow(QStringLiteral("Corner radius"), radius);
@@ -1735,12 +1811,17 @@ void MainWindow::onDesignLookRequested()
     m_working.tileStyle.dropShadow = shadow->isChecked();
     m_working.tileStyle.showNameTag = names->isChecked();
     m_working.tileStyle.excludeNoVideo = videoOnly->isChecked();
+    m_working.tmpl = editedTemplate;
+    if (m_working.templateId.isEmpty())
+        m_working.templateId = editedTemplate.id;
     m_working = lookWithCurrentAssignments(m_working);
     m_bus->stageLook(m_working);
 
     for (auto &look : m_customLooks) {
         if (look.id != m_working.id)
             continue;
+        look.tmpl = m_working.tmpl;
+        look.templateId = m_working.templateId;
         look.tileStyle = m_working.tileStyle;
         look.slotAssignments = m_working.slotAssignments;
         saveCustomLooks();

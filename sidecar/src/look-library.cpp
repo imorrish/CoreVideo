@@ -31,8 +31,10 @@ void LookLibrary::loadBuiltIn()
         if (err.error != QJsonParseError::NoError || !doc.isObject()) continue;
 
         Look l = Look::fromJson(doc.object());
-        if (const auto *t = tm.findById(l.templateId))
-            l.tmpl = *t;
+        if (!l.tmpl.isValid()) {
+            if (const auto *t = tm.findById(l.templateId))
+                l.tmpl = *t;
+        }
         if (!l.isValid()) continue;
         m_looks.append(l);
     }
