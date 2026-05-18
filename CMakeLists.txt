@@ -199,7 +199,7 @@ if(COREVIDEO_BUILD_PLUGIN)
     if(WIN32)
         target_link_libraries(obs-zoom-plugin PRIVATE crypt32)
         add_executable(CoreVideoOAuthCallback src/oauth-callback-helper.cpp)
-        target_link_libraries(CoreVideoOAuthCallback PRIVATE ws2_32)
+        target_link_libraries(CoreVideoOAuthCallback PRIVATE ws2_32 shell32 ole32)
         install(TARGETS CoreVideoOAuthCallback
             RUNTIME DESTINATION "obs-plugins/64bit"
         )
