@@ -1058,6 +1058,13 @@ void MainWindow::openObsSyncInspector()
     summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
     root->addWidget(summary);
 
+    auto *report = new QPlainTextEdit(dlg);
+    report->setReadOnly(true);
+    report->setMinimumHeight(150);
+    report->setMaximumBlockCount(500);
+    report->setPlaceholderText("Run validation to compare OBS scenes, sources, layers, and geometry with the Sidecar Look catalog.");
+    root->addWidget(report);
+
     auto *table = new QTableWidget(dlg);
     table->setColumnCount(2);
     table->setHorizontalHeaderLabels({"Category", "OBS item"});
@@ -1068,9 +1075,10 @@ void MainWindow::openObsSyncInspector()
     table->setSelectionBehavior(QAbstractItemView::SelectRows);
     root->addWidget(table, 1);
 
-    auto refresh = [this, summary, table]() {
+    auto refresh = [this, summary, report, table]() {
         if (!m_obsClient || !m_obsClient->isConnected()) {
             summary->setText("OBS is not connected. Connect OBS before inspecting scene sync.");
+            report->setPlainText("No live OBS audit is available until Sidecar is connected to obs-websocket.");
             table->setRowCount(0);
             return;
         }
@@ -1079,6 +1087,7 @@ void MainWindow::openObsSyncInspector()
         const auto audit =
             m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), lookRenderPlans());
         summary->setText(obsAuditSummaryText(audit));
+        report->setPlainText(obsAuditReportText(audit, 20));
 
         table->setRowCount(0);
         fillInspectorTable(table, "Missing scene", audit.missingScenes);
@@ -1095,12 +1104,16 @@ void MainWindow::openObsSyncInspector()
 
     auto *buttons = new QHBoxLayout;
     auto *refreshBtn = new QPushButton("Refresh", dlg);
+    auto *validateBtn = new QPushButton("Validate Live", dlg);
     auto *syncBtn = new QPushButton("Sync OBS", dlg);
+    auto *repairValidateBtn = new QPushButton("Repair + Validate", dlg);
     auto *repairGeometryBtn = new QPushButton("Repair Geometry", dlg);
     auto *repairBtn = new QPushButton("Hide Stale Layers", dlg);
     auto *closeBtn = new QPushButton("Close", dlg);
     buttons->addWidget(refreshBtn);
+    buttons->addWidget(validateBtn);
     buttons->addWidget(syncBtn);
+    buttons->addWidget(repairValidateBtn);
     buttons->addWidget(repairGeometryBtn);
     buttons->addWidget(repairBtn);
     buttons->addStretch(1);
@@ -1108,9 +1121,29 @@ void MainWindow::openObsSyncInspector()
     root->addLayout(buttons);
 
     connect(refreshBtn, &QPushButton::clicked, dlg, refresh);
+    connect(validateBtn, &QPushButton::clicked, dlg, [this, summary, report, refresh]() {
+        if (!m_obsClient || !m_obsClient->isConnected()) {
+            refresh();
+            return;
+        }
+        summary->setText("Validating live OBS scene graph...");
+        report->setPlainText("Refreshing OBS inventory. This verifies the actual scenes, sources, scene items, stale design layers, and geometry currently in OBS.");
+        refreshObsAuditInventory();
+        QTimer::singleShot(1600, this, refresh);
+    });
     connect(syncBtn, &QPushButton::clicked, dlg, [this, refresh]() {
         reconcileObsSceneGraph();
         QTimer::singleShot(7000, this, refresh);
+    });
+    connect(repairValidateBtn, &QPushButton::clicked, dlg, [this, summary, report, refresh]() {
+        if (!m_obsClient || !m_obsClient->isConnected()) {
+            refresh();
+            return;
+        }
+        summary->setText("Repairing and validating OBS scene graph...");
+        report->setPlainText("Creating missing CoreVideo scenes and sources, applying Look geometry, hiding stale design layers, then running a live audit.");
+        reconcileObsSceneGraph();
+        QTimer::singleShot(7600, this, refresh);
     });
     connect(repairGeometryBtn, &QPushButton::clicked, dlg, [this, refresh]() {
         for (const Look &look : allLooks())
@@ -2452,6 +2485,8 @@ void MainWindow::populateCommandPalette()
                    [this]() { onApplyLayout(); });
     cp->addCommand("Sync OBS scene graph", "OBS",
                    [this]() { reconcileObsSceneGraph(); });
+    cp->addCommand("Validate live OBS scene graph", "OBS",
+                   [this]() { openObsSyncInspector(); });
     cp->addCommand("Open OBS Sync Inspector", "OBS",
                    [this]() { openObsSyncInspector(); });
     cp->addCommand("Repair CoreVideo duplicate OBS scenes", "OBS",
