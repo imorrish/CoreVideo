@@ -1784,6 +1784,21 @@ void MainWindow::onDesignLookRequested()
     connect(names, &QCheckBox::toggled, &dlg, refreshDesignerPreview);
     connect(videoOnly, &QCheckBox::toggled, &dlg, refreshDesignerPreview);
 
+    auto draftLookForDesigner = [&]() {
+        applySelectedSlot();
+        Look draft = m_working;
+        draft.tmpl = editedTemplate;
+        draft.tileStyle.canvasColor = selectedCanvas;
+        draft.tileStyle.borderColor = selectedBorder;
+        draft.tileStyle.borderWidth = borderWidth->value();
+        draft.tileStyle.cornerRadius = radius->value();
+        draft.tileStyle.opacity = opacity->value();
+        draft.tileStyle.dropShadow = shadow->isChecked();
+        draft.tileStyle.showNameTag = names->isChecked();
+        draft.tileStyle.excludeNoVideo = videoOnly->isChecked();
+        return lookWithCurrentAssignments(draft);
+    };
+
     auto addRow = [&](const QString &label, QWidget *control) {
         auto *row = new QHBoxLayout;
         row->addWidget(new QLabel(label, &dlg));
@@ -1810,6 +1825,71 @@ void MainWindow::onDesignLookRequested()
     layout->addWidget(shadow);
     layout->addWidget(names);
     layout->addWidget(videoOnly);
+
+    auto *obsTitle = new QLabel(QStringLiteral("OBS Round Trip"), &dlg);
+    obsTitle->setStyleSheet("QLabel { color: #ffffff; font-weight: 800; padding-top: 8px; }");
+    layout->addWidget(obsTitle);
+    auto *obsStatus = new QLabel(QStringLiteral("Render the draft to OBS preview, then verify the OBS scene graph before saving."), &dlg);
+    obsStatus->setObjectName("designerHint");
+    obsStatus->setWordWrap(true);
+    layout->addWidget(obsStatus);
+    auto *obsButtons = new QHBoxLayout;
+    auto *renderDraftBtn = new QPushButton(QStringLiteral("Render Draft"), &dlg);
+    auto *verifyDraftBtn = new QPushButton(QStringLiteral("Verify OBS"), &dlg);
+    auto *inspectObsBtn = new QPushButton(QStringLiteral("Inspect"), &dlg);
+    obsButtons->addWidget(renderDraftBtn);
+    obsButtons->addWidget(verifyDraftBtn);
+    obsButtons->addWidget(inspectObsBtn);
+    layout->addLayout(obsButtons);
+
+    auto updateDraftObsStatus = [this, obsStatus](const Look &draft) {
+        if (!m_obsClient || !m_obsClient->isConnected()) {
+            obsStatus->setText(QStringLiteral("OBS is not connected."));
+            return;
+        }
+        refreshObsAuditInventory();
+        m_obsClient->requestSceneItems(obsSceneNameForLook(draft));
+        QVector<LookRenderPlan> plans;
+        const auto plan = obsRenderer().renderPlanForLook(draft, false, slotLabelsForLook(draft));
+        if (plan.valid)
+            plans << plan;
+        const auto audit = m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), plans);
+        const QString state = audit.isClean()
+            ? QStringLiteral("OBS scene graph is synced.")
+            : QStringLiteral("OBS still has drift.");
+        QStringList detail;
+        if (!audit.inventoryReady)
+            detail << QStringLiteral("inventory loading");
+        if (!audit.missingScenes.isEmpty())
+            detail << QStringLiteral("%1 missing scene(s)").arg(audit.missingScenes.size());
+        if (!audit.missingInputs.isEmpty())
+            detail << QStringLiteral("%1 missing input(s)").arg(audit.missingInputs.size());
+        if (!audit.missingSceneItems.isEmpty())
+            detail << QStringLiteral("%1 missing scene item(s)").arg(audit.missingSceneItems.size());
+        if (!audit.staleDesignLayers.isEmpty())
+            detail << QStringLiteral("%1 stale design layer(s)").arg(audit.staleDesignLayers.size());
+        obsStatus->setText(detail.isEmpty()
+            ? state
+            : QStringLiteral("%1 %2").arg(state, detail.join(QStringLiteral(", "))));
+    };
+    connect(renderDraftBtn, &QPushButton::clicked, &dlg, [this, obsStatus, draftLookForDesigner, updateDraftObsStatus]() {
+        if (!m_obsClient || !m_obsClient->isConnected()) {
+            obsStatus->setText(QStringLiteral("OBS is not connected. Connect OBS before rendering the draft."));
+            return;
+        }
+        const Look draft = draftLookForDesigner();
+        obsStatus->setText(QStringLiteral("Rendering '%1' to OBS preview...").arg(draft.name));
+        renderLookToOBS(draft, false);
+        QTimer::singleShot(7200, this, [updateDraftObsStatus, draft]() {
+            updateDraftObsStatus(draft);
+        });
+    });
+    connect(verifyDraftBtn, &QPushButton::clicked, &dlg, [draftLookForDesigner, updateDraftObsStatus]() {
+        updateDraftObsStatus(draftLookForDesigner());
+    });
+    connect(inspectObsBtn, &QPushButton::clicked, &dlg, [this]() {
+        openObsSyncInspector();
+    });
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
     layout->addStretch(1);
