@@ -267,6 +267,14 @@ MainWindow::MainWindow(const StartupConfig &startup, QWidget *parent)
     });
     connect(m_obsClient, &OBSClient::inventoryReady, this, [this]() {
         provisionLookScenes();
+        if (m_bus && m_bus->program().isValid()) {
+            QTimer::singleShot(1200, this, [this]() {
+                if (m_obsClient && m_obsClient->isConnected()
+                    && m_bus && m_bus->program().isValid()) {
+                    renderLookToOBS(m_bus->program(), true);
+                }
+            });
+        }
         updateSceneSyncStatus();
     });
 

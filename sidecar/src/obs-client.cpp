@@ -979,7 +979,8 @@ void OBSClient::loadSceneTemplate(const QString        &sceneName,
     QTimer::singleShot(300, this, [this, sceneName]() {
         requestSceneItems(sceneName);
     });
-    QTimer::singleShot(900, this, [this, sceneName, slotSceneNames]() {
+    auto requestedSlotItems = std::make_shared<QSet<QString>>();
+    auto addSlotScenes = [this, sceneName, slotSceneNames, requestedSlotItems]() {
         if (!m_itemCache.contains(sceneName)) {
             requestSceneItems(sceneName);
             return;
@@ -989,6 +990,7 @@ void OBSClient::loadSceneTemplate(const QString        &sceneName,
         for (const QString &sourceName : slotSceneNames) {
             if (sourceName.trimmed().isEmpty()) continue;
             if (resolveItemId(sceneName, sourceName) >= 0) continue;
+            if (requestedSlotItems->contains(sourceName)) continue;
 
             requests.append(QJsonObject{
                 {"requestType", "CreateSceneItem"},
@@ -999,6 +1001,7 @@ void OBSClient::loadSceneTemplate(const QString        &sceneName,
                     {"sceneItemEnabled", true},
                 }},
             });
+            requestedSlotItems->insert(sourceName);
         }
 
         if (requests.isEmpty()) return;
@@ -1012,17 +1015,23 @@ void OBSClient::loadSceneTemplate(const QString        &sceneName,
         m_sceneItems.remove(sceneName);
         emit log(QStringLiteral("Added %1 nested slot scenes to '%2'.")
                      .arg(requests.size()).arg(sceneName));
-    });
+    };
+    QTimer::singleShot(900, this, addSlotScenes);
+    QTimer::singleShot(1700, this, addSlotScenes);
+    QTimer::singleShot(2600, this, addSlotScenes);
     QTimer::singleShot(1300, this, [this, sceneName]() {
         requestSceneItems(sceneName);
     });
     QTimer::singleShot(1750, this, [this, sceneName, tileStyle, canvasW, canvasH]() {
         applyCanvasColor(sceneName, tileStyle, canvasW, canvasH);
     });
-    QTimer::singleShot(1800, this, [this, sceneName, tmpl, slotSceneNames, canvasW, canvasH, overlays, makeProgram]() {
+    auto applyLayoutPass = [this, sceneName, tmpl, slotSceneNames, canvasW, canvasH, overlays, makeProgram]() {
         Q_UNUSED(makeProgram);
         applyLayout(sceneName, tmpl, slotSceneNames, canvasW, canvasH);
-    });
+    };
+    QTimer::singleShot(1800, this, applyLayoutPass);
+    QTimer::singleShot(2800, this, applyLayoutPass);
+    QTimer::singleShot(3600, this, applyLayoutPass);
     QTimer::singleShot(1900, this, [this, sceneName, backgroundImagePath, canvasW, canvasH]() {
         applyBackgroundImage(sceneName, backgroundImagePath, canvasW, canvasH);
     });

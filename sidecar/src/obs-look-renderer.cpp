@@ -100,6 +100,12 @@ void OBSLookRenderer::renderLook(const Look &look,
     if (!m_client || !m_client->isConnected() || !look.tmpl.isValid())
         return;
 
+    // Rendering any Look should leave OBS with the full CoreVideo source
+    // bank available. Without this, a fresh collection rendered first with
+    // a 2-up Look only creates two participant inputs, which makes later
+    // mapping and higher-count Looks appear broken.
+    provisionPlaceholders(8);
+
     const RenderPlan plan = renderPlanForLook(look, makeProgram, slotLabels);
     if (!plan.valid)
         return;
