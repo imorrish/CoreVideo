@@ -28,7 +28,9 @@ set(SOURCES
     src/me-bus.cpp
     src/overlay-panel.cpp
     src/obs-client.cpp
+    src/obs-audit-report.cpp
     src/obs-look-renderer.cpp
+    src/obs-live-validator.cpp
     src/simple-websocket.cpp
     src/zoom-control-client.cpp
     src/obs-connect-dialog.cpp
@@ -101,6 +103,14 @@ if(BUILD_TESTING)
         COMMAND CoreVideoSidecarRendererConfigTest)
     add_test(NAME CoreVideoSidecarObsAudit
         COMMAND CoreVideoSidecarObsAuditTest)
+    add_executable(CoreVideoSidecarObsAuditReportTest
+        tests/obs-audit-report-test.cpp
+        src/obs-audit-report.cpp
+    )
+    target_include_directories(CoreVideoSidecarObsAuditReportTest PRIVATE src)
+    target_link_libraries(CoreVideoSidecarObsAuditReportTest PRIVATE Qt6::Core Qt6::Gui Qt6::Network)
+    add_test(NAME CoreVideoSidecarObsAuditReport
+        COMMAND CoreVideoSidecarObsAuditReportTest)
     add_executable(CoreVideoSidecarLowerThirdTest
         tests/lower-third-test.cpp
         src/lower-third-controller.cpp
@@ -123,6 +133,9 @@ if(BUILD_TESTING)
         set_tests_properties(CoreVideoSidecarObsAudit PROPERTIES
             ENVIRONMENT_MODIFICATION
                 "PATH=path_list_prepend:$<TARGET_FILE_DIR:CoreVideoSidecarObsAuditTest>;PATH=path_list_prepend:${_qt_runtime_dir}")
+        set_tests_properties(CoreVideoSidecarObsAuditReport PROPERTIES
+            ENVIRONMENT_MODIFICATION
+                "PATH=path_list_prepend:$<TARGET_FILE_DIR:CoreVideoSidecarObsAuditReportTest>;PATH=path_list_prepend:${_qt_runtime_dir}")
         set_tests_properties(CoreVideoSidecarLowerThirds PROPERTIES
             ENVIRONMENT_MODIFICATION
                 "PATH=path_list_prepend:$<TARGET_FILE_DIR:CoreVideoSidecarLowerThirdTest>;PATH=path_list_prepend:${_qt_runtime_dir}")

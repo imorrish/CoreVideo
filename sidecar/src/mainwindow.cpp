@@ -1,4 +1,5 @@
 #include "mainwindow.h"
+#include "obs-audit-report.h"
 #include "preview-canvas.h"
 #include "template-panel.h"
 #include "look-panel.h"
@@ -1040,24 +1041,6 @@ static void fillInspectorTable(QTableWidget *table,
     }
 }
 
-static QStringList obsAuditActionDetails(const OBSClient::CoreVideoSceneAudit &audit, int maxItems = 4)
-{
-    QStringList actions;
-    auto append = [&](const QString &prefix, const QStringList &items) {
-        for (const QString &item : items) {
-            if (actions.size() >= maxItems)
-                return;
-            actions << QStringLiteral("%1: %2").arg(prefix, item);
-        }
-    };
-    append(QStringLiteral("Geometry"), audit.geometryDrift);
-    append(QStringLiteral("Missing item"), audit.missingSceneItems);
-    append(QStringLiteral("Missing scene"), audit.missingScenes);
-    append(QStringLiteral("Missing input"), audit.missingInputs);
-    append(QStringLiteral("Stale layer"), audit.staleDesignLayers);
-    return actions;
-}
-
 void MainWindow::openObsSyncInspector()
 {
     auto *dlg = new QDialog(this);
@@ -1095,13 +1078,7 @@ void MainWindow::openObsSyncInspector()
         refreshObsAuditInventory();
         const auto audit =
             m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), lookRenderPlans());
-        summary->setText(QStringLiteral(
-            "OBS sync is %1. Inventory: %2. Scenes %3/%4, inputs %5/%6, scene items %7/%8.")
-            .arg(audit.isClean() ? QStringLiteral("clean") : QStringLiteral("needs attention"))
-            .arg(audit.inventoryReady ? QStringLiteral("ready") : QStringLiteral("loading"))
-            .arg(audit.presentScenes).arg(audit.expectedScenes)
-            .arg(audit.presentInputs).arg(audit.expectedInputs)
-            .arg(audit.presentSceneItems).arg(audit.expectedSceneItems));
+        summary->setText(obsAuditSummaryText(audit));
 
         table->setRowCount(0);
         fillInspectorTable(table, "Missing scene", audit.missingScenes);
