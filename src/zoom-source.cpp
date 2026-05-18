@@ -386,7 +386,19 @@ ZoomOutputInfo ZoomSource::output_info() const
         const uint64_t age_ns = now_ns > last_frame_ns ? now_ns - last_frame_ns : 0;
         info.last_frame_age_ms = age_ns / 1'000'000ULL;
         info.video_stale = age_ns > kStaleVideoNs;
+        const uint64_t last_recover_ns =
+            m_last_stale_recover_ns.load(std::memory_order_relaxed);
+        if (last_recover_ns != 0) {
+            const uint64_t recover_age_ns =
+                now_ns > last_recover_ns ? now_ns - last_recover_ns : 0;
+            if (recover_age_ns < kStaleRecoverCooldownNs) {
+                info.stale_recovery_cooldown_ms =
+                    (kStaleRecoverCooldownNs - recover_age_ns) / 1'000'000ULL;
+            }
+        }
     }
+    info.stale_recovery_attempts =
+        m_stale_recover_attempts.load(std::memory_order_relaxed);
     info.assignment = mode;
     info.spotlight_slot = spotlight_slot.load(std::memory_order_acquire);
     info.failover_participant_id = failover_participant_id.load(std::memory_order_acquire);
@@ -561,7 +573,7 @@ void ZoomSource::unsubscribe()
     m_stale_recover_attempts.store(0, std::memory_order_relaxed);
 }
 
-bool ZoomSource::recover_stale_video(uint64_t now_ns)
+bool ZoomSource::recover_stale_video(uint64_t now_ns, bool force)
 {
     if (!m_active.load(std::memory_order_acquire) ||
         !m_subscribed.load(std::memory_order_acquire))
@@ -575,7 +587,7 @@ bool ZoomSource::recover_stale_video(uint64_t now_ns)
 
     const uint64_t last_recover_ns =
         m_last_stale_recover_ns.load(std::memory_order_acquire);
-    if (last_recover_ns != 0 &&
+    if (!force && last_recover_ns != 0 &&
         now_ns - last_recover_ns < kStaleRecoverCooldownNs)
         return false;
 

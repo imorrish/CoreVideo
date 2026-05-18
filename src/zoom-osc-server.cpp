@@ -221,6 +221,21 @@ void ZoomOscServer::dispatch(const QString &address,
         return;
     }
 
+    // /zoom/recover_stale_outputs [,i force]
+    if (address == "/zoom/recover_stale_outputs") {
+        const bool force = !args.empty() && args[0].type == OscArg::Int32 &&
+            args[0].i != 0;
+        const uint32_t recovered =
+            ZoomOutputManager::instance().recover_stale_sources(force);
+        std::vector<OscArg> reply(1);
+        reply[0].type = OscArg::Int32;
+        reply[0].i = static_cast<int32_t>(recovered);
+        m_socket->writeDatagram(build_osc("/zoom/recover_stale_outputs/result",
+                                          "i", reply),
+                                sender, sender_port);
+        return;
+    }
+
     // /zoom/list_participants  →  reply with current roster
     if (address == "/zoom/list_participants") {
         send_participants(sender, sender_port);

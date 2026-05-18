@@ -268,8 +268,17 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
     if (output.observed_width == 0 || output.observed_height == 0)
         return QStringLiteral("No video frame has been received for this output yet.");
     if (output.video_stale) {
-        return QString("Video frames stopped %1 ms ago. CoreVideo is keeping the last frame while waiting for Zoom to resume this feed.")
+        QString text = QString("Video frames stopped %1 ms ago. CoreVideo is keeping the last frame and will retry this feed automatically.")
             .arg(output.last_frame_age_ms);
+        if (output.stale_recovery_attempts > 0) {
+            text += QString(" Recovery attempts: %1.")
+                .arg(output.stale_recovery_attempts);
+        }
+        if (output.stale_recovery_cooldown_ms > 0) {
+            text += QString(" Next automatic retry in %1 ms.")
+                .arg(output.stale_recovery_cooldown_ms);
+        }
+        return text;
     }
 
     QString text = QString("Live signal: %1x%2 at %3 fps. Requested: %4x%5.")

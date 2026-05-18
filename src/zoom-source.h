@@ -73,7 +73,7 @@ struct ZoomSource {
                              bool new_audience_audio = false);
     void subscribe();
     void unsubscribe();
-    bool recover_stale_video(uint64_t now_ns);
+    bool recover_stale_video(uint64_t now_ns, bool force = false);
     void activate();
     void deactivate();
     void on_roster_changed();

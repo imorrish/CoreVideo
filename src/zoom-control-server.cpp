@@ -235,6 +235,10 @@ static QJsonObject output_to_json(const ZoomOutputInfo &o)
     obj["observed_fps"] = o.observed_fps;
     obj["last_frame_age_ms"] = static_cast<double>(o.last_frame_age_ms);
     obj["video_stale"] = o.video_stale;
+    obj["stale_recovery_attempts"] =
+        static_cast<double>(o.stale_recovery_attempts);
+    obj["stale_recovery_cooldown_ms"] =
+        static_cast<double>(o.stale_recovery_cooldown_ms);
     obj["signal_below_requested"] = output_signal_below_requested(o);
     obj["signal_missing_or_stale"] = output_signal_missing_or_stale(o);
     return obj;
@@ -323,6 +327,7 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
         QJsonArray commands;
         for (const char *c : {"help", "status", "list_participants", "list_outputs",
                               "assign_output", "assign_output_ex",
+                              "recover_stale_outputs",
                               "speaker_director_status",
                               "speaker_director_configure",
                               "speaker_director_take",
@@ -445,6 +450,17 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
         for (const auto &o : ZoomOutputManager::instance().outputs())
             outputs.append(output_to_json(o));
         write_response(socket, {{"ok", true}, {"outputs", outputs}});
+        return;
+    }
+
+    if (cmd == "recover_stale_outputs") {
+        const bool force = req.value("force").toBool(false);
+        const uint32_t recovered =
+            ZoomOutputManager::instance().recover_stale_sources(force);
+        write_response(socket, {
+            {"ok", true},
+            {"recovered", static_cast<double>(recovered)}
+        });
         return;
     }
 

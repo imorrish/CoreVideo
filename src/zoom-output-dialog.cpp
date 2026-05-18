@@ -99,8 +99,17 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
     if (output.observed_width == 0 || output.observed_height == 0)
         return QStringLiteral("No live video frame has been received.");
     if (output.video_stale) {
-        return QString("Video frames stopped %1 ms ago. CoreVideo is preserving the last good frame while waiting for Zoom to resume the feed.")
+        QString text = QString("Video frames stopped %1 ms ago. CoreVideo is preserving the last good frame and will retry this feed automatically.")
             .arg(output.last_frame_age_ms);
+        if (output.stale_recovery_attempts > 0) {
+            text += QString(" Recovery attempts: %1.")
+                .arg(output.stale_recovery_attempts);
+        }
+        if (output.stale_recovery_cooldown_ms > 0) {
+            text += QString(" Next automatic retry in %1 ms.")
+                .arg(output.stale_recovery_cooldown_ms);
+        }
+        return text;
     }
     QString text = QString("Requested %1x%2. Receiving %3x%4 at %5 fps.")
         .arg(video_resolution_width(output.video_resolution))
@@ -181,11 +190,17 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Apply |
                                          QDialogButtonBox::Close, this);
     auto *refresh_button = buttons->addButton("Refresh", QDialogButtonBox::ActionRole);
+    auto *recover_button = buttons->addButton("Recover Stale Feeds",
+                                              QDialogButtonBox::ActionRole);
 
     if (auto *apply_btn = buttons->button(QDialogButtonBox::Apply))
         apply_btn->setProperty("role", "primary");
 
     connect(refresh_button, &QPushButton::clicked, this, [this]() { refresh(); });
+    connect(recover_button, &QPushButton::clicked, this, [this]() {
+        ZoomOutputManager::instance().recover_stale_sources(true);
+        refresh();
+    });
     connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked,
             this, [this]() { apply(); });
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);

@@ -218,6 +218,16 @@ List outputs:
 {"cmd":"list_outputs"}
 ```
 
+Output snapshots include requested resolution, observed resolution/FPS, stale
+state, last frame age, recovery attempts, and the remaining automatic recovery
+cooldown.
+
+Force a retry for stale outputs:
+
+```json
+{"cmd":"recover_stale_outputs","force":true}
+```
+
 Assign a source to a fixed participant with isolated mono audio:
 
 ```json
@@ -261,6 +271,12 @@ List participants and outputs:
 ```text
 /zoom/list_participants
 /zoom/list_outputs
+```
+
+Retry stale video outputs:
+
+```text
+/zoom/recover_stale_outputs 1
 ```
 
 Assign a source:
