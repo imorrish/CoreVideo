@@ -3,6 +3,7 @@
 #include "engine-ipc.h"
 #include "zoom-types.h"
 #include <atomic>
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -12,6 +13,14 @@
 
 class ZoomEngineClient {
 public:
+    struct DebugEvent {
+        uint64_t timestamp_ms = 0;
+        std::string stage;
+        std::string source_uuid;
+        uint32_t participant_id = 0;
+        std::string message;
+    };
+
     struct SourceCallbacks {
         std::function<void(uint32_t width, uint32_t height,
                            uint32_t participant_id)> on_frame;
@@ -62,6 +71,7 @@ public:
     uint32_t active_speaker_id() const;
     uint32_t raw_active_speaker_id() const;
     std::vector<ParticipantInfo> roster() const;
+    std::vector<DebugEvent> recent_debug_events() const;
 
     void register_source(const std::string &source_uuid, SourceCallbacks callbacks);
     void unregister_source(const std::string &source_uuid);
@@ -101,6 +111,7 @@ private:
     std::unordered_map<void *, RosterCallback> m_roster_callbacks;
     std::unordered_map<void *, ErrorCallback> m_error_callbacks;
     std::string m_last_error;
+    std::deque<DebugEvent> m_debug_events;
     // Tracks whether the user deliberately requested a leave/stop (suppresses recovery).
     std::atomic<bool> m_user_leaving{false};
     std::string m_last_jwt; // stored so reconnect manager can access it

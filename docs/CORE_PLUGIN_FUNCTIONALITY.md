@@ -40,6 +40,12 @@ The dedicated Zoom Output Manager is the primary assignment surface. It supports
 profile save/load workflows and exposes requested resolution, observed signal,
 frame rate, assignment mode, and audio routing information for each output.
 
+Open **Tools > Zoom Diagnostics** during a live session to see requested versus
+observed resolution, FPS, frame age, stale and quality retry counters, and the
+latest `ZoomObsEngine` debug events. This is the fastest way to see whether a
+source is waiting for frames, receiving a lower-than-requested feed, or being
+resubscribed by recovery logic.
+
 ![CoreVideo Zoom Participant source properties](images/corevideo-source-properties.svg)
 
 Each Zoom Participant source can be configured independently for fixed

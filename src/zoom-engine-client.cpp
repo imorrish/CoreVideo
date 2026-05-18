@@ -545,6 +545,19 @@ void ZoomEngineClient::handle_event(const std::string &line)
     if (cmd == "debug") {
         blog(LOG_INFO, "[obs-zoom-plugin] Zoom engine debug: %s", line.c_str());
         const QString stage = obj.value("stage").toString();
+        {
+            std::lock_guard<std::mutex> lk(m_mtx);
+            DebugEvent event;
+            event.timestamp_ms = os_gettime_ns() / 1000000ULL;
+            event.stage = stage.toStdString();
+            event.source_uuid = obj.value("source_uuid").toString().toStdString();
+            event.participant_id =
+                static_cast<uint32_t>(obj.value("participant_id").toInt(0));
+            event.message = line;
+            m_debug_events.push_back(std::move(event));
+            while (m_debug_events.size() > 300)
+                m_debug_events.pop_front();
+        }
         if (stage == "raw_media_ready")
             m_media_active.store(true, std::memory_order_release);
         else if (stage == "raw_media_stopped")
@@ -755,6 +768,13 @@ std::vector<ParticipantInfo> ZoomEngineClient::roster() const
 {
     std::lock_guard<std::mutex> lk(m_mtx);
     return m_roster;
+}
+
+std::vector<ZoomEngineClient::DebugEvent>
+ZoomEngineClient::recent_debug_events() const
+{
+    std::lock_guard<std::mutex> lk(m_mtx);
+    return {m_debug_events.begin(), m_debug_events.end()};
 }
 
 void ZoomEngineClient::add_roster_callback(void *key, RosterCallback cb)

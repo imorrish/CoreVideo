@@ -170,6 +170,7 @@ if(COREVIDEO_BUILD_PLUGIN)
         src/zoom-oauth.cpp
         src/zoom-output-manager.cpp
         src/zoom-output-dialog.cpp
+        src/zoom-diagnostics-dialog.cpp
         src/zoom-output-profile.cpp
         src/zoom-iso-recorder.cpp
         src/zoom-iso-panel.cpp

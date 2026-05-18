@@ -8,6 +8,7 @@
 #include "zoom-settings.h"
 #include "zoom-settings-dialog.h"
 #include "zoom-output-dialog.h"
+#include "zoom-diagnostics-dialog.h"
 #include "zoom-dock.h"
 #include "zoom-iso-recorder.h"
 #include "zoom-iso-panel.h"
@@ -204,6 +205,12 @@ bool obs_module_load(void)
     obs_frontend_add_tools_menu_item("Zoom Output Manager", [](void *) {
         auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
         ZoomOutputDialog dlg(main_win);
+        dlg.exec();
+    }, nullptr);
+
+    obs_frontend_add_tools_menu_item("Zoom Diagnostics", [](void *) {
+        auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+        ZoomDiagnosticsDialog dlg(main_win);
         dlg.exec();
     }, nullptr);
 

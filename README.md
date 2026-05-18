@@ -40,6 +40,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **Webinar support** - join Zoom Webinars using the dedicated SDK entry point (Webinar checkbox in control dock)
 - **Participant roster** - live list with video, mute, talking, host, co-host, raised hand, spotlight slot, and screen-sharing state
 - **Control dock** - dockable Qt panel with animated status dot, join/leave, token-type selector, recovery countdown, Active Speaker Director controls, and a routing section that opens the dedicated Output Manager; persists last meeting ID and display name across sessions
+- **Diagnostics window** - Tools -> Zoom Diagnostics shows requested vs observed resolution, FPS, frame age, retry counts, and recent engine debug events for live troubleshooting
 - **Auto-reconnect** - exponential back-off recovery after engine crash, network drop, or unexpected disconnect
 - **OBS hotkeys** - per-source hotkeys to enable/disable active speaker mode
 - **TCP control API** - JSON server on `127.0.0.1:19870` for scripts and dashboards; includes `oauth_callback` command for custom URL scheme forwarding
@@ -409,6 +410,7 @@ CoreVideo/
     |-- zoom-output-manager.*                 # Source registry + runtime reconfiguration
     |-- zoom-output-profile.*                 # Named JSON profile persistence
     |-- zoom-output-dialog.*                  # Qt Output Manager dialog
+    |-- zoom-diagnostics-dialog.*             # Qt Diagnostics dialog
     |-- zoom-control-server.*                 # TCP JSON API (port 19870) + oauth_callback command
     |-- zoom-osc-server.*                     # UDP OSC API (port 19871)
     |-- zoom-settings.*                       # SDK key/secret/JWT + OAuth tokens + port persistence
