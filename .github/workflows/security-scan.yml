@@ -109,13 +109,37 @@ jobs:
             const fs = require('fs');
             const marker = '<!-- corevideo-cppcheck-quality -->';
             const body = fs.readFileSync('security-reports/code-quality-issue.md', 'utf8');
+            const { owner, repo } = context.repo;
+            const title = 'Code quality findings from Cppcheck';
+
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              labels: 'code-quality',
+              per_page: 100
+            });
+            const existing = issues.find(issue => issue.title === title && !issue.pull_request);
+
             if (!body.includes(marker)) {
               core.info('No public code-quality issue needed.');
+              if (existing) {
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: existing.number,
+                  body: `Cppcheck no longer reports public code-quality findings.\n\nWorkflow run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`
+                });
+                await github.rest.issues.update({
+                  owner,
+                  repo,
+                  issue_number: existing.number,
+                  state: 'closed'
+                });
+              }
               return;
             }
 
-            const { owner, repo } = context.repo;
-            const title = 'Code quality findings from Cppcheck';
             const labels = ['code-quality', 'automated'];
             for (const label of labels) {
               try {
@@ -134,14 +158,6 @@ jobs:
               }
             }
 
-            const issues = await github.paginate(github.rest.issues.listForRepo, {
-              owner,
-              repo,
-              state: 'open',
-              labels: 'code-quality',
-              per_page: 100
-            });
-            const existing = issues.find(issue => issue.title === title && !issue.pull_request);
             const issueBody = `${body}\n\nWorkflow run: ${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}\n`;
             if (existing) {
               await github.rest.issues.update({
