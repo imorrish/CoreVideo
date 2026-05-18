@@ -25,6 +25,7 @@ struct ZoomOutputInfo {
     bool video_stale = false;
     uint32_t stale_recovery_attempts = 0;
     uint64_t stale_recovery_cooldown_ms = 0;
+    uint64_t subscribed_age_ms = 0;
     AssignmentMode   assignment = AssignmentMode::Participant;
     uint32_t         spotlight_slot = 1;     // used when assignment == SpotlightIndex
     uint32_t         failover_participant_id = 0; // 0 = none

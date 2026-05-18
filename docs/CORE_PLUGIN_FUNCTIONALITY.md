@@ -219,8 +219,8 @@ List outputs:
 ```
 
 Output snapshots include requested resolution, observed resolution/FPS, stale
-state, last frame age, recovery attempts, and the remaining automatic recovery
-cooldown.
+state, last frame age, subscribed age for outputs still waiting on their first
+frame, recovery attempts, and the remaining automatic recovery cooldown.
 
 Force a retry for stale outputs:
 

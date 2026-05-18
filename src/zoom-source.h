@@ -124,6 +124,7 @@ private:
     std::atomic<uint32_t> m_height{0};
     std::atomic<uint32_t> m_observed_fps_x100{0};
     std::atomic<uint64_t> m_last_frame_ns{0};
+    std::atomic<uint64_t> m_last_subscribe_ns{0};
     std::atomic<uint64_t> m_last_stale_recover_ns{0};
     std::atomic<uint32_t> m_stale_recover_attempts{0};
     std::vector<int16_t> m_stereo_buf;

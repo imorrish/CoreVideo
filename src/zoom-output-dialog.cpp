@@ -97,7 +97,10 @@ static QString signal_text(const ZoomOutputInfo &output)
 static QString signal_tooltip(const ZoomOutputInfo &output)
 {
     if (output.observed_width == 0 || output.observed_height == 0)
-        return QStringLiteral("No live video frame has been received.");
+        return output.subscribed_age_ms > 0
+            ? QString("No live video frame has been received. CoreVideo has been waiting %1 ms and will retry automatically if the feed does not arrive.")
+                .arg(output.subscribed_age_ms)
+            : QStringLiteral("No live video frame has been received.");
     if (output.video_stale) {
         QString text = QString("Video frames stopped %1 ms ago. CoreVideo is preserving the last good frame and will retry this feed automatically.")
             .arg(output.last_frame_age_ms);

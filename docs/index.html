@@ -1351,7 +1351,7 @@ sequenceDiagram
       <tr><td><code>help</code></td><td><code>{"cmd":"help"}</code></td><td><code>commands</code> — array of names</td></tr>
       <tr><td><code>status</code></td><td><code>{"cmd":"status"}</code></td><td><code>meeting_state</code>, <code>active_speaker_id</code></td></tr>
       <tr><td><code>list_participants</code></td><td><code>{"cmd":"list_participants"}</code></td><td><code>participants</code> array</td></tr>
-      <tr><td><code>list_outputs</code></td><td><code>{"cmd":"list_outputs"}</code></td><td><code>outputs</code> array with requested signal, observed signal, stale state, recovery attempts, and retry cooldown</td></tr>
+      <tr><td><code>list_outputs</code></td><td><code>{"cmd":"list_outputs"}</code></td><td><code>outputs</code> array with requested signal, observed signal, subscribed age, stale state, recovery attempts, and retry cooldown</td></tr>
       <tr><td><code>recover_stale_outputs</code></td><td><code>{"cmd":"recover_stale_outputs","force":true}</code></td><td><code>recovered</code> count after retrying stale feeds</td></tr>
       <tr><td><code>assign_output</code></td><td><code>{"cmd":"assign_output","source":"…","participant_id":N,"active_speaker":false,"isolate_audio":true,"audio_channels":"stereo"}</code></td><td><code>ok</code>, <code>error</code></td></tr>
       <tr><td><code>speaker_director_status</code></td><td><code>{"cmd":"speaker_director_status"}</code></td><td><code>speaker_director</code> object with directed/raw/candidate/manual/timing state</td></tr>

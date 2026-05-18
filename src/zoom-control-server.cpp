@@ -239,6 +239,7 @@ static QJsonObject output_to_json(const ZoomOutputInfo &o)
         static_cast<double>(o.stale_recovery_attempts);
     obj["stale_recovery_cooldown_ms"] =
         static_cast<double>(o.stale_recovery_cooldown_ms);
+    obj["subscribed_age_ms"] = static_cast<double>(o.subscribed_age_ms);
     obj["signal_below_requested"] = output_signal_below_requested(o);
     obj["signal_missing_or_stale"] = output_signal_missing_or_stale(o);
     return obj;
