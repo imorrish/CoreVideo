@@ -183,7 +183,7 @@ static void scale_i420_letterbox(const uint8_t *src_y,
     uint8_t *dst_u = dst_y + dst_y_size;
     uint8_t *dst_v = dst_u + dst_uv_size;
 
-    std::memset(dst_y, 16, dst_y_size);
+    std::memset(dst_y, 0, dst_y_size);
     std::memset(dst_u, 128, dst_uv_size);
     std::memset(dst_v, 128, dst_uv_size);
 
@@ -219,9 +219,9 @@ static void scale_i420_letterbox(const uint8_t *src_y,
 static void rgb_to_i420_values(uint8_t r, uint8_t g, uint8_t b,
                                uint8_t &y, uint8_t &u, uint8_t &v)
 {
-    y = clamp_u8(((66 * r + 129 * g + 25 * b + 128) >> 8) + 16);
-    u = clamp_u8(((-38 * r - 74 * g + 112 * b + 128) >> 8) + 128);
-    v = clamp_u8(((112 * r - 94 * g - 18 * b + 128) >> 8) + 128);
+    y = clamp_u8((77 * r + 150 * g + 29 * b + 128) >> 8);
+    u = clamp_u8(((-43 * r - 85 * g + 128 * b + 128) >> 8) + 128);
+    v = clamp_u8(((128 * r - 107 * g - 21 * b + 128) >> 8) + 128);
 }
 
 static bool source_wants_subscription(AssignmentMode mode,
@@ -237,8 +237,8 @@ static bool source_wants_subscription(AssignmentMode mode,
 
 static void set_yuv_frame_color_info(obs_source_frame &frame)
 {
-    frame.full_range = false;
-    video_format_get_parameters_for_format(VIDEO_CS_709, VIDEO_RANGE_PARTIAL,
+    frame.full_range = true;
+    video_format_get_parameters_for_format(VIDEO_CS_709, VIDEO_RANGE_FULL,
                                            frame.format, frame.color_matrix,
                                            frame.color_range_min,
                                            frame.color_range_max);
@@ -1137,7 +1137,7 @@ void ZoomSource::output_placeholder_frame(bool color_bars)
     uint8_t *v_plane = u_plane + uv_size;
 
     if (!color_bars) {
-        std::fill(y_plane, y_plane + y_size, 16);
+        std::fill(y_plane, y_plane + y_size, 0);
         std::fill(u_plane, u_plane + uv_size, 128);
         std::fill(v_plane, v_plane + uv_size, 128);
     } else {
