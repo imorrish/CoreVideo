@@ -6,6 +6,8 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <algorithm>
+#include <cmath>
 #include <memory>
 
 static const QString kCoreVideoSourcesScene = QStringLiteral("CoreVideo Sources");
@@ -431,10 +433,17 @@ void OBSClient::handleResponse(const QJsonObject &d)
         QHash<QString, int> nameToId;
         for (const auto &v : rd["sceneItems"].toArray()) {
             const QJsonObject o = v.toObject();
+            const QJsonObject transform = o["sceneItemTransform"].toObject();
             SceneItem si;
             si.sceneItemId = o["sceneItemId"].toInt();
             si.sourceName  = o["sourceName"].toString();
             si.enabled     = o["sceneItemEnabled"].toBool(true);
+            si.sceneItemIndex = o["sceneItemIndex"].toInt(-1);
+            si.positionX = transform["positionX"].toDouble();
+            si.positionY = transform["positionY"].toDouble();
+            si.boundsWidth = transform["boundsWidth"].toDouble();
+            si.boundsHeight = transform["boundsHeight"].toDouble();
+            si.boundsType = transform["boundsType"].toString();
             items.append(si);
             nameToId.insert(si.sourceName, si.sceneItemId);
         }
@@ -597,6 +606,20 @@ OBSClient::coreVideoSceneAudit(const QStringList &participantSources,
     QSet<QString> expectedScenes;
     QSet<QString> expectedInputs;
     QHash<QString, QSet<QString>> expectedSceneItems;
+    struct ExpectedSceneItemGeometry {
+        QString scene;
+        QString source;
+        double x = 0.0;
+        double y = 0.0;
+        double width = 0.0;
+        double height = 0.0;
+        int index = -1;
+        bool enabled = true;
+    };
+    QVector<ExpectedSceneItemGeometry> expectedGeometry;
+    auto nearlyEqual = [](double actual, double expected) {
+        return std::abs(actual - expected) <= 1.0;
+    };
 
     expectedScenes.insert(kCoreVideoSourcesScene);
     for (int i = 0; i < participantSources.size(); ++i) {
@@ -638,7 +661,18 @@ OBSClient::coreVideoSceneAudit(const QStringList &participantSources,
         for (const TemplateSlot &slot : plan.tmpl.slotList) {
             if (slot.index < 0 || slot.index >= plan.sourceNames.size())
                 continue;
-            items.insert(coreVideoNestedSceneName(slot.index, plan.sourceNames.value(slot.index)));
+            const QString source = coreVideoNestedSceneName(slot.index, plan.sourceNames.value(slot.index));
+            items.insert(source);
+            expectedGeometry.append(ExpectedSceneItemGeometry{
+                plan.sceneName,
+                source,
+                slot.x * plan.canvasWidth,
+                slot.y * plan.canvasHeight,
+                slot.width * plan.canvasWidth,
+                slot.height * plan.canvasHeight,
+                20 + slot.index,
+                true,
+            });
         }
         for (const QString &layer : plan.designLayerNames)
             items.insert(layer.trimmed());
@@ -696,14 +730,53 @@ OBSClient::coreVideoSceneAudit(const QStringList &participantSources,
         }
     }
 
+    for (const ExpectedSceneItemGeometry &expected : expectedGeometry) {
+        const QVector<SceneItem> items = m_sceneItems.value(expected.scene);
+        const auto found = std::find_if(items.constBegin(), items.constEnd(), [&](const SceneItem &item) {
+            return item.sourceName == expected.source;
+        });
+        if (found == items.constEnd())
+            continue;
+
+        QStringList detail;
+        if (found->enabled != expected.enabled)
+            detail << QStringLiteral("visibility");
+        if (!nearlyEqual(found->positionX, expected.x) || !nearlyEqual(found->positionY, expected.y)) {
+            detail << QStringLiteral("position %1,%2 expected %3,%4")
+                          .arg(found->positionX, 0, 'f', 1)
+                          .arg(found->positionY, 0, 'f', 1)
+                          .arg(expected.x, 0, 'f', 1)
+                          .arg(expected.y, 0, 'f', 1);
+        }
+        if (!nearlyEqual(found->boundsWidth, expected.width) || !nearlyEqual(found->boundsHeight, expected.height)) {
+            detail << QStringLiteral("size %1x%2 expected %3x%4")
+                          .arg(found->boundsWidth, 0, 'f', 1)
+                          .arg(found->boundsHeight, 0, 'f', 1)
+                          .arg(expected.width, 0, 'f', 1)
+                          .arg(expected.height, 0, 'f', 1);
+        }
+        if (found->boundsType != QStringLiteral("OBS_BOUNDS_SCALE_INNER"))
+            detail << QStringLiteral("bounds %1").arg(found->boundsType.isEmpty()
+                ? QStringLiteral("<unset>")
+                : found->boundsType);
+        if (found->sceneItemIndex != -1 && found->sceneItemIndex != expected.index)
+            detail << QStringLiteral("layer %1 expected %2").arg(found->sceneItemIndex).arg(expected.index);
+        if (!detail.isEmpty()) {
+            audit.geometryDrift << QStringLiteral("%1 -> %2: %3")
+                                       .arg(expected.scene, expected.source, detail.join(QStringLiteral("; ")));
+        }
+    }
+
     audit.missingScenes.removeDuplicates();
     audit.missingInputs.removeDuplicates();
     audit.missingSceneItems.removeDuplicates();
     audit.staleDesignLayers.removeDuplicates();
+    audit.geometryDrift.removeDuplicates();
     audit.missingScenes.sort();
     audit.missingInputs.sort();
     audit.missingSceneItems.sort();
     audit.staleDesignLayers.sort();
+    audit.geometryDrift.sort();
     return audit;
 }
 

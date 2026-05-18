@@ -41,6 +41,12 @@ public:
         int     sceneItemId = 0;
         QString sourceName;
         bool    enabled = true;
+        int     sceneItemIndex = -1;
+        double  positionX = 0.0;
+        double  positionY = 0.0;
+        double  boundsWidth = 0.0;
+        double  boundsHeight = 0.0;
+        QString boundsType;
     };
 
     struct CoreVideoSyncStatus {
@@ -67,6 +73,7 @@ public:
         QStringList missingInputs;
         QStringList missingSceneItems;
         QStringList staleDesignLayers;
+        QStringList geometryDrift;
 
         bool isClean() const
         {
@@ -74,7 +81,8 @@ public:
                 && expectedScenes == presentScenes
                 && expectedInputs == presentInputs
                 && expectedSceneItems == presentSceneItems
-                && staleDesignLayers.isEmpty();
+                && staleDesignLayers.isEmpty()
+                && geometryDrift.isEmpty();
         }
     };
 

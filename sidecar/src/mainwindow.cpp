@@ -971,6 +971,8 @@ void MainWindow::reconcileObsSceneGraph()
                 detail << QStringLiteral("%1 missing scene item(s)").arg(after.missingSceneItems.size());
             if (!after.staleDesignLayers.isEmpty())
                 detail << QStringLiteral("%1 stale design layer(s)").arg(after.staleDesignLayers.size());
+            if (!after.geometryDrift.isEmpty())
+                detail << QStringLiteral("%1 geometry drift(s)").arg(after.geometryDrift.size());
             onObsLog(QStringLiteral("Sync OBS finished with remaining drift: %1.")
                          .arg(detail.isEmpty() ? QStringLiteral("inventory still loading") : detail.join(", ")));
         }
@@ -1044,6 +1046,7 @@ void MainWindow::openObsSyncInspector()
         fillInspectorTable(table, "Missing input", audit.missingInputs);
         fillInspectorTable(table, "Missing scene item", audit.missingSceneItems);
         fillInspectorTable(table, "Stale design layer", audit.staleDesignLayers);
+        fillInspectorTable(table, "Geometry drift", audit.geometryDrift);
         if (table->rowCount() == 0) {
             fillInspectorTable(table, "OK", {
                 QStringLiteral("CoreVideo OBS scene graph matches the Sidecar Look catalog.")
@@ -1132,6 +1135,8 @@ void MainWindow::renderLookToOBS(const Look &look, bool makeProgram)
                 detail << QStringLiteral("%1 missing scene item(s)").arg(audit.missingSceneItems.size());
             if (!audit.staleDesignLayers.isEmpty())
                 detail << QStringLiteral("%1 stale design layer(s)").arg(audit.staleDesignLayers.size());
+            if (!audit.geometryDrift.isEmpty())
+                detail << QStringLiteral("%1 geometry drift(s)").arg(audit.geometryDrift.size());
             onObsLog(QStringLiteral("OBS render verification found drift: %1.")
                          .arg(detail.isEmpty()
                               ? QStringLiteral("inventory still loading")
@@ -1275,6 +1280,8 @@ void MainWindow::openParticipantMappingWindow()
                 text += QStringLiteral("\nMissing scene items: %1").arg(audit.missingSceneItems.mid(0, 6).join(", "));
             if (!audit.staleDesignLayers.isEmpty())
                 text += QStringLiteral("\nStale design layers: %1").arg(audit.staleDesignLayers.mid(0, 6).join(", "));
+            if (!audit.geometryDrift.isEmpty())
+                text += QStringLiteral("\nGeometry drift: %1").arg(audit.geometryDrift.mid(0, 4).join(", "));
         }
         status->setText(text);
     };
@@ -1868,6 +1875,8 @@ void MainWindow::onDesignLookRequested()
             detail << QStringLiteral("%1 missing scene item(s)").arg(audit.missingSceneItems.size());
         if (!audit.staleDesignLayers.isEmpty())
             detail << QStringLiteral("%1 stale design layer(s)").arg(audit.staleDesignLayers.size());
+        if (!audit.geometryDrift.isEmpty())
+            detail << QStringLiteral("%1 geometry drift(s)").arg(audit.geometryDrift.size());
         obsStatus->setText(detail.isEmpty()
             ? state
             : QStringLiteral("%1 %2").arg(state, detail.join(QStringLiteral(", "))));
@@ -2112,6 +2121,8 @@ void MainWindow::updateSceneSyncStatus()
         detail << QStringLiteral("Missing scene items: %1").arg(audit.missingSceneItems.mid(0, 8).join(", "));
     if (!audit.staleDesignLayers.isEmpty())
         detail << QStringLiteral("Stale design layers: %1").arg(audit.staleDesignLayers.mid(0, 8).join(", "));
+    if (!audit.geometryDrift.isEmpty())
+        detail << QStringLiteral("Geometry drift: %1").arg(audit.geometryDrift.mid(0, 8).join(", "));
     if (detail.isEmpty())
         detail << QStringLiteral("CoreVideo OBS scene graph is synced.");
     if (!m_lastRenderedLookName.isEmpty())
