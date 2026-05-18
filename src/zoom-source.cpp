@@ -45,6 +45,7 @@ static std::atomic<uint64_t> s_source_counter{1};
 static constexpr uint32_t kZoomBytesPerSample = sizeof(int16_t);
 static constexpr uint64_t kPreviewIntervalNs = 200'000'000ULL;
 static constexpr uint64_t kStaleVideoNs = 3'000'000'000ULL;
+static constexpr uint64_t kNoSignalRecoverNs = 5'000'000'000ULL;
 static constexpr uint64_t kStaleRecoverCooldownNs = 10'000'000'000ULL;
 
 static AudioChannelMode audio_mode_from_data(obs_data_t *s)
@@ -381,12 +382,28 @@ ZoomOutputInfo ZoomSource::output_info() const
     info.observed_fps =
         static_cast<double>(m_observed_fps_x100.load(std::memory_order_relaxed)) / 100.0;
     const uint64_t last_frame_ns = m_last_frame_ns.load(std::memory_order_relaxed);
+    const uint64_t now_ns = os_gettime_ns();
     if (last_frame_ns != 0) {
-        const uint64_t now_ns = os_gettime_ns();
         const uint64_t age_ns = now_ns > last_frame_ns ? now_ns - last_frame_ns : 0;
         info.last_frame_age_ms = age_ns / 1'000'000ULL;
         info.video_stale = age_ns > kStaleVideoNs;
+        const uint64_t last_recover_ns =
+            m_last_stale_recover_ns.load(std::memory_order_relaxed);
+        if (last_recover_ns != 0) {
+            const uint64_t recover_age_ns =
+                now_ns > last_recover_ns ? now_ns - last_recover_ns : 0;
+            if (recover_age_ns < kStaleRecoverCooldownNs) {
+                info.stale_recovery_cooldown_ms =
+                    (kStaleRecoverCooldownNs - recover_age_ns) / 1'000'000ULL;
+            }
+        }
     }
+    const uint64_t last_subscribe_ns =
+        m_last_subscribe_ns.load(std::memory_order_relaxed);
+    if (last_subscribe_ns != 0 && now_ns > last_subscribe_ns)
+        info.subscribed_age_ms = (now_ns - last_subscribe_ns) / 1'000'000ULL;
+    info.stale_recovery_attempts =
+        m_stale_recover_attempts.load(std::memory_order_relaxed);
     info.assignment = mode;
     info.spotlight_slot = spotlight_slot.load(std::memory_order_acquire);
     info.failover_participant_id = failover_participant_id.load(std::memory_order_acquire);
@@ -495,12 +512,14 @@ void ZoomSource::subscribe()
         // Use a sentinel so on_roster_changed re-subscribes only when we
         // actually want to change the dispatch.
         m_current_subscription_id = 0xFFFF0000u | slot;
+        m_last_subscribe_ns.store(os_gettime_ns(), std::memory_order_release);
         m_subscribed = true;
         return;
     }
     case AssignmentMode::ScreenShare:
         ZoomEngineClient::instance().subscribe_screenshare(source_uuid);
         m_current_subscription_id = 0xFFFFFFFFu;
+        m_last_subscribe_ns.store(os_gettime_ns(), std::memory_order_release);
         m_subscribed = true;
         return;
     case AssignmentMode::ActiveSpeaker:
@@ -537,6 +556,9 @@ void ZoomSource::subscribe()
              output_name().c_str(), source_uuid.c_str(), target);
         m_current_subscription_id = target;
         m_subscribed = target != 0 || use_active_speaker;
+        if (target != 0)
+            m_last_subscribe_ns.store(os_gettime_ns(),
+                                      std::memory_order_release);
         return;
     }
     }
@@ -557,11 +579,12 @@ void ZoomSource::unsubscribe()
     m_director_preview_subscription_id = 0;
     m_observed_fps_x100.store(0, std::memory_order_relaxed);
     m_last_frame_ns.store(0, std::memory_order_relaxed);
+    m_last_subscribe_ns.store(0, std::memory_order_relaxed);
     m_last_stale_recover_ns.store(0, std::memory_order_relaxed);
     m_stale_recover_attempts.store(0, std::memory_order_relaxed);
 }
 
-bool ZoomSource::recover_stale_video(uint64_t now_ns)
+bool ZoomSource::recover_stale_video(uint64_t now_ns, bool force)
 {
     if (!m_active.load(std::memory_order_acquire) ||
         !m_subscribed.load(std::memory_order_acquire))
@@ -569,13 +592,25 @@ bool ZoomSource::recover_stale_video(uint64_t now_ns)
 
     const uint64_t last_frame_ns =
         m_last_frame_ns.load(std::memory_order_acquire);
-    if (last_frame_ns == 0 || now_ns <= last_frame_ns ||
-        now_ns - last_frame_ns <= kStaleVideoNs)
-        return false;
+    const uint64_t last_subscribe_ns =
+        m_last_subscribe_ns.load(std::memory_order_acquire);
+    bool missing_initial_frame = false;
+    uint64_t age_ns = 0;
+    if (last_frame_ns == 0) {
+        if (last_subscribe_ns == 0 || now_ns <= last_subscribe_ns ||
+            now_ns - last_subscribe_ns <= kNoSignalRecoverNs)
+            return false;
+        missing_initial_frame = true;
+        age_ns = now_ns - last_subscribe_ns;
+    } else {
+        if (now_ns <= last_frame_ns || now_ns - last_frame_ns <= kStaleVideoNs)
+            return false;
+        age_ns = now_ns - last_frame_ns;
+    }
 
     const uint64_t last_recover_ns =
         m_last_stale_recover_ns.load(std::memory_order_acquire);
-    if (last_recover_ns != 0 &&
+    if (!force && last_recover_ns != 0 &&
         now_ns - last_recover_ns < kStaleRecoverCooldownNs)
         return false;
 
@@ -589,9 +624,10 @@ bool ZoomSource::recover_stale_video(uint64_t now_ns)
     const uint32_t attempt =
         m_stale_recover_attempts.fetch_add(1, std::memory_order_relaxed) + 1;
     blog(LOG_WARNING,
-         "[obs-zoom-plugin] Recovering stale Zoom video subscription: source=%s uuid=%s age_ms=%llu attempt=%u",
+         "[obs-zoom-plugin] Recovering %s Zoom video subscription: source=%s uuid=%s age_ms=%llu attempt=%u",
+         missing_initial_frame ? "no-signal" : "stale",
          output_name().c_str(), source_uuid.c_str(),
-         static_cast<unsigned long long>((now_ns - last_frame_ns) / 1'000'000ULL),
+         static_cast<unsigned long long>(age_ns / 1'000'000ULL),
          attempt);
     subscribe();
     return true;
