@@ -22,6 +22,7 @@
 #define PROP_VIDEO_LOSS_MODE      "video_loss_mode"
 #define PROP_ISOLATE_AUDIO        "isolate_audio"
 #define PROP_AUDIENCE_AUDIO       "audience_audio"
+#define PROP_ACTIVE_AUDIO_ROLE    "active_speaker_audio_role"
 #define PROP_AUDIO_CHANNELS       "audio_channels"
 #define PROP_RESOLUTION           "resolution"
 #define PROP_STATUS               "status_label"
@@ -34,6 +35,9 @@
 #define VIDEO_LOSS_BLACK      1
 #define AUDIO_CH_MONO   0
 #define AUDIO_CH_STEREO 1
+#define ACTIVE_AUDIO_MIX      0
+#define ACTIVE_AUDIO_ISOLATED 1
+#define ACTIVE_AUDIO_AUDIENCE 2
 #define RES_360P  0
 #define RES_720P  1
 #define RES_1080P 2
@@ -224,6 +228,15 @@ static void rgb_to_i420_values(uint8_t r, uint8_t g, uint8_t b,
     v = clamp_u8(((128 * r - 107 * g - 21 * b + 128) >> 8) + 128);
 }
 
+static int active_audio_role_from_settings(obs_data_t *settings)
+{
+    if (obs_data_get_bool(settings, PROP_ISOLATE_AUDIO))
+        return ACTIVE_AUDIO_ISOLATED;
+    if (obs_data_get_bool(settings, PROP_AUDIENCE_AUDIO))
+        return ACTIVE_AUDIO_AUDIENCE;
+    return ACTIVE_AUDIO_MIX;
+}
+
 static bool source_wants_subscription(AssignmentMode mode,
                                       uint32_t participant_id)
 {
@@ -289,6 +302,15 @@ void ZoomSource::apply_settings(obs_data_t *settings)
     }
     isolate_audio = obs_data_get_bool(settings, PROP_ISOLATE_AUDIO);
     audience_audio = obs_data_get_bool(settings, PROP_AUDIENCE_AUDIO);
+    if (dedicated_active_speaker_source &&
+        obs_data_has_user_value(settings, PROP_ACTIVE_AUDIO_ROLE)) {
+        const int role = static_cast<int>(
+            obs_data_get_int(settings, PROP_ACTIVE_AUDIO_ROLE));
+        isolate_audio = role == ACTIVE_AUDIO_ISOLATED;
+        audience_audio = role == ACTIVE_AUDIO_AUDIENCE;
+        obs_data_set_bool(settings, PROP_ISOLATE_AUDIO, isolate_audio);
+        obs_data_set_bool(settings, PROP_AUDIENCE_AUDIO, audience_audio);
+    }
     // isolate wins if both were saved together (legacy scenes).
     if (isolate_audio) audience_audio = false;
     audio_mode = audio_mode_from_data(settings);
@@ -1481,27 +1503,49 @@ static obs_properties_t *zoom_source_get_properties(void *data)
         obs_property_list_add_int(failover, label.c_str(),
                                   static_cast<long long>(p.user_id));
     }
-    // Mutually exclusive audio routing toggles. Default is the full meeting
-    // mix; isolate plays a single participant; audience plays the residual
-    // active speaker (everyone not bound to an isolate target). A modified
-    // callback enforces "only one checked" for clarity, with isolate winning
-    // server-side if both somehow get set.
-    obs_property_t *iso_prop = obs_properties_add_bool(props, PROP_ISOLATE_AUDIO,
-        obs_module_text("ZoomSource.IsolateAudio"));
-    obs_property_t *aud_prop = obs_properties_add_bool(props, PROP_AUDIENCE_AUDIO,
-        obs_module_text("ZoomSource.AudienceAudio"));
-    obs_property_set_modified_callback(iso_prop,
-        [](obs_properties_t *, obs_property_t *, obs_data_t *settings) -> bool {
-            if (obs_data_get_bool(settings, PROP_ISOLATE_AUDIO))
-                obs_data_set_bool(settings, PROP_AUDIENCE_AUDIO, false);
-            return false;
-        });
-    obs_property_set_modified_callback(aud_prop,
-        [](obs_properties_t *, obs_property_t *, obs_data_t *settings) -> bool {
-            if (obs_data_get_bool(settings, PROP_AUDIENCE_AUDIO))
-                obs_data_set_bool(settings, PROP_ISOLATE_AUDIO, false);
-            return false;
-        });
+    obs_property_t *active_audio_role = nullptr;
+    if (ctx->dedicated_active_speaker_source) {
+        active_audio_role = obs_properties_add_list(props, PROP_ACTIVE_AUDIO_ROLE,
+            obs_module_text("ZoomSource.ActiveSpeakerAudioRole"),
+            OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_INT);
+        obs_property_list_add_int(active_audio_role,
+            obs_module_text("ZoomSource.ActiveSpeakerAudioRole.Mixed"),
+            ACTIVE_AUDIO_MIX);
+        obs_property_list_add_int(active_audio_role,
+            obs_module_text("ZoomSource.ActiveSpeakerAudioRole.Isolated"),
+            ACTIVE_AUDIO_ISOLATED);
+        obs_property_list_add_int(active_audio_role,
+            obs_module_text("ZoomSource.ActiveSpeakerAudioRole.Audience"),
+            ACTIVE_AUDIO_AUDIENCE);
+        obs_data_t *role_settings = obs_source_get_settings(ctx->source);
+        obs_data_set_int(role_settings, PROP_ACTIVE_AUDIO_ROLE,
+                         active_audio_role_from_settings(role_settings));
+        obs_data_release(role_settings);
+        obs_property_set_long_description(active_audio_role,
+            "Choose what audio follows this Active Speaker source. Use Audience fallback for a residual mic that ignores isolated host/question-reader sources.");
+    } else {
+        // Mutually exclusive audio routing toggles. Default is the full meeting
+        // mix; isolate plays a single participant; audience plays the residual
+        // active speaker (everyone not bound to an isolate target). A modified
+        // callback enforces "only one checked" for clarity, with isolate winning
+        // server-side if both somehow get set.
+        obs_property_t *iso_prop = obs_properties_add_bool(props, PROP_ISOLATE_AUDIO,
+            obs_module_text("ZoomSource.IsolateAudio"));
+        obs_property_t *aud_prop = obs_properties_add_bool(props, PROP_AUDIENCE_AUDIO,
+            obs_module_text("ZoomSource.AudienceAudio"));
+        obs_property_set_modified_callback(iso_prop,
+            [](obs_properties_t *, obs_property_t *, obs_data_t *settings) -> bool {
+                if (obs_data_get_bool(settings, PROP_ISOLATE_AUDIO))
+                    obs_data_set_bool(settings, PROP_AUDIENCE_AUDIO, false);
+                return false;
+            });
+        obs_property_set_modified_callback(aud_prop,
+            [](obs_properties_t *, obs_property_t *, obs_data_t *settings) -> bool {
+                if (obs_data_get_bool(settings, PROP_AUDIENCE_AUDIO))
+                    obs_data_set_bool(settings, PROP_ISOLATE_AUDIO, false);
+                return false;
+            });
+    }
 
     obs_property_t *ch = obs_properties_add_list(props, PROP_AUDIO_CHANNELS,
         obs_module_text("ZoomSource.AudioChannels"),
@@ -1580,6 +1624,7 @@ static void zoom_source_get_defaults(obs_data_t *settings)
                              plugin_settings.speaker_exclude_participant_2);
     obs_data_set_default_bool(settings, PROP_ISOLATE_AUDIO, false);
     obs_data_set_default_bool(settings, PROP_AUDIENCE_AUDIO, false);
+    obs_data_set_default_int(settings, PROP_ACTIVE_AUDIO_ROLE, ACTIVE_AUDIO_MIX);
     obs_data_set_default_int(settings, PROP_PARTICIPANT_ID, 0);
     obs_data_set_default_int(settings, PROP_AUDIO_CHANNELS, AUDIO_CH_MONO);
     obs_data_set_default_int(settings, PROP_RESOLUTION, RES_1080P);
