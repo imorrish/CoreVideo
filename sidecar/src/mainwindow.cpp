@@ -15,6 +15,7 @@
 #include "command-palette.h"
 #include "sidecar-style.h"
 #include "zoom-control-client.h"
+#include <QAbstractItemView>
 #include <QShortcut>
 #include <QKeySequence>
 #include <QTimer>
@@ -46,6 +47,8 @@
 #include <QColorDialog>
 #include <QDoubleSpinBox>
 #include <QDialogButtonBox>
+#include <QHeaderView>
+#include <QTableWidget>
 #include <algorithm>
 
 MainWindow::MainWindow(const StartupConfig &startup, QWidget *parent)
@@ -192,6 +195,7 @@ MainWindow::MainWindow(const StartupConfig &startup, QWidget *parent)
     connect(m_ftbBtn,  &QPushButton::clicked,  this, &MainWindow::onFTB);
     connect(m_swapBtn, &QPushButton::clicked,  this, &MainWindow::onSwapBuses);
     connect(m_engineBtn, &QPushButton::clicked, this, &MainWindow::onEngineToggle);
+    connect(m_syncInspectBtn, &QPushButton::clicked, this, &MainWindow::openObsSyncInspector);
     connect(m_renderPreviewBtn, &QPushButton::clicked, this, &MainWindow::onRenderPreview);
     connect(m_mapBtn, &QPushButton::clicked, this, &MainWindow::openParticipantMappingWindow);
     connect(m_obsBtn,  &QPushButton::clicked,  this, &MainWindow::onObsConnect);
@@ -465,6 +469,10 @@ void MainWindow::buildTopBar(QWidget *parent)
     m_engineBtn->setObjectName("engineOffBtn");
     m_engineBtn->setFixedHeight(34);
 
+    m_syncInspectBtn = new QPushButton("Inspect", m_topBar);
+    m_syncInspectBtn->setObjectName("toolBtn");
+    m_syncInspectBtn->setFixedHeight(34);
+
     m_obsBtn = new QPushButton("OBS  ○", m_topBar);
     m_obsBtn->setObjectName("obsBtn");
     m_obsBtn->setFixedHeight(34);
@@ -477,6 +485,7 @@ void MainWindow::buildTopBar(QWidget *parent)
     row->addSpacing(4);
     row->addWidget(m_obsBtn);
     row->addWidget(m_engineBtn);
+    row->addWidget(m_syncInspectBtn);
 }
 
 // ── Center canvas area ────────────────────────────────────────────────────────
@@ -967,6 +976,107 @@ void MainWindow::reconcileObsSceneGraph()
     });
 }
 
+static void fillInspectorTable(QTableWidget *table,
+                               const QString &category,
+                               const QStringList &items)
+{
+    for (const QString &item : items) {
+        const int row = table->rowCount();
+        table->insertRow(row);
+        auto *categoryItem = new QTableWidgetItem(category);
+        auto *detailItem = new QTableWidgetItem(item);
+        categoryItem->setFlags(categoryItem->flags() & ~Qt::ItemIsEditable);
+        detailItem->setFlags(detailItem->flags() & ~Qt::ItemIsEditable);
+        table->setItem(row, 0, categoryItem);
+        table->setItem(row, 1, detailItem);
+    }
+}
+
+void MainWindow::openObsSyncInspector()
+{
+    auto *dlg = new QDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->setWindowTitle("CoreVideo OBS Sync Inspector");
+    dlg->resize(980, 640);
+    dlg->setStyleSheet(sidecar_stylesheet(nullptr));
+
+    auto *root = new QVBoxLayout(dlg);
+    root->setContentsMargins(16, 16, 16, 16);
+    root->setSpacing(12);
+
+    auto *summary = new QLabel(dlg);
+    summary->setWordWrap(true);
+    summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    root->addWidget(summary);
+
+    auto *table = new QTableWidget(dlg);
+    table->setColumnCount(2);
+    table->setHorizontalHeaderLabels({"Category", "OBS item"});
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table->verticalHeader()->setVisible(false);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    root->addWidget(table, 1);
+
+    auto refresh = [this, summary, table]() {
+        if (!m_obsClient || !m_obsClient->isConnected()) {
+            summary->setText("OBS is not connected. Connect OBS before inspecting scene sync.");
+            table->setRowCount(0);
+            return;
+        }
+
+        refreshObsAuditInventory();
+        const auto audit =
+            m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), lookRenderPlans());
+        summary->setText(QStringLiteral(
+            "OBS sync is %1. Inventory: %2. Scenes %3/%4, inputs %5/%6, scene items %7/%8.")
+            .arg(audit.isClean() ? QStringLiteral("clean") : QStringLiteral("needs attention"))
+            .arg(audit.inventoryReady ? QStringLiteral("ready") : QStringLiteral("loading"))
+            .arg(audit.presentScenes).arg(audit.expectedScenes)
+            .arg(audit.presentInputs).arg(audit.expectedInputs)
+            .arg(audit.presentSceneItems).arg(audit.expectedSceneItems));
+
+        table->setRowCount(0);
+        fillInspectorTable(table, "Missing scene", audit.missingScenes);
+        fillInspectorTable(table, "Missing input", audit.missingInputs);
+        fillInspectorTable(table, "Missing scene item", audit.missingSceneItems);
+        fillInspectorTable(table, "Stale design layer", audit.staleDesignLayers);
+        if (table->rowCount() == 0) {
+            fillInspectorTable(table, "OK", {
+                QStringLiteral("CoreVideo OBS scene graph matches the Sidecar Look catalog.")
+            });
+        }
+    };
+
+    auto *buttons = new QHBoxLayout;
+    auto *refreshBtn = new QPushButton("Refresh", dlg);
+    auto *syncBtn = new QPushButton("Sync OBS", dlg);
+    auto *repairBtn = new QPushButton("Hide Stale Layers", dlg);
+    auto *closeBtn = new QPushButton("Close", dlg);
+    buttons->addWidget(refreshBtn);
+    buttons->addWidget(syncBtn);
+    buttons->addWidget(repairBtn);
+    buttons->addStretch(1);
+    buttons->addWidget(closeBtn);
+    root->addLayout(buttons);
+
+    connect(refreshBtn, &QPushButton::clicked, dlg, refresh);
+    connect(syncBtn, &QPushButton::clicked, dlg, [this, refresh]() {
+        reconcileObsSceneGraph();
+        QTimer::singleShot(7000, this, refresh);
+    });
+    connect(repairBtn, &QPushButton::clicked, dlg, [this, refresh]() {
+        if (m_obsClient && m_obsClient->isConnected())
+            m_obsClient->hideStaleCoreVideoDesignLayers(lookRenderPlans());
+        QTimer::singleShot(1200, this, refresh);
+    });
+    connect(closeBtn, &QPushButton::clicked, dlg, &QDialog::accept);
+
+    refresh();
+    dlg->show();
+}
+
 void MainWindow::renderLookToOBS(const Look &look, bool makeProgram)
 {
     if (!m_obsClient || !m_obsClient->isConnected() || !m_settingsPage)
@@ -993,16 +1103,39 @@ void MainWindow::renderLookToOBS(const Look &look, bool makeProgram)
         if (m_obsClient && m_obsClient->isConnected())
             m_obsClient->requestSceneItems(scene);
     });
-    QTimer::singleShot(3800, this, [this]() {
-        if (m_obsSyncState == ObsSyncState::Applying)
-            m_obsSyncState = ObsSyncState::Dirty;
-        updateSceneSyncStatus();
-    });
-    QTimer::singleShot(5200, this, [this]() {
+    QTimer::singleShot(4200, this, [this]() {
         if (!m_obsClient || !m_obsClient->isConnected())
             return;
         refreshObsAuditInventory();
         m_obsClient->hideStaleCoreVideoDesignLayers(lookRenderPlans());
+    });
+    QTimer::singleShot(6800, this, [this, scene]() {
+        if (!m_obsClient || !m_obsClient->isConnected())
+            return;
+
+        refreshObsAuditInventory();
+        const auto audit =
+            m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), lookRenderPlans());
+        if (audit.isClean()) {
+            m_obsSyncState = ObsSyncState::Synced;
+            onObsLog(QStringLiteral("Verified OBS render for '%1'.").arg(scene));
+        } else {
+            m_obsSyncState = ObsSyncState::Dirty;
+            QStringList detail;
+            if (!audit.missingScenes.isEmpty())
+                detail << QStringLiteral("%1 missing scene(s)").arg(audit.missingScenes.size());
+            if (!audit.missingInputs.isEmpty())
+                detail << QStringLiteral("%1 missing input(s)").arg(audit.missingInputs.size());
+            if (!audit.missingSceneItems.isEmpty())
+                detail << QStringLiteral("%1 missing scene item(s)").arg(audit.missingSceneItems.size());
+            if (!audit.staleDesignLayers.isEmpty())
+                detail << QStringLiteral("%1 stale design layer(s)").arg(audit.staleDesignLayers.size());
+            onObsLog(QStringLiteral("OBS render verification found drift: %1.")
+                         .arg(detail.isEmpty()
+                              ? QStringLiteral("inventory still loading")
+                              : detail.join(", ")));
+        }
+        updateSceneSyncStatus();
     });
     onObsLog(QStringLiteral("Rendered Look '%1' to OBS scene '%2'.")
                  .arg(look.name, scene));
@@ -2063,6 +2196,8 @@ void MainWindow::populateCommandPalette()
                    [this]() { onApplyLayout(); });
     cp->addCommand("Sync OBS scene graph", "OBS",
                    [this]() { reconcileObsSceneGraph(); });
+    cp->addCommand("Open OBS Sync Inspector", "OBS",
+                   [this]() { openObsSyncInspector(); });
     cp->addCommand("Repair CoreVideo duplicate OBS scenes", "OBS",
                    [this]() { repairCoreVideoDuplicates(); });
 

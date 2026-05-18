@@ -63,6 +63,7 @@ private slots:
     void onFTB();
     void onSwapBuses();
     void onEngineToggle();
+    void openObsSyncInspector();
     void onObsConnect();
     void onObsState(OBSClient::State s);
     void onObsLog(const QString &msg);
@@ -128,6 +129,7 @@ private:
     QLabel      *m_obsStatusLabel = nullptr;
     QLabel      *m_sceneSyncStatusLabel = nullptr;
     QPushButton *m_engineBtn      = nullptr;
+    QPushButton *m_syncInspectBtn = nullptr;
     QPushButton *m_obsBtn         = nullptr;
     bool         m_engineOn       = false;
 
