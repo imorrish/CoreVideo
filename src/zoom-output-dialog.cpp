@@ -80,6 +80,10 @@ static QString signal_text(const ZoomOutputInfo &output)
 {
     if (output.observed_width == 0 || output.observed_height == 0)
         return QStringLiteral("No signal");
+    if (output.video_stale)
+        return QString("! Stale\n%1.%2s")
+            .arg(output.last_frame_age_ms / 1000)
+            .arg((output.last_frame_age_ms / 100) % 10);
     const QString prefix = output_signal_below_requested(output)
         ? QStringLiteral("! ")
         : QString();
@@ -94,6 +98,10 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
 {
     if (output.observed_width == 0 || output.observed_height == 0)
         return QStringLiteral("No live video frame has been received.");
+    if (output.video_stale) {
+        return QString("Video frames stopped %1 ms ago. CoreVideo is preserving the last good frame while waiting for Zoom to resume the feed.")
+            .arg(output.last_frame_age_ms);
+    }
     QString text = QString("Requested %1x%2. Receiving %3x%4 at %5 fps.")
         .arg(video_resolution_width(output.video_resolution))
         .arg(video_resolution_height(output.video_resolution))
