@@ -194,7 +194,7 @@ jobs:
 
       - name: Publish GitHub Release
         if: env.COREVIDEO_HAS_ZOOM_RUNTIME == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.release.outputs.tag }}
           name: ${{ steps.release.outputs.name }}
