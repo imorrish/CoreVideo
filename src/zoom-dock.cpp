@@ -628,6 +628,7 @@ ZoomDock::ZoomDock(QWidget *parent)
     connect(m_refresh_timer, &QTimer::timeout, this, [this]() {
         if (SpeakerDirector::instance().tick(os_gettime_ns() / 1000000ULL))
             ZoomOutputManager::instance().resubscribe_all();
+        ZoomOutputManager::instance().recover_stale_sources();
         update_state_indicator();
     });
     m_refresh_timer->start();

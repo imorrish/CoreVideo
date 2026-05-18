@@ -45,6 +45,7 @@ static std::atomic<uint64_t> s_source_counter{1};
 static constexpr uint32_t kZoomBytesPerSample = sizeof(int16_t);
 static constexpr uint64_t kPreviewIntervalNs = 200'000'000ULL;
 static constexpr uint64_t kStaleVideoNs = 3'000'000'000ULL;
+static constexpr uint64_t kStaleRecoverCooldownNs = 10'000'000'000ULL;
 
 static AudioChannelMode audio_mode_from_data(obs_data_t *s)
 {
@@ -556,6 +557,44 @@ void ZoomSource::unsubscribe()
     m_director_preview_subscription_id = 0;
     m_observed_fps_x100.store(0, std::memory_order_relaxed);
     m_last_frame_ns.store(0, std::memory_order_relaxed);
+    m_last_stale_recover_ns.store(0, std::memory_order_relaxed);
+    m_stale_recover_attempts.store(0, std::memory_order_relaxed);
+}
+
+bool ZoomSource::recover_stale_video(uint64_t now_ns)
+{
+    if (!m_active.load(std::memory_order_acquire) ||
+        !m_subscribed.load(std::memory_order_acquire))
+        return false;
+
+    const uint64_t last_frame_ns =
+        m_last_frame_ns.load(std::memory_order_acquire);
+    if (last_frame_ns == 0 || now_ns <= last_frame_ns ||
+        now_ns - last_frame_ns <= kStaleVideoNs)
+        return false;
+
+    const uint64_t last_recover_ns =
+        m_last_stale_recover_ns.load(std::memory_order_acquire);
+    if (last_recover_ns != 0 &&
+        now_ns - last_recover_ns < kStaleRecoverCooldownNs)
+        return false;
+
+    uint64_t expected = last_recover_ns;
+    if (!m_last_stale_recover_ns.compare_exchange_strong(
+            expected, now_ns, std::memory_order_acq_rel,
+            std::memory_order_acquire)) {
+        return false;
+    }
+
+    const uint32_t attempt =
+        m_stale_recover_attempts.fetch_add(1, std::memory_order_relaxed) + 1;
+    blog(LOG_WARNING,
+         "[obs-zoom-plugin] Recovering stale Zoom video subscription: source=%s uuid=%s age_ms=%llu attempt=%u",
+         output_name().c_str(), source_uuid.c_str(),
+         static_cast<unsigned long long>((now_ns - last_frame_ns) / 1'000'000ULL),
+         attempt);
+    subscribe();
+    return true;
 }
 
 void ZoomSource::activate()
@@ -861,6 +900,8 @@ bool ZoomSource::output_video_from_shared_memory(
     m_width.store(observed_w, std::memory_order_relaxed);
     m_height.store(observed_h, std::memory_order_relaxed);
     m_last_frame_ns.store(ts, std::memory_order_relaxed);
+    m_last_stale_recover_ns.store(0, std::memory_order_relaxed);
+    m_stale_recover_attempts.store(0, std::memory_order_relaxed);
 
     const uint64_t now_ns = os_gettime_ns();
     if (m_preview_cb && now_ns - m_preview_last_ns >= kPreviewIntervalNs) {
