@@ -30,6 +30,7 @@ struct LookRenderPlan {
 
 QStringList sourceNamesForSlots(const LookRenderConfig &config, int slotCount);
 QStringList sourceNamesForLook(const LookRenderConfig &config, const Look &look);
+QStringList nestedSceneNamesForSources(const QStringList &sourceNames);
 QString sceneNameForLook(const LookRenderConfig &config, const Look &look);
 QStringList designLayerSourceNames(const LookRenderConfig &config, const Look &look);
 QStringList slotLabelsForLook(const Look &look, const QStringList &slotLabels = {});

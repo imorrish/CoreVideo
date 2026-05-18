@@ -28,6 +28,11 @@ QStringList OBSLookRenderer::sourceNamesForLook(const Look &look) const
     return ::sourceNamesForLook(toRenderConfig(m_config), look);
 }
 
+QStringList OBSLookRenderer::nestedSceneNamesForLook(const Look &look) const
+{
+    return ::nestedSceneNamesForSources(sourceNamesForLook(look));
+}
+
 QString OBSLookRenderer::sceneNameForLook(const Look &look) const
 {
     return ::sceneNameForLook(toRenderConfig(m_config), look);

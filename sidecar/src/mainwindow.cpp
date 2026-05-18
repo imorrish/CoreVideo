@@ -980,6 +980,45 @@ void MainWindow::reconcileObsSceneGraph()
     });
 }
 
+void MainWindow::repairLookGeometry(const Look &look)
+{
+    if (!m_obsClient || !m_obsClient->isConnected()) {
+        onObsLog("Repair geometry skipped: OBS is not connected.");
+        return;
+    }
+
+    const OBSLookRenderer renderer = obsRenderer();
+    const LookRenderPlan plan = renderer.renderPlanForLook(look, false, slotLabelsForLook(look));
+    if (!plan.valid) {
+        onObsLog(QStringLiteral("Repair geometry skipped: Look '%1' has no valid render plan.").arg(look.name));
+        return;
+    }
+
+    const QStringList slotSceneNames = renderer.nestedSceneNamesForLook(look);
+    m_obsClient->requestSceneItems(plan.sceneName);
+    onObsLog(QStringLiteral("Repairing OBS geometry for '%1'.").arg(plan.sceneName));
+
+    QTimer::singleShot(650, this, [this, plan, slotSceneNames]() {
+        if (!m_obsClient || !m_obsClient->isConnected())
+            return;
+        m_obsClient->applyLayout(plan.sceneName,
+                                 plan.tmpl,
+                                 slotSceneNames,
+                                 plan.canvasWidth,
+                                 plan.canvasHeight);
+        m_obsClient->applyLookLayerOrder(plan.sceneName,
+                                         plan.tmpl,
+                                         plan.sourceNames,
+                                         plan.tileStyle,
+                                         plan.hasBackgroundImage(),
+                                         plan.overlays.size());
+    });
+    QTimer::singleShot(1800, this, [this, scene = plan.sceneName]() {
+        if (m_obsClient && m_obsClient->isConnected())
+            m_obsClient->requestSceneItems(scene);
+    });
+}
+
 static void fillInspectorTable(QTableWidget *table,
                                const QString &category,
                                const QStringList &items)
@@ -1057,10 +1096,12 @@ void MainWindow::openObsSyncInspector()
     auto *buttons = new QHBoxLayout;
     auto *refreshBtn = new QPushButton("Refresh", dlg);
     auto *syncBtn = new QPushButton("Sync OBS", dlg);
+    auto *repairGeometryBtn = new QPushButton("Repair Geometry", dlg);
     auto *repairBtn = new QPushButton("Hide Stale Layers", dlg);
     auto *closeBtn = new QPushButton("Close", dlg);
     buttons->addWidget(refreshBtn);
     buttons->addWidget(syncBtn);
+    buttons->addWidget(repairGeometryBtn);
     buttons->addWidget(repairBtn);
     buttons->addStretch(1);
     buttons->addWidget(closeBtn);
@@ -1070,6 +1111,11 @@ void MainWindow::openObsSyncInspector()
     connect(syncBtn, &QPushButton::clicked, dlg, [this, refresh]() {
         reconcileObsSceneGraph();
         QTimer::singleShot(7000, this, refresh);
+    });
+    connect(repairGeometryBtn, &QPushButton::clicked, dlg, [this, refresh]() {
+        for (const Look &look : allLooks())
+            repairLookGeometry(look);
+        QTimer::singleShot(3000, this, refresh);
     });
     connect(repairBtn, &QPushButton::clicked, dlg, [this, refresh]() {
         if (m_obsClient && m_obsClient->isConnected())
@@ -1843,9 +1889,11 @@ void MainWindow::onDesignLookRequested()
     auto *obsButtons = new QHBoxLayout;
     auto *renderDraftBtn = new QPushButton(QStringLiteral("Render Draft"), &dlg);
     auto *verifyDraftBtn = new QPushButton(QStringLiteral("Verify OBS"), &dlg);
+    auto *repairDraftBtn = new QPushButton(QStringLiteral("Repair Geometry"), &dlg);
     auto *inspectObsBtn = new QPushButton(QStringLiteral("Inspect"), &dlg);
     obsButtons->addWidget(renderDraftBtn);
     obsButtons->addWidget(verifyDraftBtn);
+    obsButtons->addWidget(repairDraftBtn);
     obsButtons->addWidget(inspectObsBtn);
     layout->addLayout(obsButtons);
 
@@ -1895,6 +1943,18 @@ void MainWindow::onDesignLookRequested()
     });
     connect(verifyDraftBtn, &QPushButton::clicked, &dlg, [draftLookForDesigner, updateDraftObsStatus]() {
         updateDraftObsStatus(draftLookForDesigner());
+    });
+    connect(repairDraftBtn, &QPushButton::clicked, &dlg, [this, obsStatus, draftLookForDesigner, updateDraftObsStatus]() {
+        if (!m_obsClient || !m_obsClient->isConnected()) {
+            obsStatus->setText(QStringLiteral("OBS is not connected. Connect OBS before repairing geometry."));
+            return;
+        }
+        const Look draft = draftLookForDesigner();
+        obsStatus->setText(QStringLiteral("Repairing OBS geometry for '%1'...").arg(draft.name));
+        repairLookGeometry(draft);
+        QTimer::singleShot(3200, this, [updateDraftObsStatus, draft]() {
+            updateDraftObsStatus(draft);
+        });
     });
     connect(inspectObsBtn, &QPushButton::clicked, &dlg, [this]() {
         openObsSyncInspector();

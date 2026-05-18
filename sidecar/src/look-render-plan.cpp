@@ -34,6 +34,15 @@ QStringList sourceNamesForLook(const LookRenderConfig &config, const Look &look)
     return sourceNamesForSlots(config, look.tmpl.slotList.size());
 }
 
+QStringList nestedSceneNamesForSources(const QStringList &sourceNames)
+{
+    QStringList scenes;
+    scenes.reserve(sourceNames.size());
+    for (int i = 0; i < sourceNames.size(); ++i)
+        scenes << QStringLiteral("CoreVideo Slot %1 - %2").arg(i + 1).arg(sourceNames.value(i));
+    return scenes;
+}
+
 QString sceneNameForLook(const LookRenderConfig &config, const Look &look)
 {
     QString base = look.name.trimmed();
