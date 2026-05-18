@@ -272,12 +272,14 @@ void ZoomReconnectManager::timer_loop()
         const uint64_t gen      = m_generation;
         const auto      deadline = m_retry_at;
         // Sleep until deadline, but wake early if state changes.
-        m_cv.wait_until(lk, deadline, [this, gen]() {
+        const bool interrupted = m_cv.wait_until(lk, deadline, [this, gen]() {
             return m_stop_thread || !m_pending || m_generation != gen;
         });
 
-        if (m_stop_thread) break;
-        if (!m_pending || m_generation != gen) continue; // cancelled or rescheduled
+        if (interrupted) {
+            if (m_stop_thread) break;
+            continue; // cancelled or rescheduled
+        }
         if (std::chrono::steady_clock::now() < m_retry_at) continue; // spurious wake
 
         // Consume the pending request before scheduling on UI thread.

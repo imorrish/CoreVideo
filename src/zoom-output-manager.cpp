@@ -104,25 +104,23 @@ void ZoomOutputManager::resubscribe_all()
 uint32_t ZoomOutputManager::recover_stale_sources(bool force)
 {
     const uint64_t now_ns = os_gettime_ns();
-    uint32_t recovered = 0;
     std::lock_guard<std::mutex> lk(m_mtx);
-    for (auto *src : m_sources) {
-        if (src && src->recover_stale_video(now_ns, force))
-            ++recovered;
-    }
-    return recovered;
+    return static_cast<uint32_t>(std::count_if(
+        m_sources.begin(), m_sources.end(),
+        [now_ns, force](ZoomSource *src) {
+            return src && src->recover_stale_video(now_ns, force);
+        }));
 }
 
 uint32_t ZoomOutputManager::upgrade_low_quality_sources(bool force)
 {
     const uint64_t now_ns = os_gettime_ns();
-    uint32_t upgraded = 0;
     std::lock_guard<std::mutex> lk(m_mtx);
-    for (auto *src : m_sources) {
-        if (src && src->upgrade_low_quality_video(now_ns, force))
-            ++upgraded;
-    }
-    return upgraded;
+    return static_cast<uint32_t>(std::count_if(
+        m_sources.begin(), m_sources.end(),
+        [now_ns, force](ZoomSource *src) {
+            return src && src->upgrade_low_quality_video(now_ns, force);
+        }));
 }
 
 void ZoomOutputManager::clear_all_preview_cbs()

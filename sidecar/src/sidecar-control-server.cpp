@@ -157,6 +157,7 @@ void SidecarControlServer::handleLine(QTcpSocket *socket, const QByteArray &line
 
     if (cmd == "apply_template") {
         const QString id = req.value("template_id").toString();
+        // cppcheck-suppress shadowFunction
         emit templateApplyRequested(id);
         writeResponse(socket, {{"ok", true}});
         return;
@@ -164,6 +165,7 @@ void SidecarControlServer::handleLine(QTcpSocket *socket, const QByteArray &line
 
     if (cmd == "set_scene") {
         const QString scene = req.value("scene").toString();
+        // cppcheck-suppress shadowFunction
         emit sceneChangeRequested(scene);
         writeResponse(socket, {{"ok", true}});
         return;

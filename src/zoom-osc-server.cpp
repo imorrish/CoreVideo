@@ -620,11 +620,13 @@ void ZoomOscServer::send_participants(const QHostAddress &to, quint16 port)
 void ZoomOscServer::handle_subscribe(const QHostAddress &addr, quint16 port)
 {
     const QDateTime now = QDateTime::currentDateTimeUtc();
-    for (auto &sub : m_subscribers) {
-        if (sub.addr == addr && sub.port == port) {
-            sub.renewed_at = now;
-            return;
-        }
+    const auto it = std::find_if(m_subscribers.begin(), m_subscribers.end(),
+        [&addr, port](const auto &sub) {
+            return sub.addr == addr && sub.port == port;
+        });
+    if (it != m_subscribers.end()) {
+        it->renewed_at = now;
+        return;
     }
     m_subscribers.append({addr, port, now});
 }

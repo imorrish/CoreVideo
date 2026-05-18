@@ -88,15 +88,15 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     m_ffmpeg_path->setText(settings.iso_ffmpeg_path.empty()
         ? QStringLiteral("ffmpeg")
         : QString::fromStdString(settings.iso_ffmpeg_path));
-    auto *browse_ffmpeg = new QPushButton("Browse", config_group);
+    auto *browse_ffmpeg_button = new QPushButton("Browse", config_group);
     m_test_btn = new QPushButton("Test", config_group);
-    connect(browse_ffmpeg, &QPushButton::clicked,
+    connect(browse_ffmpeg_button, &QPushButton::clicked,
             this, &ZoomIsoPanel::browse_ffmpeg);
     connect(m_test_btn, &QPushButton::clicked,
             this, &ZoomIsoPanel::test_ffmpeg);
     ffmpeg_row->addWidget(new QLabel("FFmpeg:", config_group));
     ffmpeg_row->addWidget(m_ffmpeg_path, 1);
-    ffmpeg_row->addWidget(browse_ffmpeg);
+    ffmpeg_row->addWidget(browse_ffmpeg_button);
     ffmpeg_row->addWidget(m_test_btn);
     config_layout->addLayout(ffmpeg_row);
 

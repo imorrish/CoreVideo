@@ -80,7 +80,8 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
 {
     ZoomPluginSettings s = ZoomPluginSettings::load();
     QString registration_error;
-    if (!register_url_scheme(&registration_error)) {
+    const bool registered_callback = register_url_scheme(&registration_error);
+    if (!registered_callback) {
         if (error) {
             *error = "Could not register the corevideo:// OAuth callback URL. " +
                      registration_error;

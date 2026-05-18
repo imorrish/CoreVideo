@@ -174,6 +174,7 @@ void PreviewCanvas::mousePressEvent(QMouseEvent *e)
     if (e->button() == Qt::RightButton) {
         const int slot = slotAtPoint(e->pos());
         if (slot >= 0) {
+            // cppcheck-suppress shadowFunction
             emit slotRoutingCycleRequested(slot);
             return;
         }
@@ -192,6 +193,7 @@ void PreviewCanvas::mousePressEvent(QMouseEvent *e)
         setCursor(m_editGesture == EditGesture::Resize
             ? Qt::SizeFDiagCursor
             : Qt::ClosedHandCursor);
+        // cppcheck-suppress shadowFunction
         emit slotClicked(m_pressedSlot);
         update();
         return;
@@ -242,6 +244,7 @@ void PreviewCanvas::mouseMoveEvent(QMouseEvent *e)
     }
 
     m_tmpl.slotList[pos] = updated;
+    // cppcheck-suppress shadowFunction
     emit slotGeometryChanged(m_tmpl, updated.index);
     update();
 }
@@ -261,6 +264,7 @@ void PreviewCanvas::mouseReleaseEvent(QMouseEvent *e)
         // Treat as a click only if release lands on the same slot and the
         // pointer barely moved — anything larger is a drag/resize gesture.
         if (slotNow == m_pressedSlot && dist < QApplication::startDragDistance())
+            // cppcheck-suppress shadowFunction
             emit slotClicked(m_pressedSlot);
     }
     m_pressedSlot = -1;
