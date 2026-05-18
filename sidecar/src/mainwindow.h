@@ -102,6 +102,7 @@ private:
     void reconcileObsSceneGraph();
     void repairLookGeometry(const Look &look);
     void renderLookToOBS(const Look &look, bool makeProgram);
+    void validateObsSceneGraphStatus(const QString &context, bool writeLog);
     void reconcileParticipantSlots(const QVector<ParticipantInfo> &participants);
     void syncZoomOutputAssignments();
     void updateParticipantSyncedLowerThirds();

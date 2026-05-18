@@ -465,6 +465,8 @@ void MainWindow::buildTopBar(QWidget *parent)
 
     m_sceneSyncStatusLabel = new QLabel("Sync idle", m_topBar);
     m_sceneSyncStatusLabel->setStyleSheet("color: #8080a0; font-size: 11px; background: transparent;");
+    m_sceneSyncStatusLabel->setMinimumWidth(270);
+    m_sceneSyncStatusLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     m_engineBtn = new QPushButton("Sync OBS", m_topBar);
     m_engineBtn->setObjectName("engineOffBtn");
@@ -956,28 +958,7 @@ void MainWindow::reconcileObsSceneGraph()
         refreshObsAuditInventory();
     });
     QTimer::singleShot(6200, this, [this]() {
-        refreshObsAuditInventory();
-        const auto after = m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), lookRenderPlans());
-        if (after.isClean()) {
-            m_obsSyncState = ObsSyncState::Synced;
-            onObsLog("Sync OBS complete: OBS scene graph matches the Sidecar Look catalog.");
-        } else {
-            m_obsSyncState = ObsSyncState::Dirty;
-            QStringList detail;
-            if (!after.missingScenes.isEmpty())
-                detail << QStringLiteral("%1 missing scene(s)").arg(after.missingScenes.size());
-            if (!after.missingInputs.isEmpty())
-                detail << QStringLiteral("%1 missing input(s)").arg(after.missingInputs.size());
-            if (!after.missingSceneItems.isEmpty())
-                detail << QStringLiteral("%1 missing scene item(s)").arg(after.missingSceneItems.size());
-            if (!after.staleDesignLayers.isEmpty())
-                detail << QStringLiteral("%1 stale design layer(s)").arg(after.staleDesignLayers.size());
-            if (!after.geometryDrift.isEmpty())
-                detail << QStringLiteral("%1 geometry drift(s)").arg(after.geometryDrift.size());
-            onObsLog(QStringLiteral("Sync OBS finished with remaining drift: %1.")
-                         .arg(detail.isEmpty() ? QStringLiteral("inventory still loading") : detail.join(", ")));
-        }
-        updateSceneSyncStatus();
+        validateObsSceneGraphStatus(QStringLiteral("Sync OBS"), true);
     });
 }
 
@@ -1197,31 +1178,7 @@ void MainWindow::renderLookToOBS(const Look &look, bool makeProgram)
         if (!m_obsClient || !m_obsClient->isConnected())
             return;
 
-        refreshObsAuditInventory();
-        const auto audit =
-            m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), lookRenderPlans());
-        if (audit.isClean()) {
-            m_obsSyncState = ObsSyncState::Synced;
-            onObsLog(QStringLiteral("Verified OBS render for '%1'.").arg(scene));
-        } else {
-            m_obsSyncState = ObsSyncState::Dirty;
-            QStringList detail;
-            if (!audit.missingScenes.isEmpty())
-                detail << QStringLiteral("%1 missing scene(s)").arg(audit.missingScenes.size());
-            if (!audit.missingInputs.isEmpty())
-                detail << QStringLiteral("%1 missing input(s)").arg(audit.missingInputs.size());
-            if (!audit.missingSceneItems.isEmpty())
-                detail << QStringLiteral("%1 missing scene item(s)").arg(audit.missingSceneItems.size());
-            if (!audit.staleDesignLayers.isEmpty())
-                detail << QStringLiteral("%1 stale design layer(s)").arg(audit.staleDesignLayers.size());
-            if (!audit.geometryDrift.isEmpty())
-                detail << QStringLiteral("%1 geometry drift(s)").arg(audit.geometryDrift.size());
-            onObsLog(QStringLiteral("OBS render verification found drift: %1.")
-                         .arg(detail.isEmpty()
-                              ? QStringLiteral("inventory still loading")
-                              : detail.join(", ")));
-        }
-        updateSceneSyncStatus();
+        validateObsSceneGraphStatus(QStringLiteral("Render %1").arg(scene), true);
     });
     onObsLog(QStringLiteral("Rendered Look '%1' to OBS scene '%2'.")
                  .arg(look.name, scene));
@@ -2195,9 +2152,9 @@ void MainWindow::updateSceneSyncStatus()
     const bool complete = audit.isClean();
 
     m_obsSyncState = complete ? ObsSyncState::Synced : ObsSyncState::Dirty;
-    const QString stateLabel = complete ? QStringLiteral("Synced") : QStringLiteral("Dirty");
+    const QString stateLabel = complete ? QStringLiteral("OBS OK") : QStringLiteral("OBS drift !");
 
-    m_sceneSyncStatusLabel->setText(QStringLiteral("%1  %2/%3 scenes  %4/%5 inputs  %6/%7 items")
+    m_sceneSyncStatusLabel->setText(QStringLiteral("%1  %2/%3 scenes  %4/%5 sources  %6/%7 items")
         .arg(stateLabel)
         .arg(audit.presentScenes)
         .arg(audit.expectedScenes)
@@ -2210,25 +2167,41 @@ void MainWindow::updateSceneSyncStatus()
         QStringLiteral("color: %1; font-size: 11px; background: transparent;")
             .arg(complete ? QStringLiteral("#20c460") : QStringLiteral("#e0a020")));
 
-    QStringList detail;
-    if (!audit.inventoryReady)
-        detail << QStringLiteral("OBS inventory is still loading.");
-    if (!audit.missingScenes.isEmpty())
-        detail << QStringLiteral("Missing scenes: %1").arg(audit.missingScenes.mid(0, 8).join(", "));
-    if (!audit.missingInputs.isEmpty())
-        detail << QStringLiteral("Missing inputs: %1").arg(audit.missingInputs.mid(0, 8).join(", "));
-    if (!audit.missingSceneItems.isEmpty())
-        detail << QStringLiteral("Missing scene items: %1").arg(audit.missingSceneItems.mid(0, 8).join(", "));
-    if (!audit.staleDesignLayers.isEmpty())
-        detail << QStringLiteral("Stale design layers: %1").arg(audit.staleDesignLayers.mid(0, 8).join(", "));
-    if (!audit.geometryDrift.isEmpty())
-        detail << QStringLiteral("Geometry drift: %1").arg(audit.geometryDrift.mid(0, 8).join(", "));
-    if (detail.isEmpty())
-        detail << QStringLiteral("CoreVideo OBS scene graph is synced.");
+    QStringList detail = obsAuditReportText(audit, 10).split(QStringLiteral("\n"));
     if (!m_lastRenderedLookName.isEmpty())
         detail.prepend(QStringLiteral("Last rendered Look: %1 (%2)")
                            .arg(m_lastRenderedLookName, m_lastRenderedSceneName));
     m_sceneSyncStatusLabel->setToolTip(detail.join("\n"));
+}
+
+void MainWindow::validateObsSceneGraphStatus(const QString &context, bool writeLog)
+{
+    if (!m_obsClient || !m_obsClient->isConnected()) {
+        m_obsSyncState = ObsSyncState::Offline;
+        if (writeLog)
+            onObsLog(QStringLiteral("%1 validation skipped: OBS is not connected.").arg(context));
+        updateSceneSyncStatus();
+        return;
+    }
+
+    refreshObsAuditInventory();
+    const auto audit = m_obsClient->coreVideoSceneAudit(sourceNamesForSlots(8), lookRenderPlans());
+    const bool clean = audit.isClean();
+    m_obsSyncState = clean ? ObsSyncState::Synced : ObsSyncState::Dirty;
+
+    if (writeLog) {
+        onObsLog(QStringLiteral("%1 validation: %2")
+                     .arg(context, obsAuditSummaryText(audit)));
+        const QStringList actions = obsAuditActionDetails(audit, 5);
+        if (actions.isEmpty()) {
+            onObsLog(QStringLiteral("%1 validation: OBS scene graph matches Sidecar.").arg(context));
+        } else {
+            onObsLog(QStringLiteral("%1 validation actions: %2")
+                         .arg(context, actions.join(QStringLiteral("; "))));
+        }
+    }
+
+    updateSceneSyncStatus();
 }
 
 void MainWindow::onObsLog(const QString &msg)
