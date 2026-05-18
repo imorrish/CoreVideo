@@ -3,6 +3,7 @@
 #include "zoom-source.h"
 #include <algorithm>
 #include <obs-module.h>
+#include <util/platform.h>
 
 ZoomOutputManager &ZoomOutputManager::instance()
 {
@@ -98,6 +99,19 @@ void ZoomOutputManager::resubscribe_all()
     std::lock_guard<std::mutex> lk(m_mtx);
     for (auto *src : m_sources)
         if (src && src->is_subscribed()) src->subscribe();
+}
+
+void ZoomOutputManager::recover_stale_sources()
+{
+    std::vector<ZoomSource *> sources;
+    {
+        std::lock_guard<std::mutex> lk(m_mtx);
+        sources = m_sources;
+    }
+
+    const uint64_t now_ns = os_gettime_ns();
+    for (auto *src : sources)
+        if (src) src->recover_stale_video(now_ns);
 }
 
 void ZoomOutputManager::clear_all_preview_cbs()
