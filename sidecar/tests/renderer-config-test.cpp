@@ -62,6 +62,15 @@ int main()
         return fail("scene name was not OBS-safe and deterministic");
     if (gridPlan.sourceNames != QStringList({"Zoom Participant 1", "Zoom Participant 2", "Zoom Participant 3", "Zoom Participant 4"}))
         return fail("grid source names did not match slot count");
+    if (nestedSceneNamesForSources(gridPlan.sourceNames)
+        != QStringList({
+            "CoreVideo Slot 1 - Zoom Participant 1",
+            "CoreVideo Slot 2 - Zoom Participant 2",
+            "CoreVideo Slot 3 - Zoom Participant 3",
+            "CoreVideo Slot 4 - Zoom Participant 4",
+        })) {
+        return fail("grid nested scene names did not match OBS slot scene contract");
+    }
     if (gridPlan.slotLabels != QStringList({"Alex", "Sam", "Guest 3", "Guest 4"}))
         return fail("slot labels did not prefer participant labels then template labels");
     if (!gridPlan.makeProgram)
@@ -87,6 +96,13 @@ int main()
     const auto sharePlan = renderPlanForLook(cfg, share, false);
     if (sharePlan.sourceNames != QStringList({"Zoom Participant 1", "Zoom Screen Share"}))
         return fail("speaker screenshare look did not map to participant plus share sources");
+    if (nestedSceneNamesForSources(sharePlan.sourceNames)
+        != QStringList({
+            "CoreVideo Slot 1 - Zoom Participant 1",
+            "CoreVideo Slot 2 - Zoom Screen Share",
+        })) {
+        return fail("speaker screenshare nested scene names did not preserve participant/share mapping");
+    }
     if (sharePlan.makeProgram)
         return fail("preview intent was not preserved");
 
