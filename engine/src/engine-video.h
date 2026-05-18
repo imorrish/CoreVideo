@@ -28,6 +28,7 @@ public:
     uint32_t participant_id() const { return m_participant_id; }
     uint32_t resolution() const { return m_resolution; }
     bool active() const { return m_renderer != nullptr; }
+    size_t target_count() const;
     void add_source(const std::string &source_uuid, IpcFd e2p_fd);
     void remove_source(const std::string &source_uuid);
     bool empty() const;
@@ -50,7 +51,7 @@ private:
                     size_t y_len);
 
     uint32_t    m_participant_id;
-    uint32_t    m_resolution;
+    uint32_t    m_resolution = 1;
     ZOOMSDK::IZoomSDKRenderer *m_renderer = nullptr;
     mutable std::mutex m_targets_mtx;
     std::unordered_map<std::string, std::unique_ptr<SourceTarget>> m_targets;
