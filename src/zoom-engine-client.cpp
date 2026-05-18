@@ -91,10 +91,12 @@ static std::string zoom_error_message(const QJsonObject &obj)
 #include <windows.h>
 #else
 #include <signal.h>
+#include <spawn.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
+extern char **environ;
 #endif
 
 static std::string engine_executable_path()
@@ -428,15 +430,13 @@ bool ZoomEngineClient::launch_engine()
     m_process = pi.hProcess;
     return true;
 #else
-    const pid_t pid = fork();
-    if (pid < 0) {
-        set_last_error("Failed to fork ZoomObsEngine process.");
+    const std::string path = engine_executable_path();
+    char *const argv[] = {const_cast<char *>(path.c_str()), nullptr};
+    pid_t pid = -1;
+    const int rc = posix_spawnp(&pid, path.c_str(), nullptr, nullptr, argv, environ);
+    if (rc != 0) {
+        set_last_error("Failed to launch ZoomObsEngine process.");
         return false;
-    }
-    if (pid == 0) {
-        const std::string path = engine_executable_path();
-        execlp(path.c_str(), path.c_str(), nullptr);
-        _exit(127);
     }
     m_pid = pid;
     return true;

@@ -6,15 +6,60 @@
 #include <fstream>
 #include <string>
 #include <windows.h>
+#include <shlobj.h>
+
+static std::string wide_to_utf8(const std::wstring &wide)
+{
+    if (wide.empty())
+        return {};
+    const int len = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                                        wide.c_str(), -1,
+                                        nullptr, 0, nullptr, nullptr);
+    if (len <= 0)
+        return {};
+    std::string utf8(static_cast<size_t>(len), '\0');
+    const int written = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
+                                            wide.c_str(), -1,
+                                            utf8.data(), len, nullptr, nullptr);
+    if (written <= 0)
+        return {};
+    if (!utf8.empty() && utf8.back() == '\0')
+        utf8.pop_back();
+    return utf8;
+}
+
+static std::string temp_directory()
+{
+    const DWORD len = GetTempPathW(0, nullptr);
+    if (len == 0)
+        return {};
+    std::wstring path(len, L'\0');
+    const DWORD written = GetTempPathW(len, path.data());
+    if (written == 0 || written >= len)
+        return {};
+    path.resize(written);
+    return wide_to_utf8(path);
+}
+
+static std::string roaming_app_data_directory()
+{
+    PWSTR raw_path = nullptr;
+    const HRESULT hr = SHGetKnownFolderPath(FOLDERID_RoamingAppData, 0,
+                                            nullptr, &raw_path);
+    if (FAILED(hr) || !raw_path)
+        return {};
+    std::wstring path(raw_path);
+    CoTaskMemFree(raw_path);
+    return wide_to_utf8(path);
+}
 
 static void log_helper_event(const std::string &message)
 {
-    const char *temp = std::getenv("TEMP");
-    if (!temp || !*temp)
+    const std::string temp = temp_directory();
+    if (temp.empty())
         return;
 
-    std::ofstream log(std::string(temp) + "\\CoreVideoOAuthCallback.log",
-                      std::ios::app);
+    std::ofstream log(temp + "\\CoreVideoOAuthCallback.log", std::ios::app);
     if (log)
         log << message << "\n";
 }
@@ -88,11 +133,11 @@ static std::string json_string_value(const std::string &json,
 
 static int read_control_port()
 {
-    const char *appdata = std::getenv("APPDATA");
-    if (!appdata || !*appdata)
+    const std::string appdata = roaming_app_data_directory();
+    if (appdata.empty())
         return 19870;
 
-    const std::string path = std::string(appdata) + "\\obs-studio\\global.ini";
+    const std::string path = appdata + "\\obs-studio\\global.ini";
     std::ifstream file(path);
     if (!file)
         return 19870;

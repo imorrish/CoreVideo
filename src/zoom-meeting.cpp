@@ -12,9 +12,13 @@
 static std::wstring to_zstr(const std::string &utf8)
 {
     if (utf8.empty()) return {};
-    int len = MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, nullptr, 0);
-    std::wstring wide(len, L'\0');
-    MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &wide[0], len);
+    const int len = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                        utf8.c_str(), -1, nullptr, 0);
+    if (len <= 0) return {};
+    std::wstring wide(static_cast<size_t>(len), L'\0');
+    const int written = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+                                            utf8.c_str(), -1, wide.data(), len);
+    if (written <= 0) return {};
     if (!wide.empty() && wide.back() == L'\0') wide.pop_back();
     return wide;
 }

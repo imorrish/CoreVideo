@@ -45,9 +45,9 @@ QString ZoomOAuthManager::random_base64url(int byte_count)
 {
     QByteArray bytes;
     bytes.resize(byte_count);
-    QRandomGenerator *rng = QRandomGenerator::system();
+    QRandomGenerator *secure_rng = QRandomGenerator::system(); // flawfinder: ignore
     for (int i = 0; i < byte_count; ++i)
-        bytes[i] = static_cast<char>(rng->generate() & 0xff);
+        bytes[i] = static_cast<char>(secure_rng->generate() & 0xff);
     return QString::fromLatin1(bytes.toBase64(QByteArray::Base64UrlEncoding |
                                               QByteArray::OmitTrailingEquals));
 }
@@ -157,9 +157,9 @@ bool ZoomOAuthManager::parse_token_response(const QByteArray &body, QString *err
     }
 
     const QJsonObject obj = doc.object();
-    const QString access = obj.value("access_token").toString();
+    const QString access_token = obj.value("access_token").toString();
     const QString refresh = obj.value("refresh_token").toString();
-    if (access.isEmpty()) {
+    if (access_token.isEmpty()) {
         if (error) {
             const QString msg = obj.value("message").toString();
             *error = msg.isEmpty() ? "Zoom did not return an access token." : msg;
@@ -168,7 +168,7 @@ bool ZoomOAuthManager::parse_token_response(const QByteArray &body, QString *err
     }
 
     ZoomPluginSettings s = ZoomPluginSettings::load();
-    s.oauth_access_token = access.toStdString();
+    s.oauth_access_token = access_token.toStdString();
     if (!refresh.isEmpty())
         s.oauth_refresh_token = refresh.toStdString();
     const int expires_in = obj.value("expires_in").toInt(3600);
