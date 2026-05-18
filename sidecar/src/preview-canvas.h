@@ -39,10 +39,13 @@ public:
     // Mixed. Only the PVW/PGM canvas in MainWindow shows these — the badge
     // is purely an operator affordance and does not affect rendering.
     void setSlotRouting(const QHash<int, AudioRouting> &routing);
+    void setLayoutEditingEnabled(bool enabled);
+    void setSelectedSlot(int slotIndex);
 
 signals:
     void slotAssigned(int slotIndex, int participantId);
     void slotClicked(int slotIndex);
+    void slotGeometryChanged(const LayoutTemplate &tmpl, int slotIndex);
     // Right-click on a slot — used to cycle the slot's audio routing.
     void slotRoutingCycleRequested(int slotIndex);
 
@@ -53,9 +56,12 @@ protected:
     void dragLeaveEvent(QDragLeaveEvent *e) override;
     void dropEvent(QDropEvent *e) override;
     void mousePressEvent(QMouseEvent *e) override;
+    void mouseMoveEvent(QMouseEvent *e) override;
     void mouseReleaseEvent(QMouseEvent *e) override;
 
 private:
+    enum class EditGesture { None, Move, Resize };
+
     LayoutTemplate       m_tmpl;
     QVector<Participant> m_parts;
     QVector<Overlay>     m_overlays;
@@ -67,9 +73,16 @@ private:
     QHash<int, AudioRouting> m_slotRouting;
     int                  m_hoveredSlot = -1;
     int                  m_pressedSlot = -1;
+    int                  m_selectedSlot = -1;
+    bool                 m_layoutEditing = false;
+    EditGesture          m_editGesture = EditGesture::None;
     QPoint               m_pressPos;
+    TemplateSlot         m_startSlot;
 
     int    slotAtPoint(QPoint pt) const;
+    int    slotPositionForIndex(int slotIndex) const;
+    QRectF resizeHandleRect(const QRectF &slot) const;
+    bool   pointInResizeHandle(QPoint pt, int slotIndex) const;
     void   drawSlot(QPainter &p, const QRectF &rect, int index) const;
     void   drawAvatar(QPainter &p, QPointF center, float r,
                       const Participant &part) const;

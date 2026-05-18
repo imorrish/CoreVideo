@@ -80,6 +80,25 @@ void PreviewCanvas::setSlotRouting(const QHash<int, AudioRouting> &routing)
     update();
 }
 
+void PreviewCanvas::setLayoutEditingEnabled(bool enabled)
+{
+    if (m_layoutEditing == enabled)
+        return;
+    m_layoutEditing = enabled;
+    m_editGesture = EditGesture::None;
+    setMouseTracking(enabled);
+    setCursor(enabled ? Qt::OpenHandCursor : Qt::ArrowCursor);
+    update();
+}
+
+void PreviewCanvas::setSelectedSlot(int slotIndex)
+{
+    if (m_selectedSlot == slotIndex)
+        return;
+    m_selectedSlot = slotIndex;
+    update();
+}
+
 // ── Drag-and-drop ─────────────────────────────────────────────────────────────
 
 int PreviewCanvas::slotAtPoint(QPoint pt) const
@@ -89,6 +108,29 @@ int PreviewCanvas::slotAtPoint(QPoint pt) const
             return m_tmpl.slotList[i].index;
     }
     return -1;
+}
+
+int PreviewCanvas::slotPositionForIndex(int slotIndex) const
+{
+    for (int i = 0; i < m_tmpl.slotList.size(); ++i) {
+        if (m_tmpl.slotList[i].index == slotIndex)
+            return i;
+    }
+    return -1;
+}
+
+QRectF PreviewCanvas::resizeHandleRect(const QRectF &slot) const
+{
+    const double side = std::clamp(std::min(slot.width(), slot.height()) * 0.10, 10.0, 18.0);
+    return QRectF(slot.right() - side, slot.bottom() - side, side, side);
+}
+
+bool PreviewCanvas::pointInResizeHandle(QPoint pt, int slotIndex) const
+{
+    const int pos = slotPositionForIndex(slotIndex);
+    if (pos < 0)
+        return false;
+    return resizeHandleRect(slotRect(m_tmpl.slotList[pos])).contains(pt);
 }
 
 void PreviewCanvas::dragEnterEvent(QDragEnterEvent *e)
@@ -139,11 +181,80 @@ void PreviewCanvas::mousePressEvent(QMouseEvent *e)
     if (e->button() != Qt::LeftButton) { QWidget::mousePressEvent(e); return; }
     m_pressedSlot = slotAtPoint(e->pos());
     m_pressPos    = e->pos();
+    if (m_layoutEditing && m_pressedSlot >= 0) {
+        m_selectedSlot = m_pressedSlot;
+        const int pos = slotPositionForIndex(m_pressedSlot);
+        if (pos >= 0)
+            m_startSlot = m_tmpl.slotList[pos];
+        m_editGesture = pointInResizeHandle(e->pos(), m_pressedSlot)
+            ? EditGesture::Resize
+            : EditGesture::Move;
+        setCursor(m_editGesture == EditGesture::Resize
+            ? Qt::SizeFDiagCursor
+            : Qt::ClosedHandCursor);
+        emit slotClicked(m_pressedSlot);
+        update();
+        return;
+    }
     QWidget::mousePressEvent(e);
+}
+
+void PreviewCanvas::mouseMoveEvent(QMouseEvent *e)
+{
+    if (!m_layoutEditing) {
+        QWidget::mouseMoveEvent(e);
+        return;
+    }
+
+    if (m_editGesture == EditGesture::None) {
+        const int slot = slotAtPoint(e->pos());
+        if (slot >= 0 && pointInResizeHandle(e->pos(), slot))
+            setCursor(Qt::SizeFDiagCursor);
+        else
+            setCursor(slot >= 0 ? Qt::OpenHandCursor : Qt::ArrowCursor);
+        QWidget::mouseMoveEvent(e);
+        return;
+    }
+
+    const int pos = slotPositionForIndex(m_pressedSlot);
+    if (pos < 0)
+        return;
+
+    const QRectF canvas = canvasRect();
+    if (canvas.width() <= 0.0 || canvas.height() <= 0.0)
+        return;
+
+    const QPoint deltaPx = e->pos() - m_pressPos;
+    const double dx = deltaPx.x() / canvas.width();
+    const double dy = deltaPx.y() / canvas.height();
+    TemplateSlot updated = m_startSlot;
+    auto snap = [](double value) {
+        constexpr double g = 0.005;
+        return std::round(value / g) * g;
+    };
+
+    if (m_editGesture == EditGesture::Move) {
+        updated.x = snap(std::clamp(m_startSlot.x + dx, 0.0, 1.0 - m_startSlot.width));
+        updated.y = snap(std::clamp(m_startSlot.y + dy, 0.0, 1.0 - m_startSlot.height));
+    } else if (m_editGesture == EditGesture::Resize) {
+        updated.width = snap(std::clamp(m_startSlot.width + dx, 0.02, 1.0 - m_startSlot.x));
+        updated.height = snap(std::clamp(m_startSlot.height + dy, 0.02, 1.0 - m_startSlot.y));
+    }
+
+    m_tmpl.slotList[pos] = updated;
+    emit slotGeometryChanged(m_tmpl, updated.index);
+    update();
 }
 
 void PreviewCanvas::mouseReleaseEvent(QMouseEvent *e)
 {
+    if (m_layoutEditing && m_editGesture != EditGesture::None) {
+        m_editGesture = EditGesture::None;
+        setCursor(Qt::OpenHandCursor);
+        m_pressedSlot = -1;
+        QWidget::mouseReleaseEvent(e);
+        return;
+    }
     if (e->button() == Qt::LeftButton && m_pressedSlot >= 0) {
         const int slotNow = slotAtPoint(e->pos());
         const int dist    = (e->pos() - m_pressPos).manhattanLength();
@@ -153,6 +264,7 @@ void PreviewCanvas::mouseReleaseEvent(QMouseEvent *e)
             emit slotClicked(m_pressedSlot);
     }
     m_pressedSlot = -1;
+    m_editGesture = EditGesture::None;
     QWidget::mouseReleaseEvent(e);
 }
 
@@ -428,6 +540,9 @@ void PreviewCanvas::drawSlot(QPainter &p, const QRectF &rect, int idx) const
     if (idx == m_hoveredSlot) {
         p.setPen(QPen(QColor(0x29, 0x79, 0xff), 3.0, Qt::SolidLine));
         p.drawPath(path);
+    } else if (m_layoutEditing && idx == m_selectedSlot) {
+        p.setPen(QPen(QColor(0xff, 0xff, 0xff), 2.5, Qt::DashLine));
+        p.drawPath(path);
     } else if (hasPart && part.isTalking) {
         p.setPen(QPen(QColor(0x20, 0x90, 0xff), 2.5));
         p.drawPath(path);
@@ -501,6 +616,15 @@ void PreviewCanvas::drawSlot(QPainter &p, const QRectF &rect, int idx) const
         p.drawPath(pillPath);
         p.setPen(Qt::white);
         p.drawText(pill, Qt::AlignCenter, label);
+    }
+
+    if (m_layoutEditing && idx == m_selectedSlot) {
+        const QRectF handle = resizeHandleRect(rect).adjusted(2, 2, -2, -2);
+        p.setPen(QPen(QColor(0, 0, 0, 150), 1));
+        p.setBrush(QColor(0xff, 0xff, 0xff));
+        p.drawRect(handle);
+        p.setPen(QPen(QColor(0x29, 0x79, 0xff), 1.5));
+        p.drawLine(handle.bottomLeft(), handle.topRight());
     }
 }
 

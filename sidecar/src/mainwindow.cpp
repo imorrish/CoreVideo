@@ -1622,6 +1622,7 @@ void MainWindow::onDesignLookRequested()
     designerPreview->setOverlays(m_working.overlays);
     designerPreview->setBackgroundImage(m_working.backgroundImagePath);
     designerPreview->setTileStyle(m_working.tileStyle);
+    designerPreview->setLayoutEditingEnabled(true);
     stageV->addWidget(title);
     stageV->addWidget(hint);
     stageV->addWidget(designerPreview, 1);
@@ -1683,6 +1684,8 @@ void MainWindow::onDesignLookRequested()
         }
         for (auto *spin : {slotX, slotY, slotW, slotH})
             spin->blockSignals(false);
+        if (ok)
+            designerPreview->setSelectedSlot(editedTemplate.slotList[pos].index);
     };
     auto applySelectedSlot = [&]() {
         const int pos = selectedSlotPosition();
@@ -1694,12 +1697,26 @@ void MainWindow::onDesignLookRequested()
         slot.width = qBound(0.01, slotW->value(), 1.0 - slot.x);
         slot.height = qBound(0.01, slotH->value(), 1.0 - slot.y);
         designerPreview->setTemplate(editedTemplate);
+        designerPreview->setSelectedSlot(slot.index);
     };
-    connect(slotSelector, &QComboBox::currentIndexChanged, &dlg, loadSelectedSlot);
+    connect(slotSelector, qOverload<int>(&QComboBox::currentIndexChanged), &dlg, loadSelectedSlot);
     connect(slotX, qOverload<double>(&QDoubleSpinBox::valueChanged), &dlg, applySelectedSlot);
     connect(slotY, qOverload<double>(&QDoubleSpinBox::valueChanged), &dlg, applySelectedSlot);
     connect(slotW, qOverload<double>(&QDoubleSpinBox::valueChanged), &dlg, applySelectedSlot);
     connect(slotH, qOverload<double>(&QDoubleSpinBox::valueChanged), &dlg, applySelectedSlot);
+    connect(designerPreview, &PreviewCanvas::slotClicked, &dlg, [&](int slotIndex) {
+        const int row = slotSelector->findData(slotIndex);
+        if (row >= 0)
+            slotSelector->setCurrentIndex(row);
+    });
+    connect(designerPreview, &PreviewCanvas::slotGeometryChanged,
+            &dlg, [&](const LayoutTemplate &tmpl, int slotIndex) {
+        editedTemplate = tmpl;
+        const int row = slotSelector->findData(slotIndex);
+        if (row >= 0 && slotSelector->currentIndex() != row)
+            slotSelector->setCurrentIndex(row);
+        loadSelectedSlot();
+    });
     loadSelectedSlot();
 
     auto *borderWidth = new QDoubleSpinBox(&dlg);
