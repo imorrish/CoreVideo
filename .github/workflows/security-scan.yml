@@ -37,14 +37,22 @@ jobs:
           cppcheck \
             --enable=warning,style,performance,portability,information \
             --inline-suppr \
+            -Isrc \
+            -Iengine/src \
+            -Isidecar/src \
             --suppress=missingIncludeSystem \
+            --checkers-report=security-reports/cppcheck-checkers.txt \
             --xml --xml-version=2 \
             src engine/src sidecar/src sidecar/tests \
             2> security-reports/cppcheck.xml
           cppcheck \
             --enable=warning,style,performance,portability,information \
             --inline-suppr \
+            -Isrc \
+            -Iengine/src \
+            -Isidecar/src \
             --suppress=missingIncludeSystem \
+            --checkers-report=security-reports/cppcheck-checkers.txt \
             --template="{severity}:{id}:{file}:{line}: {message}" \
             src engine/src sidecar/src sidecar/tests \
             > security-reports/cppcheck.txt 2>&1 || true
