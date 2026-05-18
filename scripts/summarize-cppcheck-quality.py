@@ -17,6 +17,7 @@ from pathlib import Path
 
 
 PUBLIC_SEVERITIES = {"style", "performance", "portability", "information"}
+IGNORED_INFORMATION_IDS = {"checkersReport"}
 
 
 def main() -> int:
@@ -35,6 +36,8 @@ def main() -> int:
     for error in root.findall(".//error"):
         severity = error.attrib.get("severity", "")
         if severity not in PUBLIC_SEVERITIES:
+            continue
+        if severity == "information" and error.attrib.get("id", "") in IGNORED_INFORMATION_IDS:
             continue
 
         location = error.find("location")

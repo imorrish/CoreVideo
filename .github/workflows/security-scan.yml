@@ -51,9 +51,6 @@ jobs:
             -Isecurity-reports/cppcheck-generated \
             -Iengine/src \
             -Isidecar/src \
-            --suppress=missingInclude:src/zoom-source.h \
-            --suppress=missingInclude:src/zoom-settings.cpp \
-            --suppress=missingInclude:sidecar/src/overlay-panel.cpp \
             --suppress=missingIncludeSystem \
             --checkers-report=security-reports/cppcheck-checkers.txt \
             --xml --xml-version=2 \
@@ -67,9 +64,6 @@ jobs:
             -Isecurity-reports/cppcheck-generated \
             -Iengine/src \
             -Isidecar/src \
-            --suppress=missingInclude:src/zoom-source.h \
-            --suppress=missingInclude:src/zoom-settings.cpp \
-            --suppress=missingInclude:sidecar/src/overlay-panel.cpp \
             --suppress=missingIncludeSystem \
             --checkers-report=security-reports/cppcheck-checkers.txt \
             --template="{severity}:{id}:{file}:{line}: {message}" \
