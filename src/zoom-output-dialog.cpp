@@ -172,8 +172,8 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     : QDialog(parent)
 {
     setWindowTitle("Zoom Output Manager");
-    setMinimumSize(1080, 720);
-    resize(1180, 760);
+    setMinimumSize(1320, 820);
+    resize(1480, 900);
 
     // ── Profile toolbar ───────────────────────────────────────────────────────
     m_profile_combo = new QComboBox(this);
@@ -221,17 +221,25 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     m_table->setHorizontalHeaderLabels({
         "Preview", "Output", "Assignment", "Requested", "Signal", "Audio", "Isolated audio"
     });
+    m_table->horizontalHeader()->setMinimumSectionSize(90);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnPreview,    QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnName,       QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(ColumnAssignment, QHeaderView::Stretch);
-    m_table->horizontalHeader()->setSectionResizeMode(ColumnResolution, QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(ColumnSignal,     QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(ColumnAudio,      QHeaderView::ResizeToContents);
-    m_table->horizontalHeader()->setSectionResizeMode(ColumnIsolate,    QHeaderView::ResizeToContents);
+    m_table->horizontalHeader()->setSectionResizeMode(ColumnAssignment, QHeaderView::Interactive);
+    m_table->horizontalHeader()->setSectionResizeMode(ColumnResolution, QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(ColumnSignal,     QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(ColumnAudio,      QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(ColumnIsolate,    QHeaderView::Fixed);
     m_table->setColumnWidth(ColumnPreview, 162);
+    m_table->setColumnWidth(ColumnName, 240);
+    m_table->setColumnWidth(ColumnAssignment, 300);
+    m_table->setColumnWidth(ColumnResolution, 116);
+    m_table->setColumnWidth(ColumnSignal, 148);
+    m_table->setColumnWidth(ColumnAudio, 130);
+    m_table->setColumnWidth(ColumnIsolate, 138);
     m_table->verticalHeader()->setVisible(false);
+    m_table->verticalHeader()->setDefaultSectionSize(112);
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
-    m_table->setMinimumHeight(360);
+    m_table->setMinimumHeight(460);
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Apply |
                                          QDialogButtonBox::Close, this);
@@ -300,9 +308,8 @@ void ZoomOutputDialog::refresh()
     const std::vector<ParticipantInfo> roster = ZoomEngineClient::instance().roster();
 
     m_table->setRowCount(static_cast<int>(outputs.size()));
-    m_table->setRowHeight(0, 92); // apply uniform row height once
     for (int row = 0; row < static_cast<int>(outputs.size()); ++row) {
-        m_table->setRowHeight(row, 92);
+        m_table->setRowHeight(row, 112);
         const auto &output = outputs[row];
 
         // Preview thumbnail label
@@ -344,6 +351,7 @@ void ZoomOutputDialog::refresh()
         m_table->setItem(row, ColumnName, name_item);
 
         auto *assignment = new QComboBox(m_table);
+        assignment->setMinimumWidth(280);
         assignment->addItem("Active speaker", "active");
         assignment->addItem("Screen share", "screenshare");
         assignment->addItem("None", "user:0");
@@ -355,11 +363,13 @@ void ZoomOutputDialog::refresh()
         m_table->setCellWidget(row, ColumnAssignment, assignment);
 
         auto *audio = new QComboBox(m_table);
+        audio->setMinimumWidth(112);
         audio->addItem("Mono", static_cast<int>(AudioChannelMode::Mono));
         audio->addItem("Stereo", static_cast<int>(AudioChannelMode::Stereo));
         audio->setCurrentIndex(output.audio_mode == AudioChannelMode::Stereo ? 1 : 0);
 
         auto *resolution = new QComboBox(m_table);
+        resolution->setMinimumWidth(96);
         resolution->addItem("360p", static_cast<int>(VideoResolution::P360));
         resolution->addItem("720p", static_cast<int>(VideoResolution::P720));
         resolution->addItem("1080p", static_cast<int>(VideoResolution::P1080));
@@ -370,6 +380,9 @@ void ZoomOutputDialog::refresh()
 
         auto *signal = new QLabel(m_table);
         signal->setAlignment(Qt::AlignCenter);
+        signal->setMinimumWidth(132);
+        signal->setWordWrap(false);
+        signal->setMargin(4);
         signal->setText(signal_text(output));
         signal->setToolTip(signal_tooltip(output));
         if (output_signal_below_requested(output))
@@ -380,6 +393,7 @@ void ZoomOutputDialog::refresh()
 
         auto *isolate = new QCheckBox(m_table);
         isolate->setChecked(output.isolate_audio);
+        isolate->setMinimumWidth(116);
         isolate->setToolTip("Use the assigned participant's isolated audio instead of the meeting mix.");
         m_table->setCellWidget(row, ColumnIsolate, isolate);
     }
