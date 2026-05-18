@@ -79,6 +79,7 @@ private slots:
     void onSlotRoutingCycle(int slotIndex);
     void onParticipantAssignClicked(int participantId);
     void onCreateLookRequested();
+    void onSaveLookRequested();
     void onSetBackgroundRequested();
     void onDesignLookRequested();
     void openParticipantMappingWindow();

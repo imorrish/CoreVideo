@@ -46,6 +46,7 @@
 #include <QColorDialog>
 #include <QDoubleSpinBox>
 #include <QDialogButtonBox>
+#include <algorithm>
 
 MainWindow::MainWindow(const StartupConfig &startup, QWidget *parent)
     : QMainWindow(parent)
@@ -740,6 +741,8 @@ void MainWindow::buildRightPanel(QWidget *parent)
             this, &MainWindow::onLookSelected);
     connect(m_lookPanel, &LookPanel::createLookRequested,
             this, &MainWindow::onCreateLookRequested);
+    connect(m_lookPanel, &LookPanel::saveLookRequested,
+            this, &MainWindow::onSaveLookRequested);
     connect(m_lookPanel, &LookPanel::setBackgroundRequested,
             this, &MainWindow::onSetBackgroundRequested);
     connect(m_lookPanel, &LookPanel::designLookRequested,
@@ -994,6 +997,12 @@ void MainWindow::renderLookToOBS(const Look &look, bool makeProgram)
         if (m_obsSyncState == ObsSyncState::Applying)
             m_obsSyncState = ObsSyncState::Dirty;
         updateSceneSyncStatus();
+    });
+    QTimer::singleShot(5200, this, [this]() {
+        if (!m_obsClient || !m_obsClient->isConnected())
+            return;
+        refreshObsAuditInventory();
+        m_obsClient->hideStaleCoreVideoDesignLayers(lookRenderPlans());
     });
     onObsLog(QStringLiteral("Rendered Look '%1' to OBS scene '%2'.")
                  .arg(look.name, scene));
@@ -1342,6 +1351,60 @@ void MainWindow::onCreateLookRequested()
     refreshLookPanel();
     onLookSelected(custom);
     onObsLog(QStringLiteral("Created custom Look: %1.").arg(custom.name));
+}
+
+void MainWindow::onSaveLookRequested()
+{
+    if (!m_working.isValid()) {
+        onObsLog("Save Look skipped: no staged Look.");
+        return;
+    }
+
+    const auto existing = std::find_if(m_customLooks.begin(), m_customLooks.end(),
+        [this](const Look &look) { return look.id == m_working.id; });
+
+    if (existing != m_customLooks.end()) {
+        Look updated = m_working;
+        updated.category = updated.category.isEmpty()
+            ? QStringLiteral("Custom")
+            : updated.category;
+        updated.description = updated.description.isEmpty()
+            ? QStringLiteral("User-created look")
+            : updated.description;
+        updated.templateId = updated.tmpl.id.isEmpty()
+            ? updated.templateId
+            : updated.tmpl.id;
+        *existing = updated;
+        saveCustomLooks();
+        refreshLookPanel();
+        renderLookToOBS(updated, false);
+        onObsLog(QStringLiteral("Saved custom Look: %1.").arg(updated.name));
+        return;
+    }
+
+    bool ok = false;
+    const QString name = QInputDialog::getText(this,
+                                               QStringLiteral("Save Look"),
+                                               QStringLiteral("Custom Look name"),
+                                               QLineEdit::Normal,
+                                               QStringLiteral("%1 Custom").arg(m_working.name),
+                                               &ok).trimmed();
+    if (!ok || name.isEmpty())
+        return;
+
+    Look custom = m_working;
+    custom.id = QStringLiteral("custom-%1")
+        .arg(QUuid::createUuid().toString(QUuid::WithoutBraces));
+    custom.name = name;
+    custom.category = QStringLiteral("Custom");
+    custom.description = QStringLiteral("User-created look");
+    custom.templateId = custom.tmpl.id.isEmpty() ? custom.templateId : custom.tmpl.id;
+
+    m_customLooks.append(custom);
+    saveCustomLooks();
+    refreshLookPanel();
+    onLookSelected(custom);
+    onObsLog(QStringLiteral("Saved staged Look as custom Look: %1.").arg(custom.name));
 }
 
 void MainWindow::onSetBackgroundRequested()

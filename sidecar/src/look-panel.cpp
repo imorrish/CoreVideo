@@ -157,19 +157,24 @@ LookPanel::LookPanel(QWidget *parent) : QWidget(parent)
     toolRow->setContentsMargins(10, 0, 10, 8);
     toolRow->setSpacing(6);
     auto *newBtn = new QPushButton("New Look", tools);
+    auto *saveBtn = new QPushButton("Save", tools);
     auto *designBtn = new QPushButton("Design", tools);
     auto *bgBtn = new QPushButton("Background", tools);
     newBtn->setObjectName("toolBtn");
+    saveBtn->setObjectName("toolBtn");
     designBtn->setObjectName("toolBtn");
     bgBtn->setObjectName("toolBtn");
     newBtn->setFixedHeight(30);
+    saveBtn->setFixedHeight(30);
     designBtn->setFixedHeight(30);
     bgBtn->setFixedHeight(30);
     toolRow->addWidget(newBtn);
+    toolRow->addWidget(saveBtn);
     toolRow->addWidget(designBtn);
     toolRow->addWidget(bgBtn);
     vl->addWidget(tools);
     connect(newBtn, &QPushButton::clicked, this, &LookPanel::createLookRequested);
+    connect(saveBtn, &QPushButton::clicked, this, &LookPanel::saveLookRequested);
     connect(designBtn, &QPushButton::clicked, this, &LookPanel::designLookRequested);
     connect(bgBtn, &QPushButton::clicked, this, &LookPanel::setBackgroundRequested);
 

@@ -19,6 +19,7 @@ public:
 signals:
     void lookSelected(const Look &look);
     void createLookRequested();
+    void saveLookRequested();
     void setBackgroundRequested();
     void designLookRequested();
 
