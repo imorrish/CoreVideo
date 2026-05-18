@@ -21,6 +21,8 @@ struct ZoomOutputInfo {
     uint32_t observed_width = 0;
     uint32_t observed_height = 0;
     double observed_fps = 0.0;
+    uint64_t last_frame_age_ms = 0;
+    bool video_stale = false;
     AssignmentMode   assignment = AssignmentMode::Participant;
     uint32_t         spotlight_slot = 1;     // used when assignment == SpotlightIndex
     uint32_t         failover_participant_id = 0; // 0 = none
@@ -52,6 +54,12 @@ inline bool output_signal_below_requested(const ZoomOutputInfo &output)
         return false;
     return output.observed_width + 8 < video_resolution_width(output.video_resolution) ||
            output.observed_height + 8 < video_resolution_height(output.video_resolution);
+}
+
+inline bool output_signal_missing_or_stale(const ZoomOutputInfo &output)
+{
+    return output.observed_width == 0 || output.observed_height == 0 ||
+           output.video_stale;
 }
 
 class ZoomOutputManager {

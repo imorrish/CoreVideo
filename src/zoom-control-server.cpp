@@ -233,7 +233,10 @@ static QJsonObject output_to_json(const ZoomOutputInfo &o)
     obj["observed_width"] = static_cast<double>(o.observed_width);
     obj["observed_height"] = static_cast<double>(o.observed_height);
     obj["observed_fps"] = o.observed_fps;
+    obj["last_frame_age_ms"] = static_cast<double>(o.last_frame_age_ms);
+    obj["video_stale"] = o.video_stale;
     obj["signal_below_requested"] = output_signal_below_requested(o);
+    obj["signal_missing_or_stale"] = output_signal_missing_or_stale(o);
     return obj;
 }
 

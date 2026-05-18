@@ -44,6 +44,7 @@ static constexpr uint32_t kDefaultHeight = 720;
 static std::atomic<uint64_t> s_source_counter{1};
 static constexpr uint32_t kZoomBytesPerSample = sizeof(int16_t);
 static constexpr uint64_t kPreviewIntervalNs = 200'000'000ULL;
+static constexpr uint64_t kStaleVideoNs = 3'000'000'000ULL;
 
 static AudioChannelMode audio_mode_from_data(obs_data_t *s)
 {
@@ -378,6 +379,13 @@ ZoomOutputInfo ZoomSource::output_info() const
     info.observed_height = m_height.load(std::memory_order_relaxed);
     info.observed_fps =
         static_cast<double>(m_observed_fps_x100.load(std::memory_order_relaxed)) / 100.0;
+    const uint64_t last_frame_ns = m_last_frame_ns.load(std::memory_order_relaxed);
+    if (last_frame_ns != 0) {
+        const uint64_t now_ns = os_gettime_ns();
+        const uint64_t age_ns = now_ns > last_frame_ns ? now_ns - last_frame_ns : 0;
+        info.last_frame_age_ms = age_ns / 1'000'000ULL;
+        info.video_stale = age_ns > kStaleVideoNs;
+    }
     info.assignment = mode;
     info.spotlight_slot = spotlight_slot.load(std::memory_order_acquire);
     info.failover_participant_id = failover_participant_id.load(std::memory_order_acquire);
@@ -546,6 +554,8 @@ void ZoomSource::unsubscribe()
     m_subscribed = false;
     m_current_subscription_id = 0;
     m_director_preview_subscription_id = 0;
+    m_observed_fps_x100.store(0, std::memory_order_relaxed);
+    m_last_frame_ns.store(0, std::memory_order_relaxed);
 }
 
 void ZoomSource::activate()
@@ -850,6 +860,7 @@ bool ZoomSource::output_video_from_shared_memory(
     }
     m_width.store(observed_w, std::memory_order_relaxed);
     m_height.store(observed_h, std::memory_order_relaxed);
+    m_last_frame_ns.store(ts, std::memory_order_relaxed);
 
     const uint64_t now_ns = os_gettime_ns();
     if (m_preview_cb && now_ns - m_preview_last_ns >= kPreviewIntervalNs) {

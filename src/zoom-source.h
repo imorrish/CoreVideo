@@ -122,6 +122,7 @@ private:
     std::atomic<uint32_t> m_width{0};
     std::atomic<uint32_t> m_height{0};
     std::atomic<uint32_t> m_observed_fps_x100{0};
+    std::atomic<uint64_t> m_last_frame_ns{0};
     std::vector<int16_t> m_stereo_buf;
     ZoomPreviewCallback m_preview_cb;
     uint64_t m_preview_last_ns = 0;
