@@ -994,16 +994,21 @@ void MainWindow::repairLookGeometry(const Look &look)
         return;
     }
 
-    const QStringList slotSceneNames = renderer.nestedSceneNamesForLook(look);
+    const LookGeometryRepairPlan repairPlan = geometryRepairPlanForLook(plan);
+    if (!repairPlan.valid) {
+        onObsLog(QStringLiteral("Repair geometry skipped: Look '%1' has no valid geometry repair plan.").arg(look.name));
+        return;
+    }
+
     m_obsClient->requestSceneItems(plan.sceneName);
     onObsLog(QStringLiteral("Repairing OBS geometry for '%1'.").arg(plan.sceneName));
 
-    QTimer::singleShot(650, this, [this, plan, slotSceneNames]() {
+    QTimer::singleShot(650, this, [this, plan, repairPlan]() {
         if (!m_obsClient || !m_obsClient->isConnected())
             return;
         m_obsClient->applyLayout(plan.sceneName,
                                  plan.tmpl,
-                                 slotSceneNames,
+                                 repairPlan.nestedSceneNames,
                                  plan.canvasWidth,
                                  plan.canvasHeight);
         m_obsClient->applyLookLayerOrder(plan.sceneName,
@@ -1033,6 +1038,24 @@ static void fillInspectorTable(QTableWidget *table,
         table->setItem(row, 0, categoryItem);
         table->setItem(row, 1, detailItem);
     }
+}
+
+static QStringList obsAuditActionDetails(const OBSClient::CoreVideoSceneAudit &audit, int maxItems = 4)
+{
+    QStringList actions;
+    auto append = [&](const QString &prefix, const QStringList &items) {
+        for (const QString &item : items) {
+            if (actions.size() >= maxItems)
+                return;
+            actions << QStringLiteral("%1: %2").arg(prefix, item);
+        }
+    };
+    append(QStringLiteral("Geometry"), audit.geometryDrift);
+    append(QStringLiteral("Missing item"), audit.missingSceneItems);
+    append(QStringLiteral("Missing scene"), audit.missingScenes);
+    append(QStringLiteral("Missing input"), audit.missingInputs);
+    append(QStringLiteral("Stale layer"), audit.staleDesignLayers);
+    return actions;
 }
 
 void MainWindow::openObsSyncInspector()
@@ -1844,7 +1867,7 @@ void MainWindow::onDesignLookRequested()
         draft.tileStyle.canvasColor = selectedCanvas;
         draft.tileStyle.borderColor = selectedBorder;
         draft.tileStyle.borderWidth = borderWidth->value();
-        draft.tileStyle.cornerRadius = radius->value();
+        draft.tileStyle.cornerRadius = 0.0;
         draft.tileStyle.opacity = opacity->value();
         draft.tileStyle.dropShadow = shadow->isChecked();
         draft.tileStyle.showNameTag = names->isChecked();
@@ -1873,6 +1896,10 @@ void MainWindow::onDesignLookRequested()
     addRow(QStringLiteral("Canvas color"), canvasColor);
     addRow(QStringLiteral("Border width"), borderWidth);
     addRow(QStringLiteral("Corner radius"), radius);
+    auto *radiusHint = new QLabel(QStringLiteral("Rounded corners are disabled until OBS mask rendering is implemented."), &dlg);
+    radiusHint->setObjectName("designerHint");
+    radiusHint->setWordWrap(true);
+    layout->addWidget(radiusHint);
     addRow(QStringLiteral("Tile opacity"), opacity);
     addRow(QStringLiteral("Border color"), borderColor);
     layout->addWidget(shadow);
@@ -1925,9 +1952,12 @@ void MainWindow::onDesignLookRequested()
             detail << QStringLiteral("%1 stale design layer(s)").arg(audit.staleDesignLayers.size());
         if (!audit.geometryDrift.isEmpty())
             detail << QStringLiteral("%1 geometry drift(s)").arg(audit.geometryDrift.size());
+        const QStringList actions = obsAuditActionDetails(audit, 3);
+        if (!actions.isEmpty())
+            detail << actions;
         obsStatus->setText(detail.isEmpty()
             ? state
-            : QStringLiteral("%1 %2").arg(state, detail.join(QStringLiteral(", "))));
+            : QStringLiteral("%1\n%2").arg(state, detail.join(QStringLiteral("\n"))));
     };
     connect(renderDraftBtn, &QPushButton::clicked, &dlg, [this, obsStatus, draftLookForDesigner, updateDraftObsStatus]() {
         if (!m_obsClient || !m_obsClient->isConnected()) {
@@ -1972,7 +2002,7 @@ void MainWindow::onDesignLookRequested()
     m_working.tileStyle.canvasColor = selectedCanvas;
     m_working.tileStyle.borderColor = selectedBorder;
     m_working.tileStyle.borderWidth = borderWidth->value();
-    m_working.tileStyle.cornerRadius = radius->value();
+    m_working.tileStyle.cornerRadius = 0.0;
     m_working.tileStyle.opacity = opacity->value();
     m_working.tileStyle.dropShadow = shadow->isChecked();
     m_working.tileStyle.showNameTag = names->isChecked();

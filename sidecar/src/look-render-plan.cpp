@@ -144,3 +144,29 @@ LookRenderPlan renderPlanForLook(const LookRenderConfig &config,
     plan.valid = true;
     return plan;
 }
+
+LookGeometryRepairPlan geometryRepairPlanForLook(const LookRenderPlan &plan)
+{
+    LookGeometryRepairPlan repair;
+    if (!plan.valid || plan.sceneName.trimmed().isEmpty() || !plan.tmpl.isValid())
+        return repair;
+
+    repair.sceneName = plan.sceneName;
+    repair.canvasWidth = plan.canvasWidth;
+    repair.canvasHeight = plan.canvasHeight;
+    repair.nestedSceneNames = nestedSceneNamesForSources(plan.sourceNames);
+    for (const TemplateSlot &slot : plan.tmpl.slotList) {
+        if (slot.index < 0 || slot.index >= repair.nestedSceneNames.size())
+            continue;
+        repair.items.append({
+            repair.nestedSceneNames.value(slot.index),
+            slot.x * plan.canvasWidth,
+            slot.y * plan.canvasHeight,
+            slot.width * plan.canvasWidth,
+            slot.height * plan.canvasHeight,
+            20 + slot.index,
+        });
+    }
+    repair.valid = true;
+    return repair;
+}

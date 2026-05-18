@@ -28,6 +28,24 @@ struct LookRenderPlan {
     bool hasBackgroundImage() const { return !backgroundImagePath.trimmed().isEmpty(); }
 };
 
+struct LookGeometryRepairItem {
+    QString sourceName;
+    double x = 0.0;
+    double y = 0.0;
+    double width = 0.0;
+    double height = 0.0;
+    int layerIndex = -1;
+};
+
+struct LookGeometryRepairPlan {
+    QString sceneName;
+    QStringList nestedSceneNames;
+    QVector<LookGeometryRepairItem> items;
+    double canvasWidth = 1920.0;
+    double canvasHeight = 1080.0;
+    bool valid = false;
+};
+
 QStringList sourceNamesForSlots(const LookRenderConfig &config, int slotCount);
 QStringList sourceNamesForLook(const LookRenderConfig &config, const Look &look);
 QStringList nestedSceneNamesForSources(const QStringList &sourceNames);
@@ -38,3 +56,4 @@ LookRenderPlan renderPlanForLook(const LookRenderConfig &config,
                                  const Look &look,
                                  bool makeProgram,
                                  const QStringList &slotLabels = {});
+LookGeometryRepairPlan geometryRepairPlanForLook(const LookRenderPlan &plan);

@@ -71,6 +71,20 @@ int main()
         })) {
         return fail("grid nested scene names did not match OBS slot scene contract");
     }
+    const auto gridRepair = geometryRepairPlanForLook(gridPlan);
+    if (!gridRepair.valid)
+        return fail("grid geometry repair plan was invalid");
+    if (gridRepair.nestedSceneNames != QStringList({"CoreVideo Slot 1", "CoreVideo Slot 2", "CoreVideo Slot 3", "CoreVideo Slot 4"}))
+        return fail("grid geometry repair did not target stable nested slot scenes");
+    if (gridRepair.items.size() != 4
+        || gridRepair.items[0].sourceName != "CoreVideo Slot 1"
+        || !qFuzzyCompare(gridRepair.items[0].x + 1.0, 1.0)
+        || !qFuzzyCompare(gridRepair.items[0].y + 1.0, 1.0)
+        || !qFuzzyCompare(gridRepair.items[0].width + 1.0, 961.0)
+        || !qFuzzyCompare(gridRepair.items[0].height + 1.0, 541.0)
+        || gridRepair.items[0].layerIndex != 20) {
+        return fail("grid geometry repair item did not match expected transform");
+    }
     if (gridPlan.slotLabels != QStringList({"Alex", "Sam", "Guest 3", "Guest 4"}))
         return fail("slot labels did not prefer participant labels then template labels");
     if (!gridPlan.makeProgram)
@@ -102,6 +116,16 @@ int main()
             "CoreVideo Screen Share",
         })) {
         return fail("speaker screenshare nested scene names did not preserve participant/share mapping");
+    }
+    const auto shareRepair = geometryRepairPlanForLook(sharePlan);
+    if (!shareRepair.valid
+        || shareRepair.nestedSceneNames != QStringList({"CoreVideo Slot 1", "CoreVideo Screen Share"})
+        || shareRepair.items.size() != 2
+        || shareRepair.items[1].sourceName != "CoreVideo Screen Share"
+        || !qFuzzyCompare(shareRepair.items[1].x + 1.0, 673.0)
+        || !qFuzzyCompare(shareRepair.items[1].width + 1.0, 1249.0)
+        || shareRepair.items[1].layerIndex != 21) {
+        return fail("speaker screenshare geometry repair did not target screen share scene transform");
     }
     if (sharePlan.makeProgram)
         return fail("preview intent was not preserved");
