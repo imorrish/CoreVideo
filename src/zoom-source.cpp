@@ -26,6 +26,7 @@
 #define PROP_AUDIO_CHANNELS       "audio_channels"
 #define PROP_RESOLUTION           "resolution"
 #define PROP_STATUS               "status_label"
+#define PROP_LIVE_STATUS          "live_status"
 #define PROP_HW_ACCEL_MODE        "hw_accel_mode"
 #define PROP_ASSIGNMENT_MODE      "assignment_mode"
 #define PROP_SPOTLIGHT_SLOT       "spotlight_slot"
@@ -277,6 +278,98 @@ static bool update_assignment_property_visibility(obs_properties_t *props,
     set_visible(PROP_AUDIO_CHANNELS, !screen_share_mode);
     set_visible(PROP_RESOLUTION, !screen_share_mode);
     return true;
+}
+
+static std::string participant_label(uint32_t participant_id)
+{
+    if (participant_id == 0)
+        return "none";
+    for (const auto &p : ZoomEngineClient::instance().roster()) {
+        if (p.user_id != participant_id)
+            continue;
+        if (!p.display_name.empty())
+            return p.display_name + " (" + std::to_string(participant_id) + ")";
+        break;
+    }
+    return "ID " + std::to_string(participant_id);
+}
+
+static std::string audio_route_label(const ZoomOutputInfo &info)
+{
+    if (info.audience_audio)
+        return "Audience fallback";
+    if (info.isolate_audio)
+        return "Isolated";
+    return "Program mix";
+}
+
+static std::string assignment_status_label(const ZoomOutputInfo &info)
+{
+    switch (info.assignment) {
+    case AssignmentMode::ActiveSpeaker:
+        return "Active speaker -> " +
+            participant_label(ZoomEngineClient::instance().active_speaker_id());
+    case AssignmentMode::SpotlightIndex:
+        return "Spotlight slot " + std::to_string(info.spotlight_slot);
+    case AssignmentMode::ScreenShare:
+        return "Active screen share";
+    case AssignmentMode::Participant:
+    default:
+        return "Participant -> " + participant_label(info.participant_id);
+    }
+}
+
+static std::string video_status_label(const ZoomOutputInfo &info)
+{
+    if (info.observed_width == 0 || info.observed_height == 0)
+        return "No video yet";
+
+    std::string text = std::to_string(info.observed_width) + "x" +
+        std::to_string(info.observed_height);
+    if (info.observed_fps > 0.01) {
+        char fps[32] = {};
+        snprintf(fps, sizeof(fps), " %.1f fps", info.observed_fps);
+        text += fps;
+    }
+    if (info.video_stale)
+        text += " stale";
+    else
+        text += " live";
+    return text;
+}
+
+static std::string recovery_status_label(const ZoomOutputInfo &info)
+{
+    if (info.assignment == AssignmentMode::ScreenShare)
+        return "Screen share follows Zoom's active share feed.";
+    if (output_signal_below_requested(info)) {
+        std::string text = "Using best available feed below requested canvas";
+        if (info.quality_upgrade_cooldown_ms > 0)
+            text += "; next quality retry in " +
+                std::to_string(info.quality_upgrade_cooldown_ms) + " ms";
+        else if (info.quality_upgrade_attempts > 0)
+            text += "; quality retry attempted " +
+                std::to_string(info.quality_upgrade_attempts) + " time(s)";
+        return text;
+    }
+    if (info.video_stale) {
+        std::string text = "Video stale";
+        if (info.stale_recovery_cooldown_ms > 0)
+            text += "; next recovery retry in " +
+                std::to_string(info.stale_recovery_cooldown_ms) + " ms";
+        return text;
+    }
+    if (info.observed_width == 0 || info.observed_height == 0)
+        return "Waiting for Zoom media.";
+    return "Feed matches current source state.";
+}
+
+static std::string live_status_text(const ZoomOutputInfo &info)
+{
+    return "Assigned: " + assignment_status_label(info) +
+        "\nVideo: " + video_status_label(info) +
+        "\nAudio: " + audio_route_label(info) +
+        "\nRecovery: " + recovery_status_label(info);
 }
 
 static bool source_wants_subscription(AssignmentMode mode,
@@ -1456,6 +1549,15 @@ static obs_properties_t *zoom_source_get_properties(void *data)
                             ZoomEngineClient::instance().state())));
     obs_data_release(settings);
     obs_property_set_enabled(status_prop, false);
+
+    obs_property_t *live_status_prop = obs_properties_add_text(
+        props, PROP_LIVE_STATUS, obs_module_text("ZoomSource.LiveStatus"),
+        OBS_TEXT_MULTILINE);
+    obs_data_t *live_settings = obs_source_get_settings(ctx->source);
+    obs_data_set_string(live_settings, PROP_LIVE_STATUS,
+                        live_status_text(ctx->output_info()).c_str());
+    obs_data_release(live_settings);
+    obs_property_set_enabled(live_status_prop, false);
 
     obs_properties_add_text(props, PROP_OUTPUT_DISPLAY_NAME,
         obs_module_text("ZoomSource.OutputDisplayName"), OBS_TEXT_DEFAULT);
