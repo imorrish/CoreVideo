@@ -76,6 +76,7 @@ ZoomControlServer::ZoomControlServer(QObject *parent)
 bool ZoomControlServer::start(quint16 port)
 {
     if (m_server && m_server->isListening()) return true;
+    m_running = false;
 
     if (!m_server) {
         m_server = new QTcpServer(this);
@@ -100,10 +101,13 @@ bool ZoomControlServer::start(quint16 port)
 
     blog(LOG_INFO, "[obs-zoom-plugin] Control server listening on 127.0.0.1:%u",
          static_cast<unsigned>(port));
+    m_running = true;
 
     // Roster changes: marshal to Qt main thread, then push event to subscribers.
     ZoomEngineClient::instance().add_roster_callback(this, [this]() {
         QMetaObject::invokeMethod(this, [this]() {
+            if (!m_running)
+                return;
             push_event({{"event", "roster_changed"}});
         }, Qt::QueuedConnection);
     });
@@ -119,11 +123,12 @@ bool ZoomControlServer::start(quint16 port)
 
 void ZoomControlServer::stop()
 {
-    if (!m_server) return;
-    m_server->close();
+    m_running = false;
     if (m_poll_timer) m_poll_timer->stop();
     ZoomEngineClient::instance().remove_roster_callback(this);
     m_event_subs.clear();
+    if (!m_server) return;
+    m_server->close();
 }
 
 void ZoomControlServer::set_token(const std::string &token)
@@ -133,6 +138,8 @@ void ZoomControlServer::set_token(const std::string &token)
 
 void ZoomControlServer::push_event(const QJsonObject &event)
 {
+    if (!m_running)
+        return;
     const QByteArray line =
         QJsonDocument(event).toJson(QJsonDocument::Compact) + '\n';
     for (auto *sock : QList<QTcpSocket *>(m_event_subs.begin(), m_event_subs.end())) {
@@ -150,6 +157,8 @@ void ZoomControlServer::remove_subscriber(QTcpSocket *socket)
 
 void ZoomControlServer::poll_and_push()
 {
+    if (!m_running)
+        return;
     const auto newState = ZoomEngineClient::instance().state();
     if (newState != m_last_state) {
         m_last_state = newState;
@@ -176,9 +185,13 @@ void ZoomControlServer::poll_and_push()
 
 void ZoomControlServer::on_new_connection()
 {
+    if (!m_running || !m_server)
+        return;
     while (m_server->hasPendingConnections()) {
         auto *socket = m_server->nextPendingConnection();
         connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
+            if (!m_running)
+                return;
             while (socket->canReadLine())
                 handle_line(socket, socket->readLine(4096).trimmed());
         });

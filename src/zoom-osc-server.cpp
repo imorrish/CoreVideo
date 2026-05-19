@@ -137,6 +137,7 @@ ZoomOscServer::ZoomOscServer(QObject *parent) : QObject(parent) {}
 bool ZoomOscServer::start(quint16 port)
 {
     if (m_socket && m_socket->state() == QAbstractSocket::BoundState) return true;
+    m_running = false;
 
     if (!m_socket) {
         m_socket = new QUdpSocket(this);
@@ -155,9 +156,12 @@ bool ZoomOscServer::start(quint16 port)
 
     blog(LOG_INFO, "[obs-zoom-plugin] OSC server listening on 127.0.0.1:%u",
          static_cast<unsigned>(port));
+    m_running = true;
 
     ZoomEngineClient::instance().add_roster_callback(this, [this]() {
         QMetaObject::invokeMethod(this, [this]() {
+            if (!m_running || !m_socket)
+                return;
             const QByteArray pkt = build_osc("/zoom/event/roster_changed", "", {});
             for (const auto &sub : m_subscribers)
                 m_socket->writeDatagram(pkt, sub.addr, sub.port);
@@ -175,13 +179,17 @@ bool ZoomOscServer::start(quint16 port)
 
 void ZoomOscServer::stop()
 {
+    m_running = false;
     if (m_poll_timer) m_poll_timer->stop();
     ZoomEngineClient::instance().remove_roster_callback(this);
+    m_subscribers.clear();
     if (m_socket) m_socket->close();
 }
 
 void ZoomOscServer::on_datagram_ready()
 {
+    if (!m_running || !m_socket)
+        return;
     while (m_socket->hasPendingDatagrams()) {
         QHostAddress sender;
         quint16 sender_port = 0;
@@ -555,6 +563,8 @@ static bool find_output_by_source(const std::string &source, ZoomOutputInfo &out
 
 void ZoomOscServer::send_status(const QHostAddress &to, quint16 port)
 {
+    if (!m_running || !m_socket)
+        return;
     const std::string state = meeting_state_str(ZoomEngineClient::instance().state());
     const uint32_t spk      = ZoomEngineClient::instance().active_speaker_id();
 
@@ -574,6 +584,8 @@ void ZoomOscServer::send_status(const QHostAddress &to, quint16 port)
 
 void ZoomOscServer::send_outputs(const QHostAddress &to, quint16 port)
 {
+    if (!m_running || !m_socket)
+        return;
     for (const auto &o : ZoomOutputManager::instance().outputs()) {
         // /zoom/output ,sisii source participant_id display_name active_speaker isolate_audio
         std::vector<OscArg> a(5);
@@ -588,6 +600,8 @@ void ZoomOscServer::send_outputs(const QHostAddress &to, quint16 port)
 
 void ZoomOscServer::send_recovery_status(const QHostAddress &to, quint16 port)
 {
+    if (!m_running || !m_socket)
+        return;
     const auto &rm = ZoomReconnectManager::instance();
     // /zoom/recovery/status ,iii active attempt max_attempts
     std::vector<OscArg> a(3);
@@ -603,6 +617,8 @@ void ZoomOscServer::send_recovery_status(const QHostAddress &to, quint16 port)
 
 void ZoomOscServer::send_participants(const QHostAddress &to, quint16 port)
 {
+    if (!m_running || !m_socket)
+        return;
     for (const auto &p : ZoomEngineClient::instance().roster()) {
         // /zoom/participant ,isiii id name has_video is_talking is_muted
         std::vector<OscArg> a(5);
@@ -619,6 +635,8 @@ void ZoomOscServer::send_participants(const QHostAddress &to, quint16 port)
 
 void ZoomOscServer::handle_subscribe(const QHostAddress &addr, quint16 port)
 {
+    if (!m_running)
+        return;
     const QDateTime now = QDateTime::currentDateTimeUtc();
     const auto it = std::find_if(m_subscribers.begin(), m_subscribers.end(),
         [&addr, port](const auto &sub) {
@@ -643,6 +661,8 @@ void ZoomOscServer::push_to_all(const std::string &address,
                                  const std::string &type_tags,
                                  const std::vector<OscArg> &args)
 {
+    if (!m_running || !m_socket)
+        return;
     const QDateTime cutoff = QDateTime::currentDateTimeUtc().addMSecs(-kSubscriberTtlMs);
     for (int i = m_subscribers.size() - 1; i >= 0; --i) {
         if (m_subscribers[i].renewed_at < cutoff)
@@ -655,6 +675,8 @@ void ZoomOscServer::push_to_all(const std::string &address,
 
 void ZoomOscServer::poll_and_push()
 {
+    if (!m_running)
+        return;
     const MeetingState newState = ZoomEngineClient::instance().state();
     if (newState != m_last_state) {
         m_last_state = newState;
