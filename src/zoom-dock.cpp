@@ -388,6 +388,8 @@ ZoomDock::ZoomDock(QWidget *parent)
     speaker_layout->addLayout(speaker_controls);
     connect(m_speaker_sensitivity_spin, qOverload<int>(&QSpinBox::valueChanged),
             this, [this](int value) {
+                if (!m_alive->load(std::memory_order_acquire))
+                    return;
                 auto s = ZoomPluginSettings::load();
                 s.speaker_sensitivity_ms = static_cast<uint32_t>(value);
                 if (m_speaker_hold_spin)
@@ -397,6 +399,8 @@ ZoomDock::ZoomDock(QWidget *parent)
             });
     connect(m_speaker_hold_spin, qOverload<int>(&QSpinBox::valueChanged),
             this, [this](int value) {
+                if (!m_alive->load(std::memory_order_acquire))
+                    return;
                 auto s = ZoomPluginSettings::load();
                 if (m_speaker_sensitivity_spin)
                     s.speaker_sensitivity_ms = static_cast<uint32_t>(
@@ -421,6 +425,8 @@ ZoomDock::ZoomDock(QWidget *parent)
     exclude_controls->addWidget(m_speaker_exclude_combo_2, 1);
     speaker_layout->addLayout(exclude_controls);
     auto save_exclusions = [this]() {
+        if (!m_alive->load(std::memory_order_acquire))
+            return;
         auto s = ZoomPluginSettings::load();
         s.speaker_exclude_participant_1 = m_speaker_exclude_combo_1
             ? static_cast<uint32_t>(m_speaker_exclude_combo_1->currentData().toUInt())
@@ -710,9 +716,17 @@ ZoomDock::~ZoomDock()
 
 void ZoomDock::prepare_shutdown()
 {
+    m_alive->store(false, std::memory_order_release);
+    if (m_speaker_sensitivity_spin)
+        QObject::disconnect(m_speaker_sensitivity_spin, nullptr, this, nullptr);
+    if (m_speaker_hold_spin)
+        QObject::disconnect(m_speaker_hold_spin, nullptr, this, nullptr);
+    if (m_speaker_exclude_combo_1)
+        QObject::disconnect(m_speaker_exclude_combo_1, nullptr, this, nullptr);
+    if (m_speaker_exclude_combo_2)
+        QObject::disconnect(m_speaker_exclude_combo_2, nullptr, this, nullptr);
     ZoomEngineClient::instance().remove_roster_callback(this);
     ZoomEngineClient::instance().remove_error_callback(this);
-    m_alive->store(false, std::memory_order_release);
     stop_pending_oauth_join();
     if (m_countdown_timer)
         m_countdown_timer->stop();
