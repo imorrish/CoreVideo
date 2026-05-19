@@ -1493,19 +1493,20 @@ static void *zoom_share_source_create(obs_data_t *settings, obs_source_t *source
 static void zoom_source_destroy(void *data)
 {
     auto *ctx = static_cast<ZoomSource *>(data);
+    ctx->clear_preview_cb();
     {
         std::lock_guard<std::mutex> callback_lock(ctx->m_callback_gate->mtx);
         ctx->m_callback_gate->alive = false;
     }
+    ZoomEngineClient::instance().remove_roster_callback(ctx);
+    if (!ctx->m_director_preview_uuid.empty())
+        ZoomEngineClient::instance().unregister_source(ctx->m_director_preview_uuid);
+    ZoomEngineClient::instance().unregister_source(ctx->source_uuid);
     if (ctx->m_hk_active_on_id  != OBS_INVALID_HOTKEY_ID) obs_hotkey_unregister(ctx->m_hk_active_on_id);
     if (ctx->m_hk_active_off_id != OBS_INVALID_HOTKEY_ID) obs_hotkey_unregister(ctx->m_hk_active_off_id);
     ZoomOutputManager::instance().unregister_source(ctx);
     ZoomIsoRecorder::instance().on_output_removed(ctx->source_uuid);
     ctx->unsubscribe();
-    ZoomEngineClient::instance().remove_roster_callback(ctx);
-    if (!ctx->m_director_preview_uuid.empty())
-        ZoomEngineClient::instance().unregister_source(ctx->m_director_preview_uuid);
-    ZoomEngineClient::instance().unregister_source(ctx->source_uuid);
     ctx->release_shared_memory();
     ctx->m_hw_pipeline.shutdown();
     delete ctx;

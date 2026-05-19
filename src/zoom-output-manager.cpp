@@ -28,15 +28,10 @@ void ZoomOutputManager::unregister_source(ZoomSource *source)
 
 std::vector<ZoomOutputInfo> ZoomOutputManager::outputs() const
 {
-    std::vector<ZoomSource *> sources;
-    {
-        std::lock_guard<std::mutex> lk(m_mtx);
-        sources = m_sources;
-    }
-
     std::vector<ZoomOutputInfo> out;
-    out.reserve(sources.size());
-    for (const auto *source : sources) {
+    std::lock_guard<std::mutex> lk(m_mtx);
+    out.reserve(m_sources.size());
+    for (const auto *source : m_sources) {
         if (!source) continue;
         ZoomOutputInfo info = source->output_info();
         out.push_back(info);
