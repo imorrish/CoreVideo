@@ -1,6 +1,6 @@
 #pragma once
 
-#include <QDialog>
+#include <QWidget>
 #include <atomic>
 #include <memory>
 
@@ -8,7 +8,7 @@ class QTableWidget;
 class QLineEdit;
 class QComboBox;
 
-class ZoomOutputDialog : public QDialog {
+class ZoomOutputDialog : public QWidget {
 public:
     explicit ZoomOutputDialog(QWidget *parent = nullptr);
     ~ZoomOutputDialog() override;

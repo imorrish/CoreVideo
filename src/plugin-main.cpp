@@ -30,10 +30,14 @@ extern "C" IMAGE_DOS_HEADER __ImageBase;
 
 static QPointer<ZoomDock> g_dock;
 static QPointer<ZoomIsoPanel> g_iso_panel;
+static QPointer<ZoomOutputDialog> g_output_panel;
+static QPointer<ZoomDiagnosticsDialog> g_diagnostics_panel;
 static bool g_frontend_callback_registered = false;
 
 static ZoomDock *ensure_zoom_dock();
 static ZoomIsoPanel *ensure_iso_panel();
+static ZoomOutputDialog *ensure_output_panel();
+static ZoomDiagnosticsDialog *ensure_diagnostics_panel();
 
 static void shutdown_corevideo()
 {
@@ -52,6 +56,8 @@ static void frontend_event_callback(enum obs_frontend_event event, void *)
     if (event == OBS_FRONTEND_EVENT_FINISHED_LOADING) {
         ensure_zoom_dock();
         ensure_iso_panel();
+        ensure_output_panel();
+        ensure_diagnostics_panel();
     }
     if (event == OBS_FRONTEND_EVENT_EXIT)
         shutdown_corevideo();
@@ -160,6 +166,73 @@ static void show_iso_panel()
     panel->activateWindow();
 }
 
+template <typename Widget>
+static void show_dock_widget(Widget *widget)
+{
+    if (!widget) return;
+
+    QWidget *parent = widget;
+    while (parent && !qobject_cast<QDockWidget *>(parent))
+        parent = parent->parentWidget();
+
+    if (auto *dock = qobject_cast<QDockWidget *>(parent)) {
+        dock->show();
+        dock->raise();
+        dock->activateWindow();
+        widget->setFocus();
+        return;
+    }
+
+    widget->show();
+    widget->raise();
+    widget->activateWindow();
+}
+
+static ZoomOutputDialog *ensure_output_panel()
+{
+    auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+    if (!main_win) {
+        blog(LOG_WARNING, "[obs-zoom-plugin] obs_frontend_get_main_window() returned null - Output Manager dock not created");
+        return nullptr;
+    }
+
+    if (!g_output_panel) {
+        g_output_panel = new ZoomOutputDialog(main_win);
+        obs_frontend_add_dock_by_id("ZoomOutputManagerDock", "Zoom Output Manager", g_output_panel);
+    }
+    return g_output_panel;
+}
+
+static void show_output_panel()
+{
+    show_dock_widget(ensure_output_panel());
+}
+
+void corevideo_show_output_manager_dock()
+{
+    show_output_panel();
+}
+
+static ZoomDiagnosticsDialog *ensure_diagnostics_panel()
+{
+    auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+    if (!main_win) {
+        blog(LOG_WARNING, "[obs-zoom-plugin] obs_frontend_get_main_window() returned null - Diagnostics dock not created");
+        return nullptr;
+    }
+
+    if (!g_diagnostics_panel) {
+        g_diagnostics_panel = new ZoomDiagnosticsDialog(main_win);
+        obs_frontend_add_dock_by_id("ZoomDiagnosticsDock", "Zoom Diagnostics", g_diagnostics_panel);
+    }
+    return g_diagnostics_panel;
+}
+
+static void show_diagnostics_panel()
+{
+    show_dock_widget(ensure_diagnostics_panel());
+}
+
 OBS_DECLARE_MODULE()
 OBS_MODULE_USE_DEFAULT_LOCALE("obs-zoom-plugin", "en-US")
 
@@ -203,15 +276,11 @@ bool obs_module_load(void)
     }, nullptr);
 
     obs_frontend_add_tools_menu_item("Zoom Output Manager", [](void *) {
-        auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
-        ZoomOutputDialog dlg(main_win);
-        dlg.exec();
+        show_output_panel();
     }, nullptr);
 
     obs_frontend_add_tools_menu_item("Zoom Diagnostics", [](void *) {
-        auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
-        ZoomDiagnosticsDialog dlg(main_win);
-        dlg.exec();
+        show_diagnostics_panel();
     }, nullptr);
 
     obs_frontend_add_tools_menu_item("Zoom Control", [](void *) {
@@ -239,4 +308,6 @@ void obs_module_unload(void)
     shutdown_corevideo();
     g_dock.clear();
     g_iso_panel.clear();
+    g_output_panel.clear();
+    g_diagnostics_panel.clear();
 }

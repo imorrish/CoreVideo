@@ -47,7 +47,7 @@ This policy covers all data categories processed by CoreVideo:
 |---|---|---|---|
 | SDK Key & Secret | `obs-studio/plugin_config/obs-zoom-plugin/settings.json` | Until manually deleted by operator | Operator deletes file or clears field in Settings dialog |
 | Control server token | Same settings file | Until manually deleted | Same as above |
-| Output profiles | `obs-studio/plugin_config/obs-zoom-plugin/profiles/*.json` | Until manually deleted via Output Manager | Delete via Output Manager dialog or remove files directly |
+| Output profiles | `obs-studio/plugin_config/obs-zoom-plugin/profiles/*.json` | Until manually deleted via Output Manager | Delete via Output Manager dock or remove files directly |
 | OBS recording / stream | Operator-configured OBS output path | Operator-defined | Operator's responsibility |
 
 ### 4.3 Shared Memory
@@ -76,7 +76,7 @@ CoreVideo does not transmit data to any server operated by the CoreVideo project
 ### 5.4 Output Profiles
 - Profile JSON files may contain participant display names and user IDs captured at the time the profile was saved.
 - Operators should apply filesystem access controls appropriate to the sensitivity of participant information.
-- Profiles can be deleted via **OBS → Tools → Zoom Output Manager** or by removing files from the profiles directory.
+- Profiles can be deleted via the **Zoom Output Manager** dock, **OBS → Tools → Zoom Output Manager**, or by removing files from the profiles directory.
 
 ### 5.5 Encryption
 - Meeting media is transmitted by the Zoom SDK over Zoom's encrypted transport (AES-256); CoreVideo receives already-decrypted raw frames via the SDK raw data API.

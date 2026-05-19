@@ -1139,10 +1139,8 @@ void ZoomDock::refresh_outputs()
 
 void ZoomDock::open_output_manager()
 {
-    auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
-    QWidget *parent = main_win ? static_cast<QWidget *>(main_win) : this;
-    ZoomOutputDialog dlg(parent);
-    dlg.exec();
+    extern void corevideo_show_output_manager_dock();
+    corevideo_show_output_manager_dock();
 }
 
 void ZoomDock::refresh_output_signal_cells()

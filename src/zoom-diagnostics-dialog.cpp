@@ -112,7 +112,7 @@ static QTableWidgetItem *readonly_item(const QString &text)
 }
 
 ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
 {
     setWindowTitle("Zoom Diagnostics");
     setMinimumSize(1160, 760);
@@ -150,7 +150,7 @@ ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     auto *refresh_button = buttons->addButton("Refresh", QDialogButtonBox::ActionRole);
     connect(refresh_button, &QPushButton::clicked, this, [this]() { refresh(); });
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QWidget::hide);
 
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(m_summary);

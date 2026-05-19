@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
   <title id="title">CoreVideo Output Manager</title>
-  <desc id="desc">Diagram of the current Zoom Output Manager profile dialog with participant and output assignment tables.</desc>
+  <desc id="desc">Diagram of the current Zoom Output Manager dock with participant and output assignment tables.</desc>
   <defs>
     <style>
       .bg{fill:#0b0d12}.window{fill:#151923;stroke:#343b4d}.panel{fill:#10141d;stroke:#2b3345}.header{fill:#1f2532}.row{fill:#171c28}.row2{fill:#121722}.text{fill:#f4f7ff;font-family:Segoe UI,Arial,sans-serif}.muted{fill:#94a0b8}.green{fill:#2fd17c}.red{fill:#ff5c67}.tiny{font-size:14px}.small{font-size:16px}.label{font-size:20px;font-weight:700}.button{fill:#242b3a;stroke:#3a4358}.primary{fill:#2f81f7}.field{fill:#202637;stroke:#3a4358}.micro{font-size:12px}

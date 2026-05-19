@@ -40,13 +40,13 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **Webinar support** - join Zoom Webinars using the dedicated SDK entry point (Webinar checkbox in control dock)
 - **Participant roster** - live list with video, mute, talking, host, co-host, raised hand, spotlight slot, and screen-sharing state
 - **Control dock** - dockable Qt panel with animated status dot, join/leave, token-type selector, recovery countdown, Active Speaker Director controls, and a routing section that opens the dedicated Output Manager; persists last meeting ID and display name across sessions
-- **Diagnostics window** - Tools -> Zoom Diagnostics shows requested vs observed resolution, FPS, frame age, retry counts, and recent engine debug events for live troubleshooting
+- **Diagnostics dock** - dockable OBS panel showing requested vs observed resolution, FPS, frame age, retry counts, and recent engine debug events for live troubleshooting
 - **Auto-reconnect** - exponential back-off recovery after engine crash, network drop, or unexpected disconnect
 - **OBS hotkeys** - per-source hotkeys to enable/disable active speaker mode
 - **TCP control API** - JSON server on `127.0.0.1:19870` for scripts and dashboards; includes `oauth_callback` command for custom URL scheme forwarding
 - **OSC control API** - UDP OSC server on `127.0.0.1:19871` for lighting consoles and broadcast hardware
 - **Output profiles** - save and load named participant-to-source mappings as JSON files
-- **Output manager** - Qt dialog and API for viewing and reconfiguring all sources at runtime
+- **Output manager dock** - dockable OBS panel and API for viewing and reconfiguring all sources at runtime
 - **JWT generation** - CoreVideo generates Meeting SDK JWTs locally from key+secret; manual override available
 - **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE for attributed joins and Marketplace compliance; fetches a short-lived ZAK via `GET /v2/users/me/zak`; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows; confidential client mode supported
 - **SDK 5.17.x and 7.x** - auto-detects flat and subfolder header layouts
@@ -304,7 +304,7 @@ Named profiles save the full source-to-participant mapping to JSON files under:
 obs-studio/plugin_config/obs-zoom-plugin/profiles/<name>.json
 ```
 
-Use **OBS -> Tools -> Zoom Output Manager** to save, load, and delete profiles interactively, or call `ZoomOutputProfile::save() / load() / list() / remove()` from code.
+Use the **Zoom Output Manager** dock, or **OBS -> Tools -> Zoom Output Manager** to focus it, to save, load, and delete profiles interactively. Code can call `ZoomOutputProfile::save() / load() / list() / remove()` directly.
 
 ## Architecture Overview
 
@@ -409,8 +409,8 @@ CoreVideo/
     |-- zoom-share-delegate.*                 # Screen share frames -> OBS
     |-- zoom-output-manager.*                 # Source registry + runtime reconfiguration
     |-- zoom-output-profile.*                 # Named JSON profile persistence
-    |-- zoom-output-dialog.*                  # Qt Output Manager dialog
-    |-- zoom-diagnostics-dialog.*             # Qt Diagnostics dialog
+    |-- zoom-output-dialog.*                  # Qt Output Manager dock widget
+    |-- zoom-diagnostics-dialog.*             # Qt Diagnostics dock widget
     |-- zoom-control-server.*                 # TCP JSON API (port 19870) + oauth_callback command
     |-- zoom-osc-server.*                     # UDP OSC API (port 19871)
     |-- zoom-settings.*                       # SDK key/secret/JWT + OAuth tokens + port persistence

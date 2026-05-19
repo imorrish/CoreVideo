@@ -169,7 +169,7 @@ static AssignmentMode assignment_mode_from_data(const QString &data,
 }
 
 ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
-    : QDialog(parent)
+    : QWidget(parent)
 {
     setWindowTitle("Zoom Output Manager");
     setMinimumSize(1320, 820);
@@ -263,7 +263,7 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     });
     connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked,
             this, [this]() { apply(); });
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(buttons, &QDialogButtonBox::rejected, this, &QWidget::hide);
 
     auto *layout = new QVBoxLayout(this);
     layout->addLayout(profile_row);

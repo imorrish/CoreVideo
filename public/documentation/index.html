@@ -1290,7 +1290,7 @@ sequenceDiagram
     <h3>Routing Section</h3>
     <p>
       The dock no longer embeds the full output table. Its routing section opens
-      the dedicated <strong>Tools → Zoom Output Manager</strong> dialog, which is
+      the dedicated <strong>Zoom Output Manager</strong> dock, which is
       the primary assignment surface for saving, loading, deleting profiles, and
       reviewing requested resolution, observed signal, frame rate, audio mode,
       and isolated-audio state.
@@ -1424,7 +1424,7 @@ sequenceDiagram
     <p>
       Each profile stores all current output assignments (source name, participant ID,
       active speaker flag, audio isolation, audio mode). Use the
-      <strong>Zoom Output Manager</strong> dialog (OBS → Tools) to save, load, and
+      <strong>Zoom Output Manager</strong> dock (or OBS → Tools to focus it) to save, load, and
       delete profiles interactively, or call the <code>ZoomOutputProfile</code> API
       directly from code.
     </p>
@@ -1653,7 +1653,7 @@ sequenceDiagram
     ├── zoom-share-delegate.*                 # Screen share frames → OBS source
     ├── zoom-output-manager.*                 # Source registry + runtime reconfiguration
     ├── zoom-output-profile.*                 # Named JSON profile persistence
-    ├── zoom-output-dialog.*                  # Qt Output Manager dialog
+    ├── zoom-output-dialog.*                  # Qt Output Manager dock widget
     ├── zoom-control-server.*                 # TCP JSON control API (port 19870) + oauth_callback
     ├── zoom-osc-server.*                     # UDP OSC control API (port 19871)
     ├── zoom-settings.*                       # SDK + OAuth credentials + port persistence

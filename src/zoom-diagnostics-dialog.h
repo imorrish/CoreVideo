@@ -1,12 +1,12 @@
 #pragma once
 
-#include <QDialog>
+#include <QWidget>
 
 class QLabel;
 class QTableWidget;
 class QTimer;
 
-class ZoomDiagnosticsDialog : public QDialog {
+class ZoomDiagnosticsDialog : public QWidget {
 public:
     explicit ZoomDiagnosticsDialog(QWidget *parent = nullptr);
 
