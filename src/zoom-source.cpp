@@ -237,6 +237,48 @@ static int active_audio_role_from_settings(obs_data_t *settings)
     return ACTIVE_AUDIO_MIX;
 }
 
+static AssignmentMode assignment_mode_from_settings(obs_data_t *settings)
+{
+    const int mode_int = static_cast<int>(
+        obs_data_get_int(settings, PROP_ASSIGNMENT_MODE));
+    if (mode_int == static_cast<int>(AssignmentMode::ActiveSpeaker))
+        return AssignmentMode::ActiveSpeaker;
+    if (mode_int == static_cast<int>(AssignmentMode::SpotlightIndex))
+        return AssignmentMode::SpotlightIndex;
+    if (mode_int == static_cast<int>(AssignmentMode::ScreenShare))
+        return AssignmentMode::ScreenShare;
+    return AssignmentMode::Participant;
+}
+
+static bool update_assignment_property_visibility(obs_properties_t *props,
+                                                  obs_data_t *settings)
+{
+    const AssignmentMode mode = assignment_mode_from_settings(settings);
+    const bool participant_mode = mode == AssignmentMode::Participant;
+    const bool active_mode = mode == AssignmentMode::ActiveSpeaker;
+    const bool spotlight_mode = mode == AssignmentMode::SpotlightIndex;
+    const bool screen_share_mode = mode == AssignmentMode::ScreenShare;
+
+    auto set_visible = [props](const char *name, bool visible) {
+        if (obs_property_t *prop = obs_properties_get(props, name))
+            obs_property_set_visible(prop, visible);
+    };
+
+    set_visible(PROP_PARTICIPANT_ID, participant_mode);
+    set_visible(PROP_FAILOVER_PARTICIPANT, participant_mode);
+    set_visible(PROP_SPOTLIGHT_SLOT, spotlight_mode);
+    set_visible(PROP_ACTIVE_SPEAKER, false);
+    set_visible(PROP_SPEAKER_SENSITIVITY, active_mode);
+    set_visible(PROP_SPEAKER_HOLD, active_mode);
+    set_visible(PROP_SPEAKER_EXCLUDE_1, active_mode);
+    set_visible(PROP_SPEAKER_EXCLUDE_2, active_mode);
+    set_visible(PROP_ISOLATE_AUDIO, !screen_share_mode);
+    set_visible(PROP_AUDIENCE_AUDIO, !screen_share_mode);
+    set_visible(PROP_AUDIO_CHANNELS, !screen_share_mode);
+    set_visible(PROP_RESOLUTION, !screen_share_mode);
+    return true;
+}
+
 static bool source_wants_subscription(AssignmentMode mode,
                                       uint32_t participant_id)
 {
@@ -1442,7 +1484,7 @@ static obs_properties_t *zoom_source_get_properties(void *data)
         obs_property_list_add_int(participant, label.c_str(),
                                   static_cast<long long>(p.user_id));
     }
-    obs_properties_add_bool(props, PROP_ACTIVE_SPEAKER,
+    obs_property_t *legacy_active = obs_properties_add_bool(props, PROP_ACTIVE_SPEAKER,
         obs_module_text("ZoomSource.ActiveSpeaker"));
     obs_properties_add_int(props, PROP_SPEAKER_SENSITIVITY,
         obs_module_text("ZoomSource.SpeakerSensitivity"), 0, 3000, 50);
@@ -1487,8 +1529,12 @@ static obs_properties_t *zoom_source_get_properties(void *data)
     obs_property_list_add_int(amode,
         obs_module_text("ZoomSource.Assignment.ScreenShare"),
         static_cast<long long>(AssignmentMode::ScreenShare));
+    obs_property_set_modified_callback(amode,
+        [](obs_properties_t *props, obs_property_t *, obs_data_t *settings) -> bool {
+            return update_assignment_property_visibility(props, settings);
+        });
 
-    obs_properties_add_int(props, PROP_SPOTLIGHT_SLOT,
+    obs_property_t *spotlight_slot = obs_properties_add_int(props, PROP_SPOTLIGHT_SLOT,
         obs_module_text("ZoomSource.SpotlightSlot"), 1, 9, 1);
 
     obs_property_t *failover = obs_properties_add_list(props, PROP_FAILOVER_PARTICIPANT,
@@ -1603,10 +1649,15 @@ static obs_properties_t *zoom_source_get_properties(void *data)
 
     if (ctx->dedicated_active_speaker_source) {
         obs_property_set_visible(participant, false);
-        obs_property_set_visible(obs_properties_get(props, PROP_ACTIVE_SPEAKER), false);
+        obs_property_set_visible(legacy_active, false);
         obs_property_set_visible(amode, false);
-        obs_property_set_visible(obs_properties_get(props, PROP_SPOTLIGHT_SLOT), false);
-        obs_property_set_visible(obs_properties_get(props, PROP_FAILOVER_PARTICIPANT), false);
+        obs_property_set_visible(spotlight_slot, false);
+        obs_property_set_visible(failover, false);
+    } else {
+        obs_property_set_visible(legacy_active, false);
+        obs_data_t *visibility_settings = obs_source_get_settings(ctx->source);
+        update_assignment_property_visibility(props, visibility_settings);
+        obs_data_release(visibility_settings);
     }
 
     return props;
