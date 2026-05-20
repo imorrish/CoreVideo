@@ -24,7 +24,8 @@
 <figure class="doc-image"><img src="images/corevideo-obs-workspace.svg" alt="CoreVideo OBS workspace with Zoom Control dock"></figure>
 <p>The Zoom Control dock joins and leaves meetings, starts and stops raw media, shows meeting state, lists participants, exposes Active Speaker Director controls, and opens the Output Manager for source assignment without leaving OBS.</p>
 <figure class="doc-image"><img src="images/corevideo-output-manager.svg" alt="CoreVideo Output Manager"></figure>
-<p>The dedicated Zoom Output Manager is the primary assignment surface. It supports profile save/load workflows and exposes requested resolution, observed signal, frame rate, assignment mode, and audio routing information for each output.</p>
+<p>The dedicated Zoom Output Manager is the primary assignment surface. It supports profile save/load workflows and exposes requested resolution, observed signal, frame rate, assignment mode, and audio routing information for each output. In <code>v0.1.15</code> it is a persistent OBS dock, so operators can keep assignments, live previews, and feed health visible while working in normal OBS scenes.</p>
+<p>Open the <strong>Zoom Diagnostics</strong> dock, or use <strong>Tools &gt; Zoom Diagnostics</strong> to focus it, during a live session to see requested versus observed resolution, FPS, frame age, stale and quality retry counters, and the latest <code>ZoomObsEngine</code> debug events. This is the fastest way to see whether a source is waiting for frames, receiving a lower-than-requested feed, or being resubscribed by recovery logic.</p>
 <figure class="doc-image"><img src="images/corevideo-source-properties.svg" alt="CoreVideo Zoom Participant source properties"></figure>
 <p>Each Zoom Participant source can be configured independently for fixed participants, active speaker, spotlight slot, screen share, isolated audio, audience audio, resolution, video-loss behavior, and hardware conversion.</p>
 <h2>Joining Meetings</h2>
@@ -76,6 +77,12 @@
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;list_participants&quot;}</code></pre>
 <p>List outputs:</p>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;list_outputs&quot;}</code></pre>
+<p>Output snapshots include requested resolution, observed resolution/FPS, stale state, last frame age, subscribed age for outputs still waiting on their first frame, recovery attempts, automatic quality-upgrade attempts, and remaining retry cooldowns.</p>
+<p>Force a retry for stale outputs:</p>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;recover_stale_outputs&quot;,&quot;force&quot;:true}</code></pre>
+<p>Force a quality retry for live outputs below their requested resolution:</p>
+<pre><code class="language-json">{&quot;cmd&quot;:&quot;upgrade_low_quality_outputs&quot;,&quot;force&quot;:true}</code></pre>
+<p>Quality retries are skipped when a feed is already observed at 1080p.</p>
 <p>Assign a source to a fixed participant with isolated mono audio:</p>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;assign_output_ex&quot;,&quot;source&quot;:&quot;Zoom Participant 1&quot;,&quot;mode&quot;:&quot;participant&quot;,&quot;participant_id&quot;:123456,&quot;isolate_audio&quot;:true,&quot;audio_channels&quot;:&quot;mono&quot;,&quot;video_resolution&quot;:&quot;1080p&quot;}</code></pre>
 <p>Assign a source to active speaker:</p>
@@ -91,6 +98,10 @@
 <p>List participants and outputs:</p>
 <pre><code class="language-text">/zoom/list_participants
 /zoom/list_outputs</code></pre>
+<p>Retry stale video outputs:</p>
+<pre><code class="language-text">/zoom/recover_stale_outputs 1</code></pre>
+<p>Retry low-quality video outputs:</p>
+<pre><code class="language-text">/zoom/upgrade_low_quality_outputs 1</code></pre>
 <p>Assign a source:</p>
 <pre><code class="language-text">/zoom/output/assign_ex &quot;Zoom Participant 1&quot; &quot;participant&quot; 123456 1</code></pre>
 <p>Assign active speaker:</p>

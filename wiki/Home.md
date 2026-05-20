@@ -22,6 +22,7 @@ Welcome to the CoreVideo wiki — an OBS Studio plugin for live Zoom meeting vid
 |---|---|
 | Documentation site | https://corevideo.iamfatness.us/documentation/ |
 | Core plugin guide | https://corevideo.iamfatness.us/core-plugin/ |
+| Latest Windows release | https://github.com/iamfatness/CoreVideo/releases/tag/v0.1.15 |
 | Source code | https://github.com/iamfatness/CoreVideo |
 | Issues & bug reports | https://github.com/iamfatness/CoreVideo/issues |
 | Releases | https://github.com/iamfatness/CoreVideo/releases |

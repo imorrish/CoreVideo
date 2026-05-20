@@ -23,7 +23,7 @@ test independently from the Zoom SDK.
 
 The CoreVideo plugin is operated from inside OBS. These diagrams mirror the
 current core plugin controls: the Zoom Control dock, regular OBS scenes/sources,
-the Active Speaker Director controls, the separate profile-oriented Zoom Output
+the Active Speaker Director controls, the dockable profile-oriented Zoom Output
 Manager, and the Zoom Participant source properties. Exact styling can vary by
 OBS theme and platform, but the controls and labels should match the current
 plugin.
@@ -39,6 +39,8 @@ controls, and opens the Output Manager for source assignment without leaving OBS
 The dedicated Zoom Output Manager is the primary assignment surface. It supports
 profile save/load workflows and exposes requested resolution, observed signal,
 frame rate, assignment mode, and audio routing information for each output.
+In `v0.1.15` it is a persistent OBS dock, so operators can keep assignments,
+live previews, and feed health visible while working in normal OBS scenes.
 
 Open the **Zoom Diagnostics** dock, or use **Tools > Zoom Diagnostics** to focus it,
 during a live session to see requested versus

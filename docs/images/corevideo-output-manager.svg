@@ -40,5 +40,5 @@
 
   <rect class="primary" x="962" y="658" width="104" height="38" rx="7"/><text class="text small" x="996" y="682">Apply</text>
   <rect class="button" x="1084" y="658" width="104" height="38" rx="7"/><text class="text small" x="1118" y="682">Close</text>
-  <text class="muted tiny" x="72" y="682">The dock has the same output controls inline; this dialog is still useful for saving, loading, and deleting named output profiles.</text>
+  <text class="muted tiny" x="72" y="682">The Output Manager is a dockable OBS panel for live assignments plus named profile save/load workflows.</text>
 </svg>

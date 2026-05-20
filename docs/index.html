@@ -270,6 +270,8 @@
         <p>Dockable Qt panel with join/leave, state indicator, Active Speaker Director controls, recovery countdown, and Output Manager launch.</p></div>
       <div class="card"><div class="card-icon">DIAG</div><h4>Diagnostics</h4>
         <p>The dockable Zoom Diagnostics panel shows requested versus observed resolution, FPS, frame age, retry counters, and recent engine debug events.</p></div>
+      <div class="card"><div class="card-icon">OUT</div><h4>Dockable Output Manager</h4>
+        <p>Zoom Output Manager is now a persistent OBS dock for source assignments, live preview thumbnails, feed health, profile save/load, and manual recovery actions.</p></div>
       <div class="card"><div class="card-icon">🌐</div><h4>TCP Control API</h4>
         <p>JSON server on port 19870 — query, join, leave, assign outputs from scripts or dashboards.</p></div>
       <div class="card"><div class="card-icon">🎛️</div><h4>OSC Control API</h4>
@@ -1498,7 +1500,7 @@ sequenceDiagram
     <h2>Installation</h2>
     <div class="callout info">
       <div class="callout-title">ℹ️ Pre-built releases</div>
-      Pre-built binaries are not yet published. Install from source using the steps below.
+      Download the latest Windows package from <a href="https://github.com/iamfatness/CoreVideo/releases/tag/v0.1.15">CoreVideo v0.1.15</a>. This release includes dockable Zoom Diagnostics and Zoom Output Manager panels, the OBS plugin, ZoomObsEngine, Sidecar runtime files, and the required Zoom SDK runtime DLLs.
     </div>
     <div class="steps">
       <div class="step"><div class="step-body">
