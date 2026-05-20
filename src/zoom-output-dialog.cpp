@@ -19,11 +19,13 @@
 #include <QPixmap>
 #include <QPointer>
 #include <QPushButton>
+#include <QStringList>
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <algorithm>
 #include <atomic>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 enum OutputColumns {
@@ -73,11 +75,35 @@ static QString participant_label(const ParticipantInfo &p)
         : QString::fromStdString(p.display_name);
     if (p.is_talking) label += " *";
     if (p.has_video) label += " [video]";
+    if (p.is_sharing_screen) label += " [sharing]";
     return label;
+}
+
+static QString screen_share_assignment_label(const std::vector<ParticipantInfo> &roster)
+{
+    for (const auto &p : roster) {
+        if (!p.is_sharing_screen)
+            continue;
+        const QString name = p.display_name.empty()
+            ? QString("ID %1").arg(p.user_id)
+            : QString::fromStdString(p.display_name);
+        return QString("Screen share - %1").arg(name);
+    }
+    return QStringLiteral("Screen share - unavailable");
 }
 
 static QString signal_text(const ZoomOutputInfo &output)
 {
+    if (output.health_reason == ZoomOutputHealthReason::RawMediaNotReady)
+        return QStringLiteral("Raw media\nnot ready");
+    if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
+        return QStringLiteral("! Duplicate\nassignment");
+    if (output.health_reason == ZoomOutputHealthReason::ParticipantMissing)
+        return QStringLiteral("Participant\nmissing");
+    if (output.health_reason == ZoomOutputHealthReason::ParticipantVideoOff)
+        return QStringLiteral("Video off");
+    if (output.health_reason == ZoomOutputHealthReason::ScreenShareUnavailable)
+        return QStringLiteral("No screen\nshare");
     if (output.observed_width == 0 || output.observed_height == 0)
         return QStringLiteral("No signal");
     if (output.video_stale)
@@ -96,6 +122,16 @@ static QString signal_text(const ZoomOutputInfo &output)
 
 static QString signal_tooltip(const ZoomOutputInfo &output)
 {
+    if (output.health_reason == ZoomOutputHealthReason::RawMediaNotReady)
+        return QStringLiteral("Zoom raw media is not active yet. Start the engine before expecting participant video or audio frames.");
+    if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
+        return QStringLiteral("This participant is assigned to more than one fixed output. CoreVideo will allow it, but duplicate fixed assignments waste subscriptions and can make quality negotiation less stable.");
+    if (output.health_reason == ZoomOutputHealthReason::ParticipantMissing)
+        return QStringLiteral("The assigned participant is not currently present in the Zoom roster.");
+    if (output.health_reason == ZoomOutputHealthReason::ParticipantVideoOff)
+        return QStringLiteral("The assigned participant is present, but Zoom reports their video is off.");
+    if (output.health_reason == ZoomOutputHealthReason::ScreenShareUnavailable)
+        return QStringLiteral("This output is assigned to screen share, but no participant is currently sharing.");
     if (output.observed_width == 0 || output.observed_height == 0)
         return output.subscribed_age_ms > 0
             ? QString("No live video frame has been received. CoreVideo has been waiting %1 ms and will retry automatically if the feed does not arrive.")
@@ -353,7 +389,7 @@ void ZoomOutputDialog::refresh()
         auto *assignment = new QComboBox(m_table);
         assignment->setMinimumWidth(280);
         assignment->addItem("Active speaker", "active");
-        assignment->addItem("Screen share", "screenshare");
+        assignment->addItem(screen_share_assignment_label(roster), "screenshare");
         assignment->addItem("None", "user:0");
         for (const auto &p : roster)
             assignment->addItem(participant_label(p), QString("user:%1").arg(p.user_id));
@@ -385,7 +421,9 @@ void ZoomOutputDialog::refresh()
         signal->setMargin(4);
         signal->setText(signal_text(output));
         signal->setToolTip(signal_tooltip(output));
-        if (output_signal_below_requested(output))
+        if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
+            signal->setStyleSheet("color: #ff6b6b; font-weight: 700;");
+        else if (output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution)
             signal->setStyleSheet("color: #f0b429; font-weight: 700;");
         m_table->setCellWidget(row, ColumnSignal, signal);
 
@@ -542,6 +580,47 @@ void ZoomOutputDialog::delete_profile()
 
 void ZoomOutputDialog::apply()
 {
+    std::unordered_map<uint32_t, QStringList> fixed_assignments;
+    for (int row = 0; row < m_table->rowCount(); ++row) {
+        auto *name_item = m_table->item(row, ColumnName);
+        auto *assignment = qobject_cast<QComboBox *>(
+            m_table->cellWidget(row, ColumnAssignment));
+        if (!name_item || !assignment) continue;
+
+        const QString assignment_data = assignment->currentData().toString();
+        uint32_t participant_id = 0;
+        uint32_t spotlight_slot = 1;
+        const AssignmentMode assignment_mode =
+            assignment_mode_from_data(assignment_data, participant_id, spotlight_slot);
+        if (assignment_mode == AssignmentMode::Participant && participant_id != 0) {
+            const QString output_name = name_item->text().trimmed().isEmpty()
+                ? name_item->data(Qt::UserRole).toString()
+                : name_item->text();
+            fixed_assignments[participant_id] << output_name;
+        }
+    }
+
+    QStringList duplicate_lines;
+    for (const auto &entry : fixed_assignments) {
+        if (entry.second.size() > 1) {
+            duplicate_lines << QString("Participant ID %1: %2")
+                .arg(entry.first)
+                .arg(entry.second.join(", "));
+        }
+    }
+    if (!duplicate_lines.isEmpty()) {
+        const auto choice = QMessageBox::warning(
+            this, "Duplicate Participant Assignment",
+            "One or more participants are assigned to multiple fixed outputs.\n\n"
+            "This can waste Zoom subscriptions and make video quality negotiation less stable.\n\n"
+            + duplicate_lines.join("\n") +
+            "\n\nApply anyway?",
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (choice != QMessageBox::Yes)
+            return;
+    }
+
     for (int row = 0; row < m_table->rowCount(); ++row) {
         auto *name_item = m_table->item(row, ColumnName);
         auto *assignment = qobject_cast<QComboBox *>(

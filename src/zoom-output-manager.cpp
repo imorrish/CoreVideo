@@ -1,4 +1,6 @@
 #include "zoom-output-manager.h"
+#include "zoom-engine-client.h"
+#include "zoom-output-health.h"
 #include "zoom-iso-recorder.h"
 #include "zoom-source.h"
 #include <algorithm>
@@ -36,6 +38,8 @@ std::vector<ZoomOutputInfo> ZoomOutputManager::outputs() const
         ZoomOutputInfo info = source->output_info();
         out.push_back(info);
     }
+    apply_output_health(out, ZoomEngineClient::instance().roster(),
+                        ZoomEngineClient::instance().is_media_active());
     return out;
 }
 

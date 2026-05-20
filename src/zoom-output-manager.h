@@ -8,6 +8,18 @@
 
 struct ZoomSource;
 
+enum class ZoomOutputHealthReason {
+    Ok = 0,
+    RawMediaNotReady,
+    ParticipantMissing,
+    ParticipantVideoOff,
+    WaitingForFirstFrame,
+    StaleFrame,
+    ZoomDeliveredLowerResolution,
+    DuplicateAssignment,
+    ScreenShareUnavailable,
+};
+
 struct ZoomOutputInfo {
     std::string source_uuid;
     std::string source_name;
@@ -28,10 +40,44 @@ struct ZoomOutputInfo {
     uint32_t quality_upgrade_attempts = 0;
     uint64_t quality_upgrade_cooldown_ms = 0;
     uint64_t subscribed_age_ms = 0;
+    bool duplicate_participant_assignment = false;
+    ZoomOutputHealthReason health_reason = ZoomOutputHealthReason::Ok;
     AssignmentMode   assignment = AssignmentMode::Participant;
     uint32_t         spotlight_slot = 1;     // used when assignment == SpotlightIndex
     uint32_t         failover_participant_id = 0; // 0 = none
 };
+
+inline const char *output_health_reason_id(ZoomOutputHealthReason reason)
+{
+    switch (reason) {
+    case ZoomOutputHealthReason::Ok: return "ok";
+    case ZoomOutputHealthReason::RawMediaNotReady: return "raw_media_not_ready";
+    case ZoomOutputHealthReason::ParticipantMissing: return "participant_missing";
+    case ZoomOutputHealthReason::ParticipantVideoOff: return "participant_video_off";
+    case ZoomOutputHealthReason::WaitingForFirstFrame: return "waiting_for_first_frame";
+    case ZoomOutputHealthReason::StaleFrame: return "stale_frame";
+    case ZoomOutputHealthReason::ZoomDeliveredLowerResolution: return "zoom_delivered_lower_resolution";
+    case ZoomOutputHealthReason::DuplicateAssignment: return "duplicate_assignment";
+    case ZoomOutputHealthReason::ScreenShareUnavailable: return "screen_share_unavailable";
+    }
+    return "unknown";
+}
+
+inline const char *output_health_reason_label(ZoomOutputHealthReason reason)
+{
+    switch (reason) {
+    case ZoomOutputHealthReason::Ok: return "OK";
+    case ZoomOutputHealthReason::RawMediaNotReady: return "Raw media not ready";
+    case ZoomOutputHealthReason::ParticipantMissing: return "Participant missing";
+    case ZoomOutputHealthReason::ParticipantVideoOff: return "Video off";
+    case ZoomOutputHealthReason::WaitingForFirstFrame: return "Waiting for first frame";
+    case ZoomOutputHealthReason::StaleFrame: return "Stale frame";
+    case ZoomOutputHealthReason::ZoomDeliveredLowerResolution: return "Zoom delivered lower resolution";
+    case ZoomOutputHealthReason::DuplicateAssignment: return "Duplicate assignment";
+    case ZoomOutputHealthReason::ScreenShareUnavailable: return "Screen share unavailable";
+    }
+    return "Unknown";
+}
 
 inline uint32_t video_resolution_width(VideoResolution resolution)
 {

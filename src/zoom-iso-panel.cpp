@@ -6,6 +6,7 @@
 
 #include <QAbstractItemView>
 #include <QCheckBox>
+#include <QColor>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
@@ -20,6 +21,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTimer>
@@ -50,6 +52,15 @@ static QTableWidgetItem *item(const QString &text)
     auto *cell = new QTableWidgetItem(text);
     cell->setFlags(cell->flags() & ~Qt::ItemIsEditable);
     return cell;
+}
+
+static QString bytes_text(qint64 bytes)
+{
+    const double gb = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
+    if (gb >= 1.0)
+        return QString("%1 GB").arg(gb, 0, 'f', 1);
+    const double mb = static_cast<double>(bytes) / (1024.0 * 1024.0);
+    return QString("%1 MB").arg(mb, 0, 'f', 1);
 }
 
 ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
@@ -125,29 +136,34 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     config_layout->addLayout(button_row);
 
     m_status = new QLabel("Idle", config_group);
+    m_disk_status = new QLabel(config_group);
     m_error = new QLabel(config_group);
     m_error->setObjectName("errorLabel");
     m_error->setWordWrap(true);
     m_error->setVisible(false);
     config_layout->addWidget(m_status);
+    config_layout->addWidget(m_disk_status);
     config_layout->addWidget(m_error);
     layout->addWidget(config_group);
 
     auto *sessions_group = new QGroupBox("Active ISO Sessions", this);
     auto *sessions_layout = new QVBoxLayout(sessions_group);
     m_sessions = new QTableWidget(sessions_group);
-    m_sessions->setColumnCount(7);
+    m_sessions->setColumnCount(10);
     m_sessions->setHorizontalHeaderLabels({
-        "Source", "Participant", "Resolution", "Video Frames",
-        "Audio Chunks", "Video File", "Audio File"
+        "Source", "Participant", "Status", "Duration", "Resolution",
+        "Video Frames", "Audio Chunks", "Video Size", "Audio Size", "Files"
     });
     m_sessions->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     m_sessions->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     m_sessions->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     m_sessions->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     m_sessions->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-    m_sessions->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Stretch);
-    m_sessions->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Stretch);
+    m_sessions->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    m_sessions->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
+    m_sessions->horizontalHeader()->setSectionResizeMode(7, QHeaderView::ResizeToContents);
+    m_sessions->horizontalHeader()->setSectionResizeMode(8, QHeaderView::ResizeToContents);
+    m_sessions->horizontalHeader()->setSectionResizeMode(9, QHeaderView::Stretch);
     m_sessions->verticalHeader()->setVisible(false);
     m_sessions->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_sessions->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -255,12 +271,36 @@ void ZoomIsoPanel::refresh_status()
               .arg(sessions.size() == 1 ? "" : "s")
         : QStringLiteral("Idle"));
 
+    const QStorageInfo storage(m_output_dir->text());
+    if (storage.isValid() && storage.isReady()) {
+        m_disk_status->setText(QString("Free space: %1")
+            .arg(bytes_text(storage.bytesAvailable())));
+        m_disk_status->setStyleSheet(storage.bytesAvailable() < 10ll * 1024ll * 1024ll * 1024ll
+            ? "color: #f0b429; font-weight: 700;"
+            : QString());
+    } else {
+        m_disk_status->setText(QStringLiteral("Free space: unavailable"));
+        m_disk_status->setStyleSheet("color: #f0b429; font-weight: 700;");
+    }
+
     m_sessions->setRowCount(sessions.size());
     for (int row = 0; row < sessions.size(); ++row) {
         const QJsonObject s = sessions.at(row).toObject();
         const QString resolution = QString("%1x%2")
             .arg(s.value("width").toInt())
             .arg(s.value("height").toInt());
+        const int elapsed_ms = static_cast<int>(s.value("elapsed_ms").toDouble());
+        const QString duration = QString("%1:%2")
+            .arg(elapsed_ms / 60000)
+            .arg((elapsed_ms / 1000) % 60, 2, 10, QLatin1Char('0'));
+        const bool ffmpeg_running = s.value("ffmpeg_running").toBool();
+        const int video_frames = s.value("video_frames").toInt();
+        const int audio_chunks = s.value("audio_chunks").toInt();
+        QString status = ffmpeg_running ? QStringLiteral("Recording") : QStringLiteral("Encoder stopped");
+        if (video_frames == 0)
+            status = QStringLiteral("Waiting for video");
+        else if (audio_chunks == 0)
+            status += QStringLiteral(" / no audio yet");
         QString participant = s.value("display_name").toString();
         const int participant_id =
             static_cast<int>(s.value("resolved_participant_id").toDouble());
@@ -271,11 +311,23 @@ void ZoomIsoPanel::refresh_status()
 
         m_sessions->setItem(row, 0, item(s.value("source").toString()));
         m_sessions->setItem(row, 1, item(participant));
-        m_sessions->setItem(row, 2, item(resolution));
-        m_sessions->setItem(row, 3, item(QString::number(s.value("video_frames").toInt())));
-        m_sessions->setItem(row, 4, item(QString::number(s.value("audio_chunks").toInt())));
-        m_sessions->setItem(row, 5, item(s.value("video_path").toString()));
-        m_sessions->setItem(row, 6, item(s.value("audio_path").toString()));
+        auto *status_item = item(status);
+        if (!ffmpeg_running || video_frames == 0)
+            status_item->setForeground(QColor("#f0b429"));
+        m_sessions->setItem(row, 2, status_item);
+        m_sessions->setItem(row, 3, item(duration));
+        m_sessions->setItem(row, 4, item(resolution));
+        m_sessions->setItem(row, 5, item(QString::number(video_frames)));
+        m_sessions->setItem(row, 6, item(QString::number(audio_chunks)));
+        m_sessions->setItem(row, 7, item(bytes_text(
+            static_cast<qint64>(s.value("video_bytes").toDouble()))));
+        m_sessions->setItem(row, 8, item(bytes_text(
+            static_cast<qint64>(s.value("audio_bytes").toDouble()))));
+        auto *files = item(QString("%1\n%2")
+            .arg(s.value("video_path").toString(),
+                 s.value("audio_path").toString()));
+        files->setToolTip(files->text());
+        m_sessions->setItem(row, 9, files);
     }
 }
 

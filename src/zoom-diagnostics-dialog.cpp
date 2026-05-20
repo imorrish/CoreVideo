@@ -1,15 +1,26 @@
 #include "zoom-diagnostics-dialog.h"
 #include "cv-style.h"
+#include "obs-zoom-version.h"
 #include "zoom-engine-client.h"
 #include "zoom-output-manager.h"
 #include <QAbstractItemView>
 #include <QColor>
+#include <QDateTime>
 #include <QDialogButtonBox>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QHeaderView>
 #include <QLabel>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QStandardPaths>
 #include <QStringList>
 #include <QTableWidget>
+#include <QTextStream>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -95,13 +106,7 @@ static QString retry_text(const ZoomOutputInfo &output)
 
 static QString signal_state_text(const ZoomOutputInfo &output)
 {
-    if (output.observed_width == 0 || output.observed_height == 0)
-        return QStringLiteral("Waiting");
-    if (output.video_stale)
-        return QStringLiteral("Stale");
-    if (output_signal_below_requested(output))
-        return QStringLiteral("Below requested");
-    return QStringLiteral("OK");
+    return QString::fromUtf8(output_health_reason_label(output.health_reason));
 }
 
 static QTableWidgetItem *readonly_item(const QString &text)
@@ -109,6 +114,135 @@ static QTableWidgetItem *readonly_item(const QString &text)
     auto *item = new QTableWidgetItem(text);
     item->setFlags(item->flags() & ~Qt::ItemIsEditable);
     return item;
+}
+
+static QString diagnostics_root_dir()
+{
+    const QString docs = QStandardPaths::writableLocation(
+        QStandardPaths::DocumentsLocation);
+    const QString base = docs.isEmpty()
+        ? QDir::homePath()
+        : docs;
+    return QDir(base).absoluteFilePath("CoreVideo Diagnostics");
+}
+
+static QString latest_obs_log_path()
+{
+#if defined(_WIN32)
+    const QString appdata = qEnvironmentVariable("APPDATA");
+    if (appdata.isEmpty())
+        return {};
+    QDir logs(QDir(appdata).absoluteFilePath("obs-studio/logs"));
+#else
+    QDir logs(QDir::home().absoluteFilePath(".config/obs-studio/logs"));
+#endif
+    const QFileInfoList files = logs.entryInfoList(
+        QStringList() << "*.txt",
+        QDir::Files,
+        QDir::Time);
+    return files.isEmpty() ? QString{} : files.first().absoluteFilePath();
+}
+
+static QString assignment_id(const ZoomOutputInfo &output)
+{
+    switch (output.assignment) {
+    case AssignmentMode::ActiveSpeaker: return QStringLiteral("active_speaker");
+    case AssignmentMode::SpotlightIndex: return QStringLiteral("spotlight");
+    case AssignmentMode::ScreenShare: return QStringLiteral("screen_share");
+    case AssignmentMode::Participant:
+    default: return QStringLiteral("participant");
+    }
+}
+
+static QString resolution_id(VideoResolution resolution)
+{
+    switch (resolution) {
+    case VideoResolution::P360: return QStringLiteral("360p");
+    case VideoResolution::P1080: return QStringLiteral("1080p");
+    case VideoResolution::P720:
+    default: return QStringLiteral("720p");
+    }
+}
+
+static QJsonObject output_json(const ZoomOutputInfo &output)
+{
+    QJsonObject obj;
+    obj["source_uuid"] = QString::fromStdString(output.source_uuid);
+    obj["source_name"] = QString::fromStdString(output.source_name);
+    obj["display_name"] = output.display_name.empty()
+        ? QString::fromStdString(output.source_name)
+        : QString::fromStdString(output.display_name);
+    obj["assignment"] = assignment_id(output);
+    obj["participant_id"] = static_cast<double>(output.participant_id);
+    obj["spotlight_slot"] = static_cast<double>(output.spotlight_slot);
+    obj["failover_participant_id"] =
+        static_cast<double>(output.failover_participant_id);
+    obj["requested_resolution"] = resolution_id(output.video_resolution);
+    obj["requested_width"] = static_cast<double>(
+        video_resolution_width(output.video_resolution));
+    obj["requested_height"] = static_cast<double>(
+        video_resolution_height(output.video_resolution));
+    obj["observed_width"] = static_cast<double>(output.observed_width);
+    obj["observed_height"] = static_cast<double>(output.observed_height);
+    obj["observed_fps"] = output.observed_fps;
+    obj["last_frame_age_ms"] = static_cast<double>(output.last_frame_age_ms);
+    obj["video_stale"] = output.video_stale;
+    obj["health_reason"] = output_health_reason_id(output.health_reason);
+    obj["health_label"] = output_health_reason_label(output.health_reason);
+    obj["duplicate_participant_assignment"] =
+        output.duplicate_participant_assignment;
+    obj["stale_recovery_attempts"] =
+        static_cast<double>(output.stale_recovery_attempts);
+    obj["stale_recovery_cooldown_ms"] =
+        static_cast<double>(output.stale_recovery_cooldown_ms);
+    obj["quality_upgrade_attempts"] =
+        static_cast<double>(output.quality_upgrade_attempts);
+    obj["quality_upgrade_cooldown_ms"] =
+        static_cast<double>(output.quality_upgrade_cooldown_ms);
+    obj["subscribed_age_ms"] = static_cast<double>(output.subscribed_age_ms);
+    obj["audio_mode"] = output.audio_mode == AudioChannelMode::Stereo
+        ? QStringLiteral("stereo")
+        : QStringLiteral("mono");
+    obj["isolate_audio"] = output.isolate_audio;
+    obj["audience_audio"] = output.audience_audio;
+    return obj;
+}
+
+static QJsonObject participant_json(const ParticipantInfo &participant)
+{
+    QJsonObject obj;
+    obj["id"] = static_cast<double>(participant.user_id);
+    obj["name"] = QString::fromStdString(participant.display_name);
+    obj["has_video"] = participant.has_video;
+    obj["is_talking"] = participant.is_talking;
+    obj["is_muted"] = participant.is_muted;
+    obj["is_host"] = participant.is_host;
+    obj["is_co_host"] = participant.is_co_host;
+    obj["raised_hand"] = participant.raised_hand;
+    obj["spotlight_index"] = static_cast<double>(participant.spotlight_index);
+    obj["is_sharing_screen"] = participant.is_sharing_screen;
+    return obj;
+}
+
+static QJsonObject event_json(const ZoomEngineClient::DebugEvent &event)
+{
+    QJsonObject obj;
+    obj["timestamp_ms"] = static_cast<double>(event.timestamp_ms);
+    obj["stage"] = QString::fromStdString(event.stage);
+    obj["source_uuid"] = QString::fromStdString(event.source_uuid);
+    obj["participant_id"] = static_cast<double>(event.participant_id);
+    obj["message"] = QString::fromStdString(event.message);
+    return obj;
+}
+
+static bool write_text_file(const QString &path, const QString &text)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return false;
+    QTextStream stream(&file);
+    stream << text;
+    return true;
 }
 
 ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
@@ -149,7 +283,11 @@ ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     auto *refresh_button = buttons->addButton("Refresh", QDialogButtonBox::ActionRole);
+    auto *export_button = buttons->addButton("Export Diagnostics",
+                                             QDialogButtonBox::ActionRole);
     connect(refresh_button, &QPushButton::clicked, this, [this]() { refresh(); });
+    connect(export_button, &QPushButton::clicked, this,
+            [this]() { export_diagnostics(); });
     connect(buttons, &QDialogButtonBox::rejected, this, &QWidget::hide);
 
     auto *layout = new QVBoxLayout(this);
@@ -212,9 +350,11 @@ void ZoomDiagnosticsDialog::refresh()
             ? QStringLiteral("-") : QString("%1 ms").arg(output.last_frame_age_ms)));
         m_outputs->setItem(row, DiagRetries, readonly_item(retry_text(output)));
         auto *state_item = readonly_item(signal_state_text(output));
-        if (output.video_stale)
+        if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
+            state_item->setForeground(QColor(255, 107, 107));
+        else if (output.health_reason == ZoomOutputHealthReason::StaleFrame)
             state_item->setForeground(Qt::red);
-        else if (output_signal_below_requested(output))
+        else if (output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution)
             state_item->setForeground(QColor(240, 180, 41));
         m_outputs->setItem(row, DiagState, state_item);
     }
@@ -237,4 +377,145 @@ void ZoomDiagnosticsDialog::refresh()
         message->setToolTip(QString::fromStdString(event.message));
         m_events->setItem(row, EventMessage, message);
     }
+}
+
+void ZoomDiagnosticsDialog::export_diagnostics()
+{
+    const auto outputs = ZoomOutputManager::instance().outputs();
+    const auto roster = ZoomEngineClient::instance().roster();
+    const auto events = ZoomEngineClient::instance().recent_debug_events();
+    const QDateTime now = QDateTime::currentDateTime();
+    const QString stamp = now.toString("yyyyMMdd-HHmmss");
+    QDir root(diagnostics_root_dir());
+    if (!root.exists() && !root.mkpath(".")) {
+        QMessageBox::warning(this, "Export Diagnostics",
+            QString("Could not create diagnostics folder:\n%1")
+                .arg(root.absolutePath()));
+        return;
+    }
+
+    const QString bundle_path = root.absoluteFilePath("CoreVideo-" + stamp);
+    QDir bundle(bundle_path);
+    if (!bundle.exists() && !root.mkpath("CoreVideo-" + stamp)) {
+        QMessageBox::warning(this, "Export Diagnostics",
+            QString("Could not create diagnostics bundle:\n%1")
+                .arg(bundle_path));
+        return;
+    }
+
+    QJsonArray output_array;
+    for (const auto &output : outputs)
+        output_array.append(output_json(output));
+
+    QJsonArray roster_array;
+    for (const auto &participant : roster)
+        roster_array.append(participant_json(participant));
+
+    QJsonArray event_array;
+    for (const auto &event : events)
+        event_array.append(event_json(event));
+
+    const QString obs_log = latest_obs_log_path();
+    const QString copied_log_name = obs_log.isEmpty()
+        ? QString{}
+        : QStringLiteral("obs-latest.log");
+    if (!obs_log.isEmpty())
+        QFile::copy(obs_log, bundle.absoluteFilePath(copied_log_name));
+
+    QJsonObject summary;
+    summary["created_at"] = now.toString(Qt::ISODate);
+    summary["plugin_version"] = OBS_ZOOM_PLUGIN_VERSION;
+    summary["meeting_state"] = state_text(ZoomEngineClient::instance().state());
+    summary["media_active"] = ZoomEngineClient::instance().is_media_active();
+    summary["authenticated"] = ZoomEngineClient::instance().is_authenticated();
+    summary["active_speaker_id"] =
+        static_cast<double>(ZoomEngineClient::instance().active_speaker_id());
+    summary["raw_active_speaker_id"] =
+        static_cast<double>(ZoomEngineClient::instance().raw_active_speaker_id());
+    summary["last_error"] =
+        QString::fromStdString(ZoomEngineClient::instance().last_error());
+    summary["obs_log_source"] = obs_log;
+    summary["obs_log_copy"] = copied_log_name;
+    summary["outputs"] = output_array;
+    summary["participants"] = roster_array;
+    summary["recent_engine_events"] = event_array;
+
+    QFile json_file(bundle.absoluteFilePath("summary.json"));
+    if (!json_file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        QMessageBox::warning(this, "Export Diagnostics",
+            QString("Could not write summary.json in:\n%1")
+                .arg(bundle.absolutePath()));
+        return;
+    }
+    json_file.write(QJsonDocument(summary).toJson(QJsonDocument::Indented));
+    json_file.close();
+
+    QString text;
+    QTextStream out(&text);
+    out << "CoreVideo Diagnostics\n";
+    out << "Created: " << now.toString(Qt::ISODate) << "\n";
+    out << "Plugin version: " << OBS_ZOOM_PLUGIN_VERSION << "\n";
+    out << "Meeting: " << state_text(ZoomEngineClient::instance().state()) << "\n";
+    out << "Media: "
+        << (ZoomEngineClient::instance().is_media_active() ? "active" : "inactive")
+        << "\n";
+    out << "Authenticated: "
+        << (ZoomEngineClient::instance().is_authenticated() ? "yes" : "no")
+        << "\n";
+    out << "Active speaker: " << ZoomEngineClient::instance().active_speaker_id()
+        << "\n";
+    out << "Raw active speaker: "
+        << ZoomEngineClient::instance().raw_active_speaker_id() << "\n";
+    out << "Last error: "
+        << QString::fromStdString(ZoomEngineClient::instance().last_error())
+        << "\n";
+    out << "OBS log: " << (obs_log.isEmpty() ? QStringLiteral("not found") : obs_log)
+        << "\n\n";
+
+    out << "Outputs\n";
+    for (const auto &output : outputs) {
+        out << "- " << (output.display_name.empty()
+                ? QString::fromStdString(output.source_name)
+                : QString::fromStdString(output.display_name))
+            << " | " << assignment_text(output)
+            << " | participant " << output.participant_id
+            << " | requested " << resolution_text(output.video_resolution)
+            << " | observed " << observed_text(output)
+            << " | fps " << QString::number(output.observed_fps, 'f', 1)
+            << " | " << output_health_reason_label(output.health_reason)
+            << "\n";
+    }
+
+    out << "\nParticipants\n";
+    for (const auto &participant : roster) {
+        out << "- " << QString::fromStdString(participant.display_name)
+            << " (" << participant.user_id << ")"
+            << " video=" << (participant.has_video ? "on" : "off")
+            << " audio=" << (participant.is_muted ? "muted" : "open")
+            << " talking=" << (participant.is_talking ? "yes" : "no")
+            << " sharing=" << (participant.is_sharing_screen ? "yes" : "no")
+            << "\n";
+    }
+
+    out << "\nRecent Engine Events\n";
+    const int start = std::max<int>(0, static_cast<int>(events.size()) - 50);
+    for (int i = start; i < static_cast<int>(events.size()); ++i) {
+        const auto &event = events[i];
+        out << "- " << event.timestamp_ms
+            << " " << QString::fromStdString(event.stage)
+            << " source=" << QString::fromStdString(event.source_uuid)
+            << " participant=" << event.participant_id
+            << " " << QString::fromStdString(event.message)
+            << "\n";
+    }
+
+    if (!write_text_file(bundle.absoluteFilePath("summary.txt"), text)) {
+        QMessageBox::warning(this, "Export Diagnostics",
+            QString("Could not write summary.txt in:\n%1")
+                .arg(bundle.absolutePath()));
+        return;
+    }
+
+    QMessageBox::information(this, "Export Diagnostics",
+        QString("Diagnostics exported to:\n%1").arg(bundle.absolutePath()));
 }

@@ -1,0 +1,104 @@
+#include "zoom-output-health.h"
+
+#include <iostream>
+#include <vector>
+
+static int fail(const char *message)
+{
+    std::cerr << message << "\n";
+    return 1;
+}
+
+static ParticipantInfo participant(uint32_t id, bool has_video = true)
+{
+    ParticipantInfo p;
+    p.user_id = id;
+    p.has_video = has_video;
+    return p;
+}
+
+static ZoomOutputInfo output(uint32_t participant_id = 1)
+{
+    ZoomOutputInfo o;
+    o.assignment = AssignmentMode::Participant;
+    o.participant_id = participant_id;
+    o.video_resolution = VideoResolution::P1080;
+    o.observed_width = 1920;
+    o.observed_height = 1080;
+    return o;
+}
+
+static bool expect_reason(const char *name,
+                          ZoomOutputInfo output_info,
+                          std::vector<ParticipantInfo> roster,
+                          bool raw_media_active,
+                          ZoomOutputHealthReason expected)
+{
+    std::vector<ZoomOutputInfo> outputs = {output_info};
+    apply_output_health(outputs, roster, raw_media_active);
+    if (outputs[0].health_reason != expected) {
+        std::cerr << name << ": expected "
+                  << output_health_reason_id(expected) << ", got "
+                  << output_health_reason_id(outputs[0].health_reason) << "\n";
+        return false;
+    }
+    return true;
+}
+
+int main()
+{
+    if (!expect_reason("raw media inactive", output(), {participant(1)}, false,
+                       ZoomOutputHealthReason::RawMediaNotReady))
+        return 1;
+
+    if (!expect_reason("participant missing", output(99), {participant(1)}, true,
+                       ZoomOutputHealthReason::ParticipantMissing))
+        return 1;
+
+    if (!expect_reason("participant video off", output(1), {participant(1, false)}, true,
+                       ZoomOutputHealthReason::ParticipantVideoOff))
+        return 1;
+
+    ZoomOutputInfo share;
+    share.assignment = AssignmentMode::ScreenShare;
+    share.observed_width = 1920;
+    share.observed_height = 1080;
+    if (!expect_reason("screen share unavailable", share, {participant(1)}, true,
+                       ZoomOutputHealthReason::ScreenShareUnavailable))
+        return 1;
+
+    ZoomOutputInfo waiting = output();
+    waiting.observed_width = 0;
+    waiting.observed_height = 0;
+    if (!expect_reason("waiting for first frame", waiting, {participant(1)}, true,
+                       ZoomOutputHealthReason::WaitingForFirstFrame))
+        return 1;
+
+    ZoomOutputInfo stale = output();
+    stale.video_stale = true;
+    if (!expect_reason("stale frame", stale, {participant(1)}, true,
+                       ZoomOutputHealthReason::StaleFrame))
+        return 1;
+
+    ZoomOutputInfo low = output();
+    low.observed_width = 640;
+    low.observed_height = 360;
+    if (!expect_reason("lower resolution", low, {participant(1)}, true,
+                       ZoomOutputHealthReason::ZoomDeliveredLowerResolution))
+        return 1;
+
+    if (!expect_reason("ok", output(), {participant(1)}, true,
+                       ZoomOutputHealthReason::Ok))
+        return 1;
+
+    std::vector<ZoomOutputInfo> duplicates = {output(7), output(7)};
+    apply_output_health(duplicates, {participant(7)}, true);
+    if (duplicates[0].health_reason != ZoomOutputHealthReason::DuplicateAssignment ||
+        duplicates[1].health_reason != ZoomOutputHealthReason::DuplicateAssignment ||
+        !duplicates[0].duplicate_participant_assignment ||
+        !duplicates[1].duplicate_participant_assignment) {
+        return fail("duplicate assignment was not detected on both outputs");
+    }
+
+    return 0;
+}

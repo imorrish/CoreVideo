@@ -43,6 +43,7 @@
 #include <QSpinBox>
 #include <QTableWidget>
 #include <QTimer>
+#include <QVariant>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <obs-frontend-api.h>
@@ -239,8 +240,31 @@ static QString participant_roster_label(const ParticipantInfo &p)
     return QString("%1  -  %2").arg(label, tags.join(" / "));
 }
 
+static QString screen_share_assignment_label(const std::vector<ParticipantInfo> &roster)
+{
+    for (const auto &p : roster) {
+        if (!p.is_sharing_screen)
+            continue;
+        const QString name = p.display_name.empty()
+            ? QString("ID %1").arg(p.user_id)
+            : QString::fromStdString(p.display_name);
+        return QString("Screen share - %1").arg(name);
+    }
+    return QStringLiteral("Screen share - unavailable");
+}
+
 static QString signal_label(const ZoomOutputInfo &output)
 {
+    if (output.health_reason == ZoomOutputHealthReason::RawMediaNotReady)
+        return QStringLiteral("Raw media\nnot ready");
+    if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
+        return QStringLiteral("! Duplicate\nassignment");
+    if (output.health_reason == ZoomOutputHealthReason::ParticipantMissing)
+        return QStringLiteral("Participant\nmissing");
+    if (output.health_reason == ZoomOutputHealthReason::ParticipantVideoOff)
+        return QStringLiteral("Video off");
+    if (output.health_reason == ZoomOutputHealthReason::ScreenShareUnavailable)
+        return QStringLiteral("No screen\nshare");
     if (output.observed_width == 0 || output.observed_height == 0)
         return QStringLiteral("Waiting");
     if (output.video_stale)
@@ -265,6 +289,16 @@ static QString signal_label(const ZoomOutputInfo &output)
 
 static QString signal_tooltip(const ZoomOutputInfo &output)
 {
+    if (output.health_reason == ZoomOutputHealthReason::RawMediaNotReady)
+        return QStringLiteral("Zoom raw media is not active yet. Start the engine before expecting participant video or audio frames.");
+    if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
+        return QStringLiteral("This participant is assigned to more than one fixed output. CoreVideo will allow it, but duplicate fixed assignments waste subscriptions and can make quality negotiation less stable.");
+    if (output.health_reason == ZoomOutputHealthReason::ParticipantMissing)
+        return QStringLiteral("The assigned participant is not currently present in the Zoom roster.");
+    if (output.health_reason == ZoomOutputHealthReason::ParticipantVideoOff)
+        return QStringLiteral("The assigned participant is present, but Zoom reports their video is off.");
+    if (output.health_reason == ZoomOutputHealthReason::ScreenShareUnavailable)
+        return QStringLiteral("This output is assigned to screen share, but no participant is currently sharing.");
     if (output.observed_width == 0 || output.observed_height == 0)
         return output.subscribed_age_ms > 0
             ? QString("No video frame has been received for this output yet. CoreVideo has been waiting %1 ms and will retry automatically if the feed does not arrive.")
@@ -380,12 +414,41 @@ ZoomDock::ZoomDock(QWidget *parent)
         static_cast<int>(initial_settings.speaker_hold_ms));
     m_speaker_hold_spin->setToolTip(
         "Minimum time to hold the current speaker before switching away.");
+    m_speaker_preset_combo = new QComboBox(speaker_group);
+    m_speaker_preset_combo->addItem("Custom", QVariantMap{});
+    m_speaker_preset_combo->addItem("Responsive", QVariantMap{
+        {"sensitivity", 250}, {"hold", 1200}
+    });
+    m_speaker_preset_combo->addItem("Balanced", QVariantMap{
+        {"sensitivity", 500}, {"hold", 2000}
+    });
+    m_speaker_preset_combo->addItem("Stable Panel", QVariantMap{
+        {"sensitivity", 900}, {"hold", 3500}
+    });
+    m_speaker_preset_combo->setToolTip(
+        "Presets for automatic active speaker switching behavior.");
+    speaker_controls->addWidget(new QLabel("Preset", speaker_group));
+    speaker_controls->addWidget(m_speaker_preset_combo);
     speaker_controls->addWidget(new QLabel("Sensitivity", speaker_group));
     speaker_controls->addWidget(m_speaker_sensitivity_spin);
     speaker_controls->addWidget(new QLabel("Hold", speaker_group));
     speaker_controls->addWidget(m_speaker_hold_spin);
     speaker_controls->addStretch(1);
     speaker_layout->addLayout(speaker_controls);
+    connect(m_speaker_preset_combo, qOverload<int>(&QComboBox::currentIndexChanged),
+            this, [this](int index) {
+                if (index <= 0 || !m_speaker_preset_combo ||
+                    !m_speaker_sensitivity_spin || !m_speaker_hold_spin)
+                    return;
+                const QVariantMap preset =
+                    m_speaker_preset_combo->itemData(index).toMap();
+                const int sensitivity = preset.value("sensitivity").toInt();
+                const int hold = preset.value("hold").toInt();
+                if (sensitivity <= 0 || hold <= 0)
+                    return;
+                m_speaker_sensitivity_spin->setValue(sensitivity);
+                m_speaker_hold_spin->setValue(hold);
+            });
     connect(m_speaker_sensitivity_spin, qOverload<int>(&QSpinBox::valueChanged),
             this, [this](int value) {
                 if (!m_alive->load(std::memory_order_acquire))
@@ -562,19 +625,15 @@ ZoomDock::ZoomDock(QWidget *parent)
     engine_layout->setSpacing(6);
     m_start_engine_btn = new QPushButton("Start Engine", engine_group);
     m_stop_engine_btn = new QPushButton("Stop Engine", engine_group);
-    m_launch_sidecar_btn = new QPushButton("Launch Sidecar", engine_group);
     m_start_engine_btn->setProperty("role", "primary");
     m_stop_engine_btn->setProperty("role", "danger");
     m_start_engine_btn->setToolTip(
         "Start Zoom raw media capture and send participant video/audio to OBS outputs.");
     m_stop_engine_btn->setToolTip(
         "Stop Zoom raw media capture while staying joined to the meeting.");
-    m_launch_sidecar_btn->setToolTip(
-        "Open the CoreVideo Sidecar production console and connect it to OBS.");
     m_stop_engine_btn->setEnabled(false);
     engine_layout->addWidget(m_start_engine_btn);
     engine_layout->addWidget(m_stop_engine_btn);
-    engine_layout->addWidget(m_launch_sidecar_btn);
     vLayout->addWidget(engine_group);
 
     auto *routing_group = new QGroupBox("Routing", this);
@@ -609,8 +668,6 @@ ZoomDock::ZoomDock(QWidget *parent)
             this, [this]() { on_start_engine_clicked(); });
     connect(m_stop_engine_btn, &QPushButton::clicked,
             this, [this]() { on_stop_engine_clicked(); });
-    connect(m_launch_sidecar_btn, &QPushButton::clicked,
-            this, [this]() { on_launch_sidecar_clicked(); });
     m_pending_oauth_join_timer = new QTimer(this);
     m_pending_oauth_join_timer->setInterval(500);
     connect(m_pending_oauth_join_timer, &QTimer::timeout, this, [this]() {
@@ -1052,7 +1109,7 @@ void ZoomDock::refresh_outputs()
         for (int slot = 1; slot <= 4; ++slot)
             assignment->addItem(QString("Spotlight %1").arg(slot),
                                 QString("spotlight:%1").arg(slot));
-        assignment->addItem("Screen share", "screenshare");
+        assignment->addItem(screen_share_assignment_label(roster), "screenshare");
 
         // Apply the filter from the search box, but always keep the currently
         // selected item visible (otherwise the user would lose context).
@@ -1106,7 +1163,9 @@ void ZoomDock::refresh_outputs()
         signal_item->setFlags(signal_item->flags() & ~Qt::ItemIsEditable);
         signal_item->setTextAlignment(Qt::AlignCenter);
         signal_item->setToolTip(signal_tooltip(output));
-        if (output_signal_below_requested(output))
+        if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
+            signal_item->setForeground(QColor("#ff6b6b"));
+        else if (output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution)
             signal_item->setForeground(QColor("#f0b429"));
         m_output_table->setItem(row, DColSignal, signal_item);
 
@@ -1163,9 +1222,11 @@ void ZoomDock::refresh_output_signal_cells()
 
         signal_item->setText(signal_label(it->second));
         signal_item->setToolTip(signal_tooltip(it->second));
-        signal_item->setForeground(output_signal_below_requested(it->second)
-            ? QColor("#f0b429")
-            : QColor());
+        signal_item->setForeground(it->second.health_reason == ZoomOutputHealthReason::DuplicateAssignment
+            ? QColor("#ff6b6b")
+            : it->second.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution
+                ? QColor("#f0b429")
+                : QColor());
     }
 }
 
@@ -1173,6 +1234,45 @@ void ZoomDock::apply_outputs()
 {
     if (!m_output_table)
         return;
+
+    std::unordered_map<uint32_t, QStringList> fixed_assignments;
+    for (int row = 0; row < m_output_table->rowCount(); ++row) {
+        auto *name_item = m_output_table->item(row, DColName);
+        auto *assignment = qobject_cast<QComboBox *>(m_output_table->cellWidget(row, DColAssignment));
+        if (!name_item || !assignment) continue;
+
+        const QString ad = assignment->currentData().toString();
+        if (!ad.startsWith("user:")) continue;
+        const uint32_t participant_id = ad.mid(5).toUInt();
+        if (participant_id == 0) continue;
+
+        const QString output_name = name_item->text().trimmed().isEmpty()
+            ? name_item->data(Qt::UserRole).toString()
+            : name_item->text();
+        fixed_assignments[participant_id] << output_name;
+    }
+
+    QStringList duplicate_lines;
+    for (const auto &entry : fixed_assignments) {
+        if (entry.second.size() > 1) {
+            duplicate_lines << QString("Participant ID %1: %2")
+                .arg(entry.first)
+                .arg(entry.second.join(", "));
+        }
+    }
+    if (!duplicate_lines.isEmpty()) {
+        const auto choice = QMessageBox::warning(
+            this, "Duplicate Participant Assignment",
+            "One or more participants are assigned to multiple fixed outputs.\n\n"
+            "This can waste Zoom subscriptions and make video quality negotiation less stable.\n\n"
+            + duplicate_lines.join("\n") +
+            "\n\nApply anyway?",
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (choice != QMessageBox::Yes)
+            return;
+    }
+
     for (int row = 0; row < m_output_table->rowCount(); ++row) {
         auto *name_item  = m_output_table->item(row, DColName);
         auto *assignment = qobject_cast<QComboBox *>(m_output_table->cellWidget(row, DColAssignment));

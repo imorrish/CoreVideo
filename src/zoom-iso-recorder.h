@@ -76,6 +76,8 @@ private:
         uint32_t video_frames = 0;
         uint32_t audio_chunks = 0;
         uint64_t started_ns = 0;
+        uint64_t last_video_ns = 0;
+        uint64_t last_audio_ns = 0;
         QString base_path;
         QString video_path;
         QString audio_path;

@@ -257,6 +257,9 @@ static QJsonObject output_to_json(const ZoomOutputInfo &o)
     obj["quality_upgrade_cooldown_ms"] =
         static_cast<double>(o.quality_upgrade_cooldown_ms);
     obj["subscribed_age_ms"] = static_cast<double>(o.subscribed_age_ms);
+    obj["duplicate_participant_assignment"] = o.duplicate_participant_assignment;
+    obj["health_reason"] = output_health_reason_id(o.health_reason);
+    obj["health_label"] = output_health_reason_label(o.health_reason);
     obj["signal_below_requested"] = output_signal_below_requested(o);
     obj["signal_missing_or_stale"] = output_signal_missing_or_stale(o);
     return obj;

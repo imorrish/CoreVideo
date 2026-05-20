@@ -12,6 +12,7 @@ public:
 
 private:
     void refresh();
+    void export_diagnostics();
 
     QLabel *m_summary = nullptr;
     QTableWidget *m_outputs = nullptr;

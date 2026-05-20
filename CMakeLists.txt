@@ -362,6 +362,17 @@ if(COREVIDEO_BUILD_SIDECAR)
     add_subdirectory(sidecar)
 endif()
 
+if(BUILD_TESTING)
+    add_executable(CoreVideoOutputHealthTest
+        tests/output-health-test.cpp
+    )
+    target_include_directories(CoreVideoOutputHealthTest PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
+    add_test(NAME CoreVideoOutputHealth
+             COMMAND CoreVideoOutputHealthTest)
+endif()
+
 set(CPACK_GENERATOR                 "ZIP")
 set(CPACK_PACKAGE_NAME              "CoreVideo")
 set(CPACK_PACKAGE_VENDOR            "CoreVideo")

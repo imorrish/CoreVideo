@@ -191,6 +191,24 @@ QJsonArray ZoomIsoRecorder::status_json() const
         obj["height"] = static_cast<int>(s.height);
         obj["video_frames"] = static_cast<int>(s.video_frames);
         obj["audio_chunks"] = static_cast<int>(s.audio_chunks);
+        const uint64_t now_ns = os_gettime_ns();
+        obj["elapsed_ms"] = s.started_ns > 0 && now_ns >= s.started_ns
+            ? static_cast<double>((now_ns - s.started_ns) / 1000000ULL)
+            : 0.0;
+        obj["last_video_age_ms"] = s.last_video_ns > 0 && now_ns >= s.last_video_ns
+            ? static_cast<double>((now_ns - s.last_video_ns) / 1000000ULL)
+            : -1.0;
+        obj["last_audio_age_ms"] = s.last_audio_ns > 0 && now_ns >= s.last_audio_ns
+            ? static_cast<double>((now_ns - s.last_audio_ns) / 1000000ULL)
+            : -1.0;
+        obj["ffmpeg_running"] =
+            s.ffmpeg && s.ffmpeg->state() == QProcess::Running;
+        obj["video_bytes"] = QFileInfo(s.video_path).exists()
+            ? static_cast<double>(QFileInfo(s.video_path).size())
+            : 0.0;
+        obj["audio_bytes"] = QFileInfo(s.audio_path).exists()
+            ? static_cast<double>(QFileInfo(s.audio_path).size())
+            : 0.0;
         obj["video_path"] = s.video_path;
         obj["audio_path"] = s.audio_path;
         arr.append(obj);
@@ -361,6 +379,7 @@ void ZoomIsoRecorder::record_video_frame(const ZoomOutputInfo &info,
         session.ffmpeg->write(reinterpret_cast<const char *>(v + row * stride_uv),
                               width / 2);
     ++session.video_frames;
+    session.last_video_ns = timestamp_ns;
 }
 
 void ZoomIsoRecorder::record_audio_frame(const ZoomOutputInfo &info,
@@ -391,5 +410,6 @@ void ZoomIsoRecorder::record_audio_frame(const ZoomOutputInfo &info,
         session.wav.channels == std::max<uint16_t>(channels, 1)) {
         session.wav.write(pcm, byte_len);
         ++session.audio_chunks;
+        session.last_audio_ns = timestamp_ns;
     }
 }

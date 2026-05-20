@@ -52,8 +52,15 @@ static constexpr uint64_t kPreviewIntervalNs = 200'000'000ULL;
 static constexpr uint64_t kStaleVideoNs = 3'000'000'000ULL;
 static constexpr uint64_t kNoSignalRecoverNs = 5'000'000'000ULL;
 static constexpr uint64_t kStaleRecoverCooldownNs = 10'000'000'000ULL;
-static constexpr uint64_t kQualityUpgradeStableNs = 10'000'000'000ULL;
-static constexpr uint64_t kQualityUpgradeCooldownNs = 30'000'000'000ULL;
+static constexpr uint64_t kQualityUpgradeStableNs = 20'000'000'000ULL;
+static constexpr uint64_t kQualityUpgradeBaseCooldownNs = 60'000'000'000ULL;
+static constexpr uint32_t kMaxAutomaticQualityUpgradeAttempts = 4;
+
+static uint64_t quality_upgrade_cooldown_ns(uint32_t completed_attempts)
+{
+    const uint32_t shift = std::min<uint32_t>(completed_attempts, 3);
+    return kQualityUpgradeBaseCooldownNs << shift;
+}
 
 static AudioChannelMode audio_mode_from_data(obs_data_t *s)
 {
@@ -561,9 +568,11 @@ ZoomOutputInfo ZoomSource::output_info() const
         if (last_upgrade_ns != 0) {
             const uint64_t upgrade_age_ns =
                 now_ns > last_upgrade_ns ? now_ns - last_upgrade_ns : 0;
-            if (upgrade_age_ns < kQualityUpgradeCooldownNs) {
+            const uint64_t cooldown_ns = quality_upgrade_cooldown_ns(
+                m_quality_upgrade_attempts.load(std::memory_order_relaxed));
+            if (upgrade_age_ns < cooldown_ns) {
                 info.quality_upgrade_cooldown_ms =
-                    (kQualityUpgradeCooldownNs - upgrade_age_ns) / 1'000'000ULL;
+                    (cooldown_ns - upgrade_age_ns) / 1'000'000ULL;
             }
         }
     }
@@ -836,8 +845,12 @@ bool ZoomSource::upgrade_low_quality_video(uint64_t now_ns, bool force)
 
     const uint64_t last_upgrade_ns =
         m_last_quality_upgrade_ns.load(std::memory_order_acquire);
+    const uint32_t completed_attempts =
+        m_quality_upgrade_attempts.load(std::memory_order_acquire);
+    if (!force && completed_attempts >= kMaxAutomaticQualityUpgradeAttempts)
+        return false;
     if (!force && last_upgrade_ns != 0 &&
-        now_ns - last_upgrade_ns < kQualityUpgradeCooldownNs)
+        now_ns - last_upgrade_ns < quality_upgrade_cooldown_ns(completed_attempts))
         return false;
 
     uint64_t expected = last_upgrade_ns;
@@ -850,9 +863,9 @@ bool ZoomSource::upgrade_low_quality_video(uint64_t now_ns, bool force)
     const uint32_t attempt =
         m_quality_upgrade_attempts.fetch_add(1, std::memory_order_relaxed) + 1;
     blog(LOG_INFO,
-         "[obs-zoom-plugin] Retrying Zoom video quality upgrade: source=%s uuid=%s observed=%ux%u requested=%ux%u attempt=%u",
+         "[obs-zoom-plugin] Retrying Zoom video quality upgrade: source=%s uuid=%s observed=%ux%u requested=%ux%u attempt=%u automatic=%s",
          output_name().c_str(), source_uuid.c_str(), observed_w, observed_h,
-         requested_w, requested_h, attempt);
+         requested_w, requested_h, attempt, force ? "false" : "true");
     subscribe();
     return true;
 }

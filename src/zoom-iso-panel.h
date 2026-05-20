@@ -34,6 +34,7 @@ private:
     QPushButton *m_test_btn = nullptr;
     QPushButton *m_open_folder_btn = nullptr;
     QLabel *m_status = nullptr;
+    QLabel *m_disk_status = nullptr;
     QLabel *m_error = nullptr;
     QTableWidget *m_sessions = nullptr;
     QTimer *m_refresh_timer = nullptr;
