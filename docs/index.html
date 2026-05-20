@@ -255,7 +255,7 @@
       <div class="card"><div class="card-icon">🎯</div><h4>Spotlight / ZoomISO Modes</h4>
         <p>Assign a source to Spotlight slot 1…N — exactly like ZoomISO. Engine resolves which participant owns each slot.</p></div>
       <div class="card"><div class="card-icon">🔄</div><h4>Active Speaker Mode</h4>
-        <p>Sensitivity (ms) + hold-time (ms) debounce with liveness guard, supersede logic, and failover participant.</p></div>
+        <p>Responsive, Balanced, and Stable Panel presets with sensitivity, hold-time, manual supersede, exclusions, and clean cuts.</p></div>
       <div class="card"><div class="card-icon">🔁</div><h4>Failover Participant</h4>
         <p>Configure a secondary participant ID that activates automatically when the primary leaves the meeting.</p></div>
       <div class="card"><div class="card-icon">🔌</div><h4>Auto-Reconnect</h4>
@@ -269,9 +269,9 @@
       <div class="card"><div class="card-icon">🎛️</div><h4>Control Dock</h4>
         <p>Dockable Qt panel with join/leave, state indicator, Active Speaker Director controls, recovery countdown, and Output Manager launch.</p></div>
       <div class="card"><div class="card-icon">DIAG</div><h4>Diagnostics</h4>
-        <p>The dockable Zoom Diagnostics panel shows requested versus observed resolution, FPS, frame age, retry counters, and recent engine debug events.</p></div>
+        <p>The dockable Zoom Diagnostics panel shows output health, requested versus observed resolution, FPS, retry counters, recent engine events, and support snapshot export.</p></div>
       <div class="card"><div class="card-icon">OUT</div><h4>Dockable Output Manager</h4>
-        <p>Zoom Output Manager is now a persistent OBS dock for source assignments, live preview thumbnails, feed health, profile save/load, and manual recovery actions.</p></div>
+        <p>Zoom Output Manager is a persistent OBS dock for source assignments, live preview thumbnails, duplicate warnings, feed health, profiles, and recovery actions.</p></div>
       <div class="card"><div class="card-icon">🌐</div><h4>TCP Control API</h4>
         <p>JSON server on port 19870 — query, join, leave, assign outputs from scripts or dashboards.</p></div>
       <div class="card"><div class="card-icon">🎛️</div><h4>OSC Control API</h4>
@@ -287,7 +287,7 @@
       <div class="card"><div class="card-icon">🎨</div><h4>Modern UI</h4>
         <p>CoreVideo dark stylesheet with animated <code>CvStatusDot</code>, <code>CvBanner</code> first-run notices, and button role variants (primary / danger).</p></div>
       <div class="card"><div class="card-icon">ISO</div><h4>Auto ISO Recording</h4>
-        <p>Record assigned participant video/audio tracks to separate files while optionally recording the main OBS program output.</p></div>
+        <p>Record assigned participant video/audio tracks to separate files with FFmpeg status, disk free space, file sizes, and optional OBS program recording.</p></div>
       <div class="card"><div class="card-icon">💻</div><h4>Multi-Platform</h4>
         <p>Windows (x64/arm64), macOS (universal arm64+x86_64), Linux. SDK 5.17.x and 7.x header layouts supported.</p></div>
     </div>
@@ -901,7 +901,7 @@ sequenceDiagram
 
     <div class="callout info">
       <div class="callout-title">Full setup guide</div>
-      See <a href="ZOOM_MARKETPLACE_OAUTH.md"><code>docs/ZOOM_MARKETPLACE_OAUTH.md</code></a> for the
+      See <a href="/oauth/"><code>docs/ZOOM_MARKETPLACE_OAUTH.md</code></a> for the
       complete Zoom Marketplace app configuration, local setup walkthrough, and Marketplace review checklist.
     </div>
   </section>
@@ -1139,6 +1139,14 @@ sequenceDiagram
       The Zoom Control dock exposes these values through the Active Speaker
       Director controls. Operators can also manually take a participant to air
       and release that supersede when automatic direction should resume.
+    </p>
+    <p>
+      The dock includes <strong>Responsive</strong>, <strong>Balanced</strong>, and
+      <strong>Stable Panel</strong> presets for common switching styles. Choosing
+      <strong>Custom</strong> leaves sensitivity and hold timing under operator
+      control. The dedicated <code>CoreVideo Active Speaker</code> source also
+      exposes exclusion dropdowns so a host or question reader can be kept out
+      of the automatically directed speaker feed.
     </p>
 
     <h3>Safety Mechanisms</h3>
@@ -1449,6 +1457,17 @@ sequenceDiagram
       <div class="diagram-caption">The Output Manager mirrors the dock assignment controls and remains useful for named profile save/load workflows.</div>
     </div>
 
+    <h3>Output Health</h3>
+    <p>
+      The Zoom Control dock, Zoom Output Manager, Zoom Diagnostics dock, and
+      TCP <code>list_outputs</code> response report an explicit health reason for
+      every output. Current reasons include <code>ok</code>,
+      <code>raw_media_not_ready</code>, <code>participant_missing</code>,
+      <code>participant_video_off</code>, <code>waiting_for_first_frame</code>,
+      <code>stale_frame</code>, <code>zoom_delivered_lower_resolution</code>,
+      <code>duplicate_assignment</code>, and <code>screen_share_unavailable</code>.
+    </p>
+
     <h3>Profile JSON format</h3>
     <pre><code>[
   {
@@ -1500,7 +1519,7 @@ sequenceDiagram
     <h2>Installation</h2>
     <div class="callout info">
       <div class="callout-title">ℹ️ Pre-built releases</div>
-      Download the latest Windows package from <a href="https://github.com/iamfatness/CoreVideo/releases/tag/v0.1.15">CoreVideo v0.1.15</a>. This release includes dockable Zoom Diagnostics and Zoom Output Manager panels, the OBS plugin, ZoomObsEngine, Sidecar runtime files, and the required Zoom SDK runtime DLLs.
+      Download the latest Windows package from <a href="https://github.com/iamfatness/CoreVideo/releases/tag/v0.1.18">CoreVideo v0.1.18</a>. This release includes dockable Zoom Diagnostics, Zoom Output Manager, and Zoom ISO Recorder panels, the OBS plugin, ZoomObsEngine, Sidecar runtime files, and the required Zoom SDK runtime DLLs. The Sidecar executable is packaged for development, but the in-plugin launcher is hidden while that workflow is rebuilt.
     </div>
     <div class="steps">
       <div class="step"><div class="step-body">
@@ -1703,8 +1722,9 @@ sequenceDiagram
       a separate OBS dock. The panel lets operators choose an output folder,
       set or test the FFmpeg executable, choose whether to also control OBS
       program recording, start/stop ISO recording, and monitor active ISO
-      sessions with source, participant, resolution, frame counts, audio chunk
-      counts, and output file paths.
+      sessions with source, participant, resolution, encoder state, duration,
+      frame counts, audio chunk counts, disk-free-space status, file sizes, and
+      output file paths.
     </p>
     <p>
       The panel uses the same <code>ZoomIsoRecorder</code> backend as the TCP and

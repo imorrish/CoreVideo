@@ -92,6 +92,71 @@ export function buildFeedbacks(inst: CoreVideoInstance): CompanionFeedbackDefini
 			callback: () => inst.state.zoom.meetingState === 'recovering',
 		},
 
+		zoom_output_health: {
+			type: 'boolean',
+			name: 'Zoom: Output Health Reason',
+			description: 'True when the named OBS source has the selected output health reason',
+			defaultStyle: { bgcolor: AMBER, color: BLACK },
+			options: [
+				{ type: 'textinput', id: 'source', label: 'OBS Source Name', default: '' },
+				{
+					type: 'dropdown', id: 'health', label: 'Health', default: 'ok',
+					choices: [
+						{ id: 'ok', label: 'OK' },
+						{ id: 'raw_media_not_ready', label: 'Raw Media Not Ready' },
+						{ id: 'participant_missing', label: 'Participant Missing' },
+						{ id: 'participant_video_off', label: 'Participant Video Off' },
+						{ id: 'waiting_for_first_frame', label: 'Waiting For First Frame' },
+						{ id: 'stale_frame', label: 'Stale Frame' },
+						{ id: 'zoom_delivered_lower_resolution', label: 'Lower Resolution' },
+						{ id: 'duplicate_assignment', label: 'Duplicate Assignment' },
+						{ id: 'screen_share_unavailable', label: 'Screen Share Unavailable' },
+					],
+				},
+			],
+			callback: (fb) => {
+				const out = inst.state.zoom.outputs.find((o) => o.source === fb.options['source'])
+				return !!out && out.health_reason === fb.options['health']
+			},
+		},
+
+		zoom_output_needs_attention: {
+			type: 'boolean',
+			name: 'Zoom: Output Needs Attention',
+			description: 'True when an output is stale, missing, below requested resolution, duplicate, or otherwise not OK',
+			defaultStyle: { bgcolor: RED, color: WHITE },
+			options: [
+				{ type: 'textinput', id: 'source', label: 'OBS Source Name', default: '' },
+			],
+			callback: (fb) => {
+				const out = inst.state.zoom.outputs.find((o) => o.source === fb.options['source'])
+				return !!out && (
+					out.health_reason !== 'ok' ||
+					out.signal_below_requested === true ||
+					out.signal_missing_or_stale === true ||
+					out.duplicate_participant_assignment === true
+				)
+			},
+		},
+
+		zoom_iso_recording: {
+			type: 'boolean',
+			name: 'Zoom: ISO Recording Active',
+			description: 'True while CoreVideo ISO recording is active',
+			defaultStyle: { bgcolor: RED, color: WHITE },
+			options: [],
+			callback: () => inst.state.zoom.isoRecording.active,
+		},
+
+		zoom_speaker_manual: {
+			type: 'boolean',
+			name: 'Zoom: Active Speaker Manual Take Active',
+			description: 'True while Active Speaker Director is manually holding a participant',
+			defaultStyle: { bgcolor: AMBER, color: BLACK },
+			options: [],
+			callback: () => inst.state.zoom.speakerDirector.manual_active,
+		},
+
 		// ── OBS ─────────────────────────────────────────────────────────────────
 
 		obs_connected: {

@@ -2,7 +2,13 @@
   "name": "companion-module-corevideo-obs",
   "version": "1.0.0",
   "description": "Bitfocus Companion module for CoreVideo OBS plugin — Zoom participant routing and meeting control",
-  "keywords": ["companion-module", "obs", "zoom", "corevideo", "broadcast"],
+  "keywords": [
+    "companion-module",
+    "obs",
+    "zoom",
+    "corevideo",
+    "broadcast"
+  ],
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
@@ -21,7 +27,7 @@
     "category": "softwarecontrol"
   },
   "dependencies": {
-    "@companion-module/base": "^2.0.4",
+    "@companion-module/base": "^1.13.6",
     "ws": "^8.0.0"
   },
   "devDependencies": {
