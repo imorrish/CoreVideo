@@ -41,6 +41,16 @@ static bool valid_i420_frame(YUVRawDataI420 *data, uint32_t w, uint32_t h, size_
     return true;
 }
 
+static uint64_t target_pixels_for_resolution(uint32_t resolution)
+{
+    switch (resolution) {
+    case 0: return 640ull * 360ull;
+    case 2: return 1920ull * 1080ull;
+    case 1:
+    default: return 1280ull * 720ull;
+    }
+}
+
 ParticipantSubscription::ParticipantSubscription(uint32_t participant_id,
                                                  const std::string &initial_source_uuid,
                                                  IpcFd e2p_fd,
@@ -163,7 +173,10 @@ bool ParticipantSubscription::ensure_shm(SourceTarget &target,
                                          const std::string &source_uuid,
                                          size_t y_len)
 {
-    const size_t total = sizeof(ShmFrameHeader) + y_len + y_len / 4 + y_len / 4;
+    const uint64_t requested_pixels = target_pixels_for_resolution(m_resolution);
+    const size_t target_y_len = static_cast<size_t>(
+        std::max<uint64_t>(static_cast<uint64_t>(y_len), requested_pixels));
+    const size_t total = sizeof(ShmFrameHeader) + target_y_len + target_y_len / 4 + target_y_len / 4;
     if (total < y_len) return false;
     if (target.shm.ptr && target.shm.size >= total) return true;
 
@@ -267,6 +280,20 @@ void EngineVideo::subscribe(uint32_t participant_id,
 
     unsubscribe_locked(source_uuid);
 
+    if (!m_raw_media_active) {
+        m_source_participants[source_uuid] = {
+            participant_id,
+            resolution,
+            e2p_fd
+        };
+        EngineIpc::write(
+            R"({"cmd":"debug","stage":"video_subscribe_deferred","source_uuid":")" +
+            source_uuid + R"(","participant_id":)" +
+            std::to_string(participant_id) + R"(,"requested":)" +
+            std::to_string(resolution) + R"(,"reason":"raw_media_not_ready"})");
+        return;
+    }
+
     auto it = m_subs.find(participant_id);
     if (it != m_subs.end() && it->second) {
         if (it->second->active()) {
@@ -299,7 +326,8 @@ void EngineVideo::subscribe(uint32_t participant_id,
                 for (const auto &target : targets) {
                     m_source_participants[target.first] = {
                         participant_id,
-                        it->second->resolution()
+                        it->second->resolution(),
+                        target.second
                     };
                 }
                 EngineIpc::write(
@@ -314,7 +342,8 @@ void EngineVideo::subscribe(uint32_t participant_id,
             it->second->add_source(source_uuid, e2p_fd);
             m_source_participants[source_uuid] = {
                 participant_id,
-                it->second->resolution()
+                it->second->resolution(),
+                e2p_fd
             };
             EngineIpc::write(
                 R"({"cmd":"debug","stage":"video_source_attached_existing_subscription","source_uuid":")" +
@@ -342,7 +371,8 @@ void EngineVideo::subscribe(uint32_t participant_id,
     }
     m_source_participants[source_uuid] = {
         participant_id,
-        it->second->resolution()
+        it->second->resolution(),
+        e2p_fd
     };
     EngineIpc::write(
         R"({"cmd":"debug","stage":"video_source_bound","source_uuid":")" +
@@ -351,6 +381,17 @@ void EngineVideo::subscribe(uint32_t participant_id,
         std::to_string(resolution) + R"(,"actual":)" +
         std::to_string(it->second->resolution()) + R"(,"participant_subscriptions":)" +
         std::to_string(m_subs.size()) + R"(,"source_bindings":)" +
+        std::to_string(m_source_participants.size()) + "}");
+}
+
+void EngineVideo::set_raw_media_active(bool active)
+{
+    if (m_raw_media_active == active) return;
+    m_raw_media_active = active;
+    EngineIpc::write(
+        R"({"cmd":"debug","stage":"video_raw_media_state","active":)" +
+        std::string(active ? "true" : "false") +
+        R"(,"pending_sources":)" +
         std::to_string(m_source_participants.size()) + "}");
 }
 
@@ -377,24 +418,49 @@ void EngineVideo::unsubscribe_locked(const std::string &source_uuid)
 void EngineVideo::resubscribe_all()
 {
     std::vector<std::tuple<std::string, uint32_t, IpcFd, uint32_t>> current;
-    for (const auto &entry : m_subs) {
-        if (entry.second) {
-            const uint32_t participant_id = entry.second->participant_id();
-            const uint32_t resolution = entry.second->resolution();
-            const auto sources = entry.second->sources();
-            std::transform(sources.begin(), sources.end(),
-                           std::back_inserter(current),
-                           [participant_id, resolution](const auto &source) {
-                               return std::make_tuple(source.first,
-                                                      participant_id,
-                                                      source.second,
-                                                      resolution);
-                           });
+    for (const auto &entry : m_source_participants) {
+        if (entry.second.e2p_fd != kIpcInvalidFd) {
+            current.emplace_back(entry.first,
+                                 entry.second.participant_id,
+                                 entry.second.e2p_fd,
+                                 entry.second.resolution);
+        }
+    }
+    if (current.empty()) {
+        for (const auto &entry : m_subs) {
+            if (entry.second) {
+                const uint32_t participant_id = entry.second->participant_id();
+                const uint32_t resolution = entry.second->resolution();
+                const auto sources = entry.second->sources();
+                std::transform(sources.begin(), sources.end(),
+                               std::back_inserter(current),
+                               [participant_id, resolution](const auto &source) {
+                                   return std::make_tuple(source.first,
+                                                          participant_id,
+                                                          source.second,
+                                                          resolution);
+                               });
+            }
         }
     }
 
     m_subs.clear();
     m_source_participants.clear();
+    if (!m_raw_media_active) {
+        std::for_each(current.begin(), current.end(), [this](const auto &entry) {
+            const auto &[source_uuid, participant_id, e2p_fd, resolution] = entry;
+            m_source_participants[source_uuid] = {
+                participant_id,
+                resolution,
+                e2p_fd
+            };
+        });
+        EngineIpc::write(
+            R"({"cmd":"debug","stage":"video_resubscribe_deferred","pending_sources":)" +
+            std::to_string(m_source_participants.size()) +
+            R"(,"reason":"raw_media_not_ready"})");
+        return;
+    }
     std::for_each(current.begin(), current.end(), [this](const auto &entry) {
         const auto &[source_uuid, participant_id, e2p_fd, resolution] = entry;
         subscribe(participant_id, source_uuid, e2p_fd, resolution);

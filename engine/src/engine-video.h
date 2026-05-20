@@ -63,6 +63,7 @@ public:
                    const std::string &source_uuid,
                    IpcFd e2p_fd,
                    uint32_t resolution);
+    void set_raw_media_active(bool active);
     void unsubscribe(const std::string &source_uuid);
     void resubscribe_all();
     void unsubscribe_all();
@@ -75,6 +76,8 @@ private:
     struct SourceBinding {
         uint32_t participant_id = 0;
         uint32_t resolution = 1;
+        IpcFd e2p_fd = kIpcInvalidFd;
     };
     std::unordered_map<std::string, SourceBinding> m_source_participants;
+    bool m_raw_media_active = false;
 };

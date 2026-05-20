@@ -35,6 +35,7 @@ public:
               bool isolate_audio,
               bool audience_audio);
     bool retry_subscribe(const std::string &reason);
+    void set_raw_media_active(bool active);
     void reset_subscription(const std::string &reason);
     void remove(const std::string &source_uuid);
     void shutdown();
@@ -75,4 +76,5 @@ private:
     std::mutex  m_targets_mtx;
     std::unordered_map<std::string, std::unique_ptr<AudioTarget>> m_targets;
     bool        m_subscribed = false;
+    bool        m_raw_media_active = false;
 };

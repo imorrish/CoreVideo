@@ -35,6 +35,13 @@ bool EngineAudio::init(IpcFd e2p_fd,
         }
     }
 
+    if (!m_raw_media_active) {
+        EngineIpc::write(
+            R"({"cmd":"debug","stage":"audio_subscribe_deferred","source_uuid":")" +
+            source_uuid + R"(","reason":"raw_media_not_ready"})");
+        return true;
+    }
+
     return subscribe_if_needed(source_uuid, "audio_subscribe");
 }
 
@@ -81,6 +88,16 @@ bool EngineAudio::retry_subscribe(const std::string &reason)
         R"({"cmd":"debug","stage":"audio_retry","source_uuid":")" +
         source_uuid + R"(","reason":")" + reason + "\"}");
     return subscribe_if_needed(source_uuid, "audio_resubscribe");
+}
+
+void EngineAudio::set_raw_media_active(bool active)
+{
+    std::lock_guard<std::mutex> subscribe_lock(m_subscribe_mtx);
+    if (m_raw_media_active == active) return;
+    m_raw_media_active = active;
+    EngineIpc::write(
+        R"({"cmd":"debug","stage":"audio_raw_media_state","active":)" +
+        std::string(active ? "true" : "false") + "}");
 }
 
 void EngineAudio::reset_subscription(const std::string &reason)

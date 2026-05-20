@@ -623,8 +623,11 @@ public:
             R"({"cmd":"debug","stage":"raw_media_ready","reason":")" +
             std::string(reason ? reason : "unknown") + "\"}");
         m_raw_media_active = true;
-        if (m_video_engine)
+        if (m_video_engine) {
+            m_video_engine->set_raw_media_active(true);
             m_video_engine->resubscribe_all();
+        }
+        EngineAudio::instance().set_raw_media_active(true);
         EngineAudio::instance().retry_subscribe(reason ? reason : "raw_media_ready");
     }
 
@@ -742,8 +745,11 @@ public:
             }
         }
 #endif
-        if (m_video_engine)
+        if (m_video_engine) {
+            m_video_engine->set_raw_media_active(false);
             m_video_engine->unsubscribe_all();
+        }
+        EngineAudio::instance().set_raw_media_active(false);
         EngineAudio::instance().reset_subscription(reason ? reason : "manual_stop");
         m_raw_media_active = false;
         EngineIpc::write(
