@@ -28,6 +28,10 @@ param(
     [string]$QtRootDir,
     [Parameter()]
     [string]$ZoomSdkDir,
+    [Parameter()]
+    [switch]$DisableFfmpegHwAccel,
+    [Parameter()]
+    [string]$FfmpegRoot,
 
     [Parameter()]
     [switch]$SkipBuild,
@@ -48,6 +52,12 @@ if (-not $DistDir) { $DistDir = "dist" }
 if (-not $Generator) { $Generator = "NMake Makefiles" }
 if (-not $ZoomSdkDir) { $ZoomSdkDir = "third_party/zoom-sdk" }
 if (-not $ObsInstallPath) { $ObsInstallPath = "C:\Program Files\obs-studio" }
+if (-not $FfmpegRoot -and
+    (Test-Path -LiteralPath "C:\ffmpeg\include\libavfilter\avfilter.h") -and
+    (Test-Path -LiteralPath "C:\ffmpeg\lib\avfilter.lib") -and
+    (Test-Path -LiteralPath "C:\ffmpeg\lib\avutil.lib")) {
+    $FfmpegRoot = "C:\ffmpeg"
+}
 
 function Resolve-RepoPath {
     param([string]$Path)
@@ -134,6 +144,12 @@ try {
             "-DCMAKE_BUILD_TYPE=$Configuration",
             "-DZOOM_SDK_DIR=$ZoomSdkDir"
         )
+        if ($DisableFfmpegHwAccel) {
+            $configureArgs += "-DENABLE_FFMPEG_HW_ACCEL=OFF"
+        } elseif ($FfmpegRoot) {
+            $configureArgs += "-DENABLE_FFMPEG_HW_ACCEL=ON"
+            $configureArgs += "-DFFMPEG_ROOT=$FfmpegRoot"
+        }
         if ($CMakePrefixPath) { $configureArgs += "-DCMAKE_PREFIX_PATH=$CMakePrefixPath" }
         if ($LibObsDir) { $configureArgs += "-DLibObs_DIR=$LibObsDir" }
         if ($ObsFrontendApiDir) { $configureArgs += "-Dobs-frontend-api_DIR=$ObsFrontendApiDir" }
@@ -147,6 +163,10 @@ try {
         cmake @configureArgs
     } elseif (-not (Test-Path -LiteralPath $resolvedBuildPath)) {
         throw "Build directory does not exist: $resolvedBuildPath. Rerun with -Configure and the required CMake paths, or provide -BuildPath."
+    } elseif ($DisableFfmpegHwAccel) {
+        cmake -B $resolvedBuildPath -DENABLE_FFMPEG_HW_ACCEL=OFF
+    } elseif ($FfmpegRoot) {
+        cmake -B $resolvedBuildPath -DENABLE_FFMPEG_HW_ACCEL=ON "-DFFMPEG_ROOT=$FfmpegRoot"
     }
 
     if (-not $SkipBuild) {

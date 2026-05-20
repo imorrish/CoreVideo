@@ -138,6 +138,10 @@ For fast local releases from a machine that already has the Zoom runtime, use:
 .\scripts\release-local.ps1 -Version v0.1.6 -Upload
 ```
 
+If an FFmpeg shared development tree exists at `C:\ffmpeg`, local releases
+automatically enable hardware I420->NV12 conversion and bundle the FFmpeg DLLs
+beside the OBS plugin. Pass `-DisableFfmpegHwAccel` to force a CPU-only build.
+
 Useful options:
 
 ```powershell

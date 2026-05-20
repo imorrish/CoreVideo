@@ -42,6 +42,16 @@ option(ENABLE_FFMPEG_HW_ACCEL
     "Enable FFmpeg hardware-accelerated I420→NV12 video conversion (LGPL dynamic link required)"
     OFF)
 
+option(COREVIDEO_HW_ACCEL
+    "Alias for ENABLE_FFMPEG_HW_ACCEL; kept for documented local build commands"
+    OFF)
+
+if(COREVIDEO_HW_ACCEL AND NOT ENABLE_FFMPEG_HW_ACCEL)
+    set(ENABLE_FFMPEG_HW_ACCEL ON CACHE BOOL
+        "Enable FFmpeg hardware-accelerated I420 to NV12 video conversion (LGPL dynamic link required)"
+        FORCE)
+endif()
+
 if(ENABLE_FFMPEG_HW_ACCEL)
     # Two ways to find FFmpeg:
     #  (a) FFMPEG_ROOT pointing at a prebuilt dev tree with include/, lib/,
