@@ -57,6 +57,9 @@ if(ENABLE_FFMPEG_HW_ACCEL)
     #  (a) FFMPEG_ROOT pointing at a prebuilt dev tree with include/, lib/,
     #      bin/ — used on Windows where pkg-config isn't standard.
     #  (b) pkg-config (libavfilter / libavutil) — Linux + Homebrew on macOS.
+    if(DEFINED FFMPEG_ROOT)
+        file(TO_CMAKE_PATH "${FFMPEG_ROOT}" FFMPEG_ROOT)
+    endif()
     if(DEFINED FFMPEG_ROOT AND EXISTS "${FFMPEG_ROOT}")
         find_path(COREVIDEO_AVFILTER_INC libavfilter/avfilter.h
             HINTS "${FFMPEG_ROOT}/include" REQUIRED NO_DEFAULT_PATH)

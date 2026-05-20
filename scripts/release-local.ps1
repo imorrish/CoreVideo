@@ -58,6 +58,9 @@ if (-not $FfmpegRoot -and
     (Test-Path -LiteralPath "C:\ffmpeg\lib\avutil.lib")) {
     $FfmpegRoot = "C:\ffmpeg"
 }
+if ($FfmpegRoot) {
+    $FfmpegRoot = $FfmpegRoot.Replace('\', '/')
+}
 
 function Resolve-RepoPath {
     param([string]$Path)
