@@ -8,7 +8,6 @@
 #include <QDateTime>
 #include <QDialogButtonBox>
 #include <QDir>
-#include <QDockWidget>
 #include <QFile>
 #include <QFileInfo>
 #include <QHeaderView>
@@ -289,16 +288,7 @@ ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
     connect(refresh_button, &QPushButton::clicked, this, [this]() { refresh(); });
     connect(export_button, &QPushButton::clicked, this,
             [this]() { export_diagnostics(); });
-    connect(buttons, &QDialogButtonBox::rejected, this, [this]() {
-        QWidget *parent = this;
-        while (parent && !qobject_cast<QDockWidget *>(parent))
-            parent = parent->parentWidget();
-        if (auto *dock = qobject_cast<QDockWidget *>(parent)) {
-            dock->hide();
-            return;
-        }
-        hide();
-    });
+    connect(buttons, &QDialogButtonBox::rejected, this, &QWidget::hide);
 
     auto *layout = new QVBoxLayout(this);
     layout->addWidget(m_summary);

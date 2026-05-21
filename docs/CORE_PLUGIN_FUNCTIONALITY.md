@@ -38,10 +38,9 @@ controls, and opens the Output Manager for source assignment without leaving OBS
 
 The dedicated Zoom Output Manager is the primary assignment surface. It supports
 profile save/load workflows and exposes requested resolution, observed signal,
-frame rate, assignment mode, audio routing, duplicate assignment warnings, and
-explicit output health labels for each output. It is a persistent OBS dock, so
-operators can keep assignments, live previews, and feed health visible while
-working in normal OBS scenes.
+frame rate, assignment mode, and audio routing information for each output.
+In `v0.1.15` it is a persistent OBS dock, so operators can keep assignments,
+live previews, and feed health visible while working in normal OBS scenes.
 
 Open the **Zoom Diagnostics** dock, or use **Tools > Zoom Diagnostics** to focus it,
 during a live session to see requested versus
@@ -49,11 +48,6 @@ observed resolution, FPS, frame age, stale and quality retry counters, and the
 latest `ZoomObsEngine` debug events. This is the fastest way to see whether a
 source is waiting for frames, receiving a lower-than-requested feed, or being
 resubscribed by recovery logic.
-
-Use **Export Diagnostics** from the Diagnostics dock when you need a support
-snapshot. CoreVideo writes a timestamped folder under `Documents/CoreVideo
-Diagnostics/` with JSON and text summaries, output health, roster state,
-active-speaker state, recent engine events, and the latest OBS log when found.
 
 ![CoreVideo Zoom Participant source properties](images/corevideo-source-properties.svg)
 
@@ -90,11 +84,6 @@ different assignment mode:
 Each output reports observed resolution and frame rate through the output
 manager and TCP `list_outputs` command.
 
-The same surfaces also report a health reason. Common values are `ok`,
-`raw_media_not_ready`, `participant_missing`, `participant_video_off`,
-`waiting_for_first_frame`, `stale_frame`, `zoom_delivered_lower_resolution`,
-`duplicate_assignment`, and `screen_share_unavailable`.
-
 For a single directed speaker-follow output, add the dedicated **CoreVideo Active
 Speaker** OBS source. It follows the central Active Speaker Director and uses a
 two-slot handoff internally: the current participant remains visible while the
@@ -123,12 +112,6 @@ Timing controls:
 |---|---|---|
 | Sensitivity | 500 ms | Candidate must keep speaking this long before switching. |
 | Hold | 2000 ms | Minimum time to stay on the current directed speaker after a cut. |
-
-The dock includes **Responsive**, **Balanced**, and **Stable Panel** presets for
-common switching styles. Choosing **Custom** leaves the exact sensitivity and
-hold values under operator control. The dedicated `CoreVideo Active Speaker`
-source also exposes exclusion dropdowns so a host or question reader can be
-kept out of the automatically directed speaker feed.
 
 TCP examples:
 
@@ -184,13 +167,11 @@ dock. The panel provides:
 
 - Output folder picker.
 - FFmpeg executable field with a test button.
-- Disk-free-space status for the selected recording volume.
 - **Also start/stop OBS program recording** toggle.
 - **Start ISO Recording** and **Stop ISO Recording** buttons.
 - Live status showing idle/recording and active session count.
 - Active session table with source, participant, resolution, video frame count,
-  audio chunk count, encoder state, duration, file sizes, and the current
-  video/audio file paths.
+  audio chunk count, and the current video/audio file paths.
 
 The panel uses the same `ZoomIsoRecorder` backend as the TCP and OSC APIs. It
 persists the output folder, FFmpeg path, and program-recording toggle in OBS
@@ -248,8 +229,8 @@ List outputs:
 
 Output snapshots include requested resolution, observed resolution/FPS, stale
 state, last frame age, subscribed age for outputs still waiting on their first
-frame, health reason, duplicate assignment flag, recovery attempts, automatic
-quality-upgrade attempts, and remaining retry cooldowns.
+frame, recovery attempts, automatic quality-upgrade attempts, and remaining
+retry cooldowns.
 
 Force a retry for stale outputs:
 
@@ -356,12 +337,3 @@ Start and stop ISO recording:
 | ISO recording does not start | Confirm `ffmpeg` is on PATH or provide `ffmpeg_path`. |
 | External meeting rejected | Confirm the Meeting SDK app/client ID is approved or published for external meeting joins. |
 | Plugin cannot launch engine | Confirm `ZoomObsEngine.exe` and Zoom SDK runtime DLLs are installed under `obs-plugins/64bit/zoom-runtime`. |
-
-## Sidecar Status
-
-The Qt Sidecar binary is still packaged for development builds, but the OBS
-plugin launcher is currently hidden. The supported production workflow today is
-inside OBS: Zoom Control, Zoom Output Manager, Zoom Diagnostics, Zoom ISO
-Recorder, normal OBS scenes/sources, and the TCP/OSC APIs. Sidecar scene/look
-design remains roadmap work until it can create and control OBS scenes with
-reliable visual parity.

@@ -18,38 +18,10 @@ export interface Output {
 	assignment_mode: 'participant' | 'active_speaker' | 'spotlight' | 'screen_share'
 	spotlight_slot: number
 	isolate_audio: boolean
-	audience_audio?: boolean
 	audio_channels: 'mono' | 'stereo'
-	video_resolution?: '360p' | '720p' | '1080p'
-	observed_width?: number
-	observed_height?: number
-	observed_fps?: number
-	health_reason?: string
-	health_label?: string
-	signal_below_requested?: boolean
-	signal_missing_or_stale?: boolean
-	duplicate_participant_assignment?: boolean
 }
 
 export type ShowPhase = 'pre_show' | 'live' | 'post_show'
-
-export interface SpeakerDirectorState {
-	directed_speaker_id: number
-	raw_speaker_id: number
-	candidate_speaker_id: number
-	last_speaker_id: number
-	manual_speaker_id: number
-	manual_active: boolean
-	sensitivity_ms: number
-	hold_ms: number
-	require_video: boolean
-	excluded_participant_ids: number[]
-}
-
-export interface IsoRecordingState {
-	active: boolean
-	sessionCount: number
-}
 
 // ── Combined module state ────────────────────────────────────────────────────
 
@@ -60,8 +32,6 @@ export interface ModuleState {
 		activeSpeakerName: string
 		participants: Participant[]
 		outputs: Output[]
-		speakerDirector: SpeakerDirectorState
-		isoRecording: IsoRecordingState
 	}
 	obs: {
 		connected: boolean
@@ -92,22 +62,6 @@ export function defaultState(): ModuleState {
 			activeSpeakerName: '',
 			participants: [],
 			outputs: [],
-			speakerDirector: {
-				directed_speaker_id: 0,
-				raw_speaker_id: 0,
-				candidate_speaker_id: 0,
-				last_speaker_id: 0,
-				manual_speaker_id: 0,
-				manual_active: false,
-				sensitivity_ms: 500,
-				hold_ms: 2000,
-				require_video: true,
-				excluded_participant_ids: [],
-			},
-			isoRecording: {
-				active: false,
-				sessionCount: 0,
-			},
 		},
 		obs: {
 			connected: false,

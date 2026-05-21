@@ -39,60 +39,6 @@ static ZoomIsoPanel *ensure_iso_panel();
 static ZoomOutputDialog *ensure_output_panel();
 static ZoomDiagnosticsDialog *ensure_diagnostics_panel();
 
-static QDockWidget *find_dock_widget(QWidget *content, const char *dock_id,
-                                     const char *title)
-{
-    if (!content)
-        return nullptr;
-
-    QWidget *parent = content;
-    while (parent) {
-        if (auto *dock = qobject_cast<QDockWidget *>(parent))
-            return dock;
-        parent = parent->parentWidget();
-    }
-
-    auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
-    if (!main_win)
-        return nullptr;
-
-    const QString id = QString::fromUtf8(dock_id);
-    const QString dock_title = QString::fromUtf8(title);
-    const auto docks = main_win->findChildren<QDockWidget *>();
-    for (auto *dock : docks) {
-        if (dock->objectName() == id || dock->windowTitle() == dock_title ||
-            dock->widget() == content) {
-            return dock;
-        }
-    }
-
-    return nullptr;
-}
-
-static QDockWidget *ensure_obs_dock(QWidget *content, const char *dock_id,
-                                    const char *title)
-{
-    if (!content)
-        return nullptr;
-
-    if (auto *dock = find_dock_widget(content, dock_id, title))
-        return dock;
-
-    auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
-    if (!main_win)
-        return nullptr;
-
-    auto *dock = new QDockWidget(QString::fromUtf8(title), main_win);
-    dock->setObjectName(QString::fromUtf8(dock_id));
-    dock->setWidget(content);
-    dock->setAllowedAreas(Qt::AllDockWidgetAreas);
-    main_win->addDockWidget(Qt::RightDockWidgetArea, dock);
-    blog(LOG_WARNING,
-         "[obs-zoom-plugin] Created fallback Qt dock for %s after OBS dock lookup failed",
-         dock_id);
-    return dock;
-}
-
 static void shutdown_corevideo()
 {
     if (g_dock)
@@ -220,30 +166,24 @@ static void show_iso_panel()
     panel->activateWindow();
 }
 
-static void show_dock_widget(QWidget *widget, const char *dock_id,
-                             const char *title)
+template <typename Widget>
+static void show_dock_widget(Widget *widget)
 {
     if (!widget) return;
 
-    auto *dock = ensure_obs_dock(widget, dock_id, title);
-    if (dock) {
-        widget->setVisible(true);
-        dock->setMinimumSize(widget->minimumSize());
-        dock->setVisible(true);
-        dock->showNormal();
+    QWidget *parent = widget;
+    while (parent && !qobject_cast<QDockWidget *>(parent))
+        parent = parent->parentWidget();
+
+    if (auto *dock = qobject_cast<QDockWidget *>(parent)) {
+        dock->show();
         dock->raise();
         dock->activateWindow();
-
-        if (auto *main_win = qobject_cast<QMainWindow *>(dock->parentWidget()))
-            main_win->raise();
-
         widget->setFocus();
         return;
     }
 
-    widget->setVisible(true);
     widget->show();
-    widget->showNormal();
     widget->raise();
     widget->activateWindow();
 }
@@ -259,15 +199,13 @@ static ZoomOutputDialog *ensure_output_panel()
     if (!g_output_panel) {
         g_output_panel = new ZoomOutputDialog(main_win);
         obs_frontend_add_dock_by_id("ZoomOutputManagerDock", "Zoom Output Manager", g_output_panel);
-        ensure_obs_dock(g_output_panel, "ZoomOutputManagerDock", "Zoom Output Manager");
     }
     return g_output_panel;
 }
 
 static void show_output_panel()
 {
-    show_dock_widget(ensure_output_panel(), "ZoomOutputManagerDock",
-                     "Zoom Output Manager");
+    show_dock_widget(ensure_output_panel());
 }
 
 void corevideo_show_output_manager_dock()
@@ -286,16 +224,13 @@ static ZoomDiagnosticsDialog *ensure_diagnostics_panel()
     if (!g_diagnostics_panel) {
         g_diagnostics_panel = new ZoomDiagnosticsDialog(main_win);
         obs_frontend_add_dock_by_id("ZoomDiagnosticsDock", "Zoom Diagnostics", g_diagnostics_panel);
-        ensure_obs_dock(g_diagnostics_panel, "ZoomDiagnosticsDock",
-                        "Zoom Diagnostics");
     }
     return g_diagnostics_panel;
 }
 
 static void show_diagnostics_panel()
 {
-    show_dock_widget(ensure_diagnostics_panel(), "ZoomDiagnosticsDock",
-                     "Zoom Diagnostics");
+    show_dock_widget(ensure_diagnostics_panel());
 }
 
 OBS_DECLARE_MODULE()

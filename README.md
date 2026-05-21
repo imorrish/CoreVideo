@@ -29,10 +29,10 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **Hardware-accelerated video** - optional FFmpeg I420->NV12 conversion via CUDA, VAAPI, VideoToolbox, or QSV (`-DCOREVIDEO_HW_ACCEL=ON`)
 - **Video loss mode** - hold last frame or show black when a feed drops; shows color-bar placeholder before first frame
 - **Raw audio capture** - 48 kHz PCM, mono or stereo, with per-participant audio isolation and mixer routing
-- **Auto ISO recording** - record assigned participant/active-speaker/spotlight outputs to separate FFmpeg-encoded MP4 files with matching PCM WAV audio, plus optional main OBS program recording and live session health
+- **Auto ISO recording** - record assigned participant/active-speaker/spotlight outputs to separate FFmpeg-encoded MP4 files with matching PCM WAV audio, plus optional main OBS program recording
 - **Assignment modes** - each source independently follows: a fixed participant, the active speaker, a ZoomISO-style spotlight slot (1...N), or the active screen share
 - **Failover participant** - configure a secondary participant that activates automatically when the primary leaves
-- **Active Speaker Director** - Responsive / Balanced / Stable Panel presets, configurable sensitivity + hold-time switching, manual take/release supersede, participant exclusions, and a dedicated `CoreVideo Active Speaker` OBS source for clean speaker-follow output
+- **Active Speaker Director** - configurable sensitivity + hold-time switching, manual take/release supersede, and a dedicated `CoreVideo Active Speaker` OBS source for clean speaker-follow output
 - **Spotlight / ZoomISO** - subscribe a source to spotlight slot N; engine resolves which participant is spotlighted
 - **Screen share capture** - source subscribes to the active meeting screen-share feed
 - **Zoom interpretation audio channel capture** - dedicated OBS source for existing Zoom interpretation audio channels
@@ -40,14 +40,13 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **Webinar support** - join Zoom Webinars using the dedicated SDK entry point (Webinar checkbox in control dock)
 - **Participant roster** - live list with video, mute, talking, host, co-host, raised hand, spotlight slot, and screen-sharing state
 - **Control dock** - dockable Qt panel with animated status dot, join/leave, token-type selector, recovery countdown, Active Speaker Director controls, and a routing section that opens the dedicated Output Manager; persists last meeting ID and display name across sessions
-- **Diagnostics dock** - dockable OBS panel showing requested vs observed resolution, FPS, frame age, retry counts, output health reasons, recent engine debug events, and an export button for support snapshots
+- **Diagnostics dock** - dockable OBS panel showing requested vs observed resolution, FPS, frame age, retry counts, and recent engine debug events for live troubleshooting
 - **Auto-reconnect** - exponential back-off recovery after engine crash, network drop, or unexpected disconnect
 - **OBS hotkeys** - per-source hotkeys to enable/disable active speaker mode
 - **TCP control API** - JSON server on `127.0.0.1:19870` for scripts and dashboards; includes `oauth_callback` command for custom URL scheme forwarding
 - **OSC control API** - UDP OSC server on `127.0.0.1:19871` for lighting consoles and broadcast hardware
 - **Output profiles** - save and load named participant-to-source mappings as JSON files
-- **Output manager dock** - dockable OBS panel and API for viewing and reconfiguring all sources at runtime, including duplicate assignment warnings and output health labels
-- **Sidecar packaged but hidden** - the Qt Sidecar binary is still included for development, but the in-plugin launcher is hidden while the OBS-controlled production-console workflow is rebuilt
+- **Output manager dock** - dockable OBS panel and API for viewing and reconfiguring all sources at runtime
 - **JWT generation** - CoreVideo generates Meeting SDK JWTs locally from key+secret; manual override available
 - **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE for attributed joins and Marketplace compliance; fetches a short-lived ZAK via `GET /v2/users/me/zak`; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows; confidential client mode supported
 - **SDK 5.17.x and 7.x** - auto-detects flat and subfolder header layouts
@@ -222,9 +221,7 @@ Commands: `help`, `status`, `list_participants`, `list_outputs`, `assign_output`
 
 Use **OBS -> Tools -> Zoom ISO Recorder** for the operator UI. The dock provides
 an output-folder picker, FFmpeg path/test controls, a program-recording toggle,
-Start/Stop buttons, disk-free-space status, and a live table of active ISO
-sessions with duration, encoder state, resolution, frame/audio counts, file
-sizes, and file paths.
+Start/Stop buttons, and a live table of active ISO sessions and file paths.
 
 ```sh
 # Start ISO recording. record_program=true also starts OBS program recording.
@@ -263,7 +260,7 @@ CoreVideo has two active-speaker workflows:
 - Set a normal **Zoom Participant** source to **Active Speaker** assignment mode when that source should follow the directed speaker.
 - Add the dedicated **CoreVideo Active Speaker** source when you want a single speaker-follow OBS source. It uses a two-slot handoff internally: the current participant stays visible while the next participant warms on a hidden slot, then the source cuts only after a valid frame is available.
 
-The **Active Speaker Director** in the Zoom Control dock decides which participant is directed. It tracks the raw Zoom speaker, candidate speaker, directed speaker, last directed speaker, and any manual supersede. Use the built-in **Responsive**, **Balanced**, and **Stable Panel** presets for common switching styles, or switch to **Custom** for exact sensitivity/hold timing. The dedicated `CoreVideo Active Speaker` source also exposes exclusion slots for host/question-reader workflows where those participants should not be pulled into the auto-directed speaker feed.
+The **Active Speaker Director** in the Zoom Control dock decides which participant is directed. It tracks the raw Zoom speaker, candidate speaker, directed speaker, last directed speaker, and any manual supersede.
 
 ### Debounce
 
@@ -312,29 +309,6 @@ obs-studio/plugin_config/obs-zoom-plugin/profiles/<name>.json
 ```
 
 Use the **Zoom Output Manager** dock, or **OBS -> Tools -> Zoom Output Manager** to focus it, to save, load, and delete profiles interactively. Code can call `ZoomOutputProfile::save() / load() / list() / remove()` directly.
-
-## Output Health and Diagnostics
-
-CoreVideo reports an explicit health reason for each configured output in the
-Zoom Control dock, Zoom Output Manager, Zoom Diagnostics dock, and TCP
-`list_outputs` response. Current health values include:
-
-| Health | Meaning |
-|---|---|
-| `ok` | Frames are arriving for the requested source. |
-| `raw_media_not_ready` | The meeting is joined but raw media has not started. |
-| `participant_missing` | The fixed participant is not in the current roster. |
-| `participant_video_off` | The participant is present but video is off. |
-| `waiting_for_first_frame` | The source subscribed and is waiting for Zoom to deliver the first frame. |
-| `stale_frame` | A source had frames but has stopped receiving fresh frames. |
-| `zoom_delivered_lower_resolution` | Zoom delivered a lower resolution than requested. |
-| `duplicate_assignment` | More than one fixed output is assigned to the same participant. |
-| `screen_share_unavailable` | The output is assigned to screen share but no share is active. |
-
-Use **Tools -> Zoom Diagnostics -> Export Diagnostics** to create a support
-snapshot under `Documents/CoreVideo Diagnostics/`. The export includes JSON and
-text summaries, current output health, roster state, active-speaker state,
-recent engine events, and the latest OBS log when available.
 
 ## Architecture Overview
 

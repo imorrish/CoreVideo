@@ -8,10 +8,6 @@ export const variableDefinitions: CompanionVariableDefinition[] = [
 	{ variableId: 'zoom_active_speaker_id',   name: 'Zoom: Active Speaker ID' },
 	{ variableId: 'zoom_participant_count',   name: 'Zoom: Participant Count' },
 	{ variableId: 'zoom_output_count',        name: 'Zoom: Output Count' },
-	{ variableId: 'zoom_directed_speaker_id', name: 'Zoom: Directed Speaker ID' },
-	{ variableId: 'zoom_speaker_preset',      name: 'Zoom: Active Speaker Preset' },
-	{ variableId: 'zoom_iso_recording',       name: 'Zoom: ISO Recording Active' },
-	{ variableId: 'zoom_iso_session_count',   name: 'Zoom: ISO Session Count' },
 	// ── OBS ───────────────────────────────────────────────────────────────────
 	{ variableId: 'obs_current_scene', name: 'OBS: Current Scene' },
 	{ variableId: 'obs_recording',     name: 'OBS: Recording' },
@@ -32,10 +28,6 @@ export function buildVariableValues(state: ModuleState): CompanionVariableValues
 		zoom_active_speaker_id:   String(state.zoom.activeSpeakerId),
 		zoom_participant_count:   String(state.zoom.participants.length),
 		zoom_output_count:        String(state.zoom.outputs.length),
-		zoom_directed_speaker_id: String(state.zoom.speakerDirector.directed_speaker_id),
-		zoom_speaker_preset:      speakerPresetName(state.zoom.speakerDirector.sensitivity_ms, state.zoom.speakerDirector.hold_ms),
-		zoom_iso_recording:       state.zoom.isoRecording.active ? 'yes' : 'no',
-		zoom_iso_session_count:   String(state.zoom.isoRecording.sessionCount),
 		// OBS
 		obs_current_scene: state.obs.currentScene,
 		obs_recording:     state.obs.recording ? 'yes' : 'no',
@@ -53,13 +45,6 @@ export function buildVariableValues(state: ModuleState): CompanionVariableValues
 		vals[`zoom_output_${n}_source`]      = o.source
 		vals[`zoom_output_${n}_participant`]  = o.display_name || String(o.participant_id)
 		vals[`zoom_output_${n}_mode`]         = o.assignment_mode
-		vals[`zoom_output_${n}_health`]       = o.health_label || o.health_reason || ''
-		vals[`zoom_output_${n}_resolution`]   = o.observed_width && o.observed_height
-			? `${o.observed_width}x${o.observed_height}`
-			: 'No signal'
-		vals[`zoom_output_${n}_fps`]          = typeof o.observed_fps === 'number'
-			? o.observed_fps.toFixed(1)
-			: ''
 	})
 
 	return vals
@@ -72,17 +57,7 @@ export function buildOutputVariableDefs(count: number): CompanionVariableDefinit
 			{ variableId: `zoom_output_${i}_source`,      name: `Zoom Output ${i} Source` },
 			{ variableId: `zoom_output_${i}_participant`, name: `Zoom Output ${i} Participant` },
 			{ variableId: `zoom_output_${i}_mode`,        name: `Zoom Output ${i} Assignment Mode` },
-			{ variableId: `zoom_output_${i}_health`,      name: `Zoom Output ${i} Health` },
-			{ variableId: `zoom_output_${i}_resolution`,  name: `Zoom Output ${i} Observed Resolution` },
-			{ variableId: `zoom_output_${i}_fps`,         name: `Zoom Output ${i} FPS` },
 		)
 	}
 	return defs
-}
-
-function speakerPresetName(sensitivityMs: number, holdMs: number): string {
-	if (sensitivityMs === 250 && holdMs === 1200) return 'Responsive'
-	if (sensitivityMs === 500 && holdMs === 2000) return 'Balanced'
-	if (sensitivityMs === 900 && holdMs === 3500) return 'Stable Panel'
-	return 'Custom'
 }

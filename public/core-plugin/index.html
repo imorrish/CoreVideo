@@ -24,9 +24,8 @@
 <figure class="doc-image"><img src="images/corevideo-obs-workspace.svg" alt="CoreVideo OBS workspace with Zoom Control dock"></figure>
 <p>The Zoom Control dock joins and leaves meetings, starts and stops raw media, shows meeting state, lists participants, exposes Active Speaker Director controls, and opens the Output Manager for source assignment without leaving OBS.</p>
 <figure class="doc-image"><img src="images/corevideo-output-manager.svg" alt="CoreVideo Output Manager"></figure>
-<p>The dedicated Zoom Output Manager is the primary assignment surface. It supports profile save/load workflows and exposes requested resolution, observed signal, frame rate, assignment mode, audio routing, duplicate assignment warnings, and explicit output health labels for each output. It is a persistent OBS dock, so operators can keep assignments, live previews, and feed health visible while working in normal OBS scenes.</p>
+<p>The dedicated Zoom Output Manager is the primary assignment surface. It supports profile save/load workflows and exposes requested resolution, observed signal, frame rate, assignment mode, and audio routing information for each output. In <code>v0.1.15</code> it is a persistent OBS dock, so operators can keep assignments, live previews, and feed health visible while working in normal OBS scenes.</p>
 <p>Open the <strong>Zoom Diagnostics</strong> dock, or use <strong>Tools &gt; Zoom Diagnostics</strong> to focus it, during a live session to see requested versus observed resolution, FPS, frame age, stale and quality retry counters, and the latest <code>ZoomObsEngine</code> debug events. This is the fastest way to see whether a source is waiting for frames, receiving a lower-than-requested feed, or being resubscribed by recovery logic.</p>
-<p>Use <strong>Export Diagnostics</strong> from the Diagnostics dock when you need a support snapshot. CoreVideo writes a timestamped folder under <code>Documents/CoreVideo Diagnostics/</code> with JSON and text summaries, output health, roster state, active-speaker state, recent engine events, and the latest OBS log when found.</p>
 <figure class="doc-image"><img src="images/corevideo-source-properties.svg" alt="CoreVideo Zoom Participant source properties"></figure>
 <p>Each Zoom Participant source can be configured independently for fixed participants, active speaker, spotlight slot, screen share, isolated audio, audience audio, resolution, video-loss behavior, and hardware conversion.</p>
 <h2>Joining Meetings</h2>
@@ -36,7 +35,6 @@
 <p>Add one or more <strong>Zoom Participant</strong> sources in OBS. Each source can follow a different assignment mode:</p>
 <table><thead><tr><th>Mode</th><th>Behavior</th><th>Common Use</th></tr></thead><tbody><tr><td>Participant</td><td>Fixed Zoom participant ID</td><td>Dedicated guest ISO</td></tr><tr><td>Active Speaker</td><td>Follows the current active speaker</td><td>Host/speaker-follow shot</td></tr><tr><td>Spotlight Slot</td><td>Follows Zoom spotlight position 1..N</td><td>ZoomISO-style production</td></tr><tr><td>Screen Share</td><td>Follows active screen share</td><td>Slides/demo capture</td></tr></tbody></table>
 <p>Each output reports observed resolution and frame rate through the output manager and TCP <code>list_outputs</code> command.</p>
-<p>The same surfaces also report a health reason. Common values are <code>ok</code>, <code>raw_media_not_ready</code>, <code>participant_missing</code>, <code>participant_video_off</code>, <code>waiting_for_first_frame</code>, <code>stale_frame</code>, <code>zoom_delivered_lower_resolution</code>, <code>duplicate_assignment</code>, and <code>screen_share_unavailable</code>.</p>
 <p>For a single directed speaker-follow output, add the dedicated <strong>CoreVideo Active Speaker</strong> OBS source. It follows the central Active Speaker Director and uses a two-slot handoff internally: the current participant remains visible while the next participant warms on a hidden slot, then the source cuts only after a valid frame is available.</p>
 <h2>Active Speaker Director</h2>
 <p>The Active Speaker Director is controlled from the Zoom Control dock. It is not just a pass-through of Zoom's raw active-speaker event; it builds CoreVideo's own production decision from the raw speaker signal.</p>
@@ -44,7 +42,6 @@
 <ul><li>Directed speaker: the participant currently being sent to active-speaker outputs.</li><li>Raw speaker: the latest speaker reported by Zoom.</li><li>Candidate speaker: the participant waiting out the sensitivity timer.</li><li>Last speaker: the previously directed participant.</li><li>Manual take/release: an operator supersede that holds a participant on air until released.</li></ul>
 <p>Timing controls:</p>
 <table><thead><tr><th>Setting</th><th>Default</th><th>Behavior</th></tr></thead><tbody><tr><td>Sensitivity</td><td>500 ms</td><td>Candidate must keep speaking this long before switching.</td></tr><tr><td>Hold</td><td>2000 ms</td><td>Minimum time to stay on the current directed speaker after a cut.</td></tr></tbody></table>
-<p>The dock includes <strong>Responsive</strong>, <strong>Balanced</strong>, and <strong>Stable Panel</strong> presets for common switching styles. Choosing <strong>Custom</strong> leaves the exact sensitivity and hold values under operator control. The dedicated <code>CoreVideo Active Speaker</code> source also exposes exclusion dropdowns so a host or question reader can be kept out of the automatically directed speaker feed.</p>
 <p>TCP examples:</p>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_status&quot;}</code></pre>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;speaker_director_configure&quot;,&quot;sensitivity_ms&quot;:650,&quot;hold_ms&quot;:2500}</code></pre>
@@ -61,7 +58,7 @@
 <ul><li><code>ffmpeg</code> must be available on <code>PATH</code>, or pass an explicit <code>ffmpeg_path</code>.</li><li>Raw media must be active.</li><li>Sources must be assigned to participant, active speaker, or spotlight modes.</li></ul>
 <h3>OBS ISO Recorder Panel</h3>
 <p>Open <strong>Tools &gt; Zoom ISO Recorder</strong> to manage ISO recording from a separate OBS dock. The panel provides:</p>
-<ul><li>Output folder picker.</li><li>FFmpeg executable field with a test button.</li><li>Disk-free-space status for the selected recording volume.</li><li><strong>Also start/stop OBS program recording</strong> toggle.</li><li><strong>Start ISO Recording</strong> and <strong>Stop ISO Recording</strong> buttons.</li><li>Live status showing idle/recording and active session count.</li><li>Active session table with source, participant, resolution, video frame count, audio chunk count, encoder state, duration, file sizes, and the current video/audio file paths.</li></ul>
+<ul><li>Output folder picker.</li><li>FFmpeg executable field with a test button.</li><li><strong>Also start/stop OBS program recording</strong> toggle.</li><li><strong>Start ISO Recording</strong> and <strong>Stop ISO Recording</strong> buttons.</li><li>Live status showing idle/recording and active session count.</li><li>Active session table with source, participant, resolution, video frame count, audio chunk count, and the current video/audio file paths.</li></ul>
 <p>The panel uses the same <code>ZoomIsoRecorder</code> backend as the TCP and OSC APIs. It persists the output folder, FFmpeg path, and program-recording toggle in OBS global settings.</p>
 <p>TCP start example:</p>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;iso_recording_start&quot;,&quot;output_dir&quot;:&quot;C:/Recordings/CoreVideo&quot;,&quot;ffmpeg_path&quot;:&quot;ffmpeg&quot;,&quot;record_program&quot;:true}</code></pre>
@@ -80,7 +77,7 @@
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;list_participants&quot;}</code></pre>
 <p>List outputs:</p>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;list_outputs&quot;}</code></pre>
-<p>Output snapshots include requested resolution, observed resolution/FPS, stale state, last frame age, subscribed age for outputs still waiting on their first frame, health reason, duplicate assignment flag, recovery attempts, automatic quality-upgrade attempts, and remaining retry cooldowns.</p>
+<p>Output snapshots include requested resolution, observed resolution/FPS, stale state, last frame age, subscribed age for outputs still waiting on their first frame, recovery attempts, automatic quality-upgrade attempts, and remaining retry cooldowns.</p>
 <p>Force a retry for stale outputs:</p>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;recover_stale_outputs&quot;,&quot;force&quot;:true}</code></pre>
 <p>Force a quality retry for live outputs below their requested resolution:</p>
@@ -116,8 +113,6 @@
 /zoom/iso/stop</code></pre>
 <h2>Troubleshooting</h2>
 <table><thead><tr><th>Symptom</th><th>Check</th></tr></thead><tbody><tr><td>Color bars only</td><td>Confirm the meeting is joined, raw media is started, and the source has a participant/role assignment.</td></tr><tr><td>No isolated audio</td><td>Confirm the source is assigned to a real participant and <code>isolate_audio</code> is true.</td></tr><tr><td>ISO recording does not start</td><td>Confirm <code>ffmpeg</code> is on PATH or provide <code>ffmpeg_path</code>.</td></tr><tr><td>External meeting rejected</td><td>Confirm the Meeting SDK app/client ID is approved or published for external meeting joins.</td></tr><tr><td>Plugin cannot launch engine</td><td>Confirm <code>ZoomObsEngine.exe</code> and Zoom SDK runtime DLLs are installed under <code>obs-plugins/64bit/zoom-runtime</code>.</td></tr></tbody></table>
-<h2>Sidecar Status</h2>
-<p>The Qt Sidecar binary is still packaged for development builds, but the OBS plugin launcher is currently hidden. The supported production workflow today is inside OBS: Zoom Control, Zoom Output Manager, Zoom Diagnostics, Zoom ISO Recorder, normal OBS scenes/sources, and the TCP/OSC APIs. Sidecar scene/look design remains roadmap work until it can create and control OBS scenes with reliable visual parity.</p>
   </main>
   <footer class="site-footer">
     <span>CoreVideo is an independent open-source project and is not affiliated with Zoom Video Communications, Inc.</span>

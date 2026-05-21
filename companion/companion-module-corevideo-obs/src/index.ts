@@ -106,7 +106,6 @@ export class CoreVideoInstance extends InstanceBase<CoreVideoConfig> {
 			this.sendPlugin({ cmd: 'status' })
 			this.sendPlugin({ cmd: 'list_outputs' })
 			this.sendPlugin({ cmd: 'list_participants' })
-			this.sendPlugin({ cmd: 'iso_recording_status' })
 		})
 
 		this.pluginSocket.on('data', (chunk: string) => {
@@ -174,17 +173,6 @@ export class CoreVideoInstance extends InstanceBase<CoreVideoConfig> {
 					...buildOutputVariableDefs(this.state.zoom.outputs.length),
 				])
 			}
-			if (typeof msg['speaker_director'] === 'object' && msg['speaker_director'])
-				this.state.zoom.speakerDirector = {
-					...this.state.zoom.speakerDirector,
-					...(msg['speaker_director'] as ModuleState['zoom']['speakerDirector']),
-				}
-			if (typeof msg['active'] === 'boolean' && Array.isArray(msg['sessions'])) {
-				this.state.zoom.isoRecording = {
-					active: msg['active'],
-					sessionCount: msg['sessions'].length,
-				}
-			}
 			this.flushState()
 		}
 	}
@@ -198,19 +186,13 @@ export class CoreVideoInstance extends InstanceBase<CoreVideoConfig> {
 			case 'active_speaker':
 				this.state.zoom.activeSpeakerId  = (msg['user_id'] as number) ?? 0
 				this.state.zoom.activeSpeakerName = (msg['name'] as string) ?? ''
-				if (typeof msg['speaker_director'] === 'object' && msg['speaker_director'])
-					this.state.zoom.speakerDirector = {
-						...this.state.zoom.speakerDirector,
-						...(msg['speaker_director'] as ModuleState['zoom']['speakerDirector']),
-					}
-				this.checkFeedbacks('zoom_active_speaker', 'zoom_speaker_manual')
+				this.checkFeedbacks('zoom_active_speaker')
 				break
 			case 'roster_changed':
 				this.sendPlugin({ cmd: 'list_participants' })
 				break
 			case 'output_changed':
 				this.sendPlugin({ cmd: 'list_outputs' })
-				this.sendPlugin({ cmd: 'iso_recording_status' })
 				break
 		}
 		this.flushState()
@@ -389,9 +371,7 @@ export class CoreVideoInstance extends InstanceBase<CoreVideoConfig> {
 		this.setVariableValues(buildVariableValues(this.state))
 		this.checkFeedbacks(
 			'zoom_meeting_state', 'zoom_meeting_state_color',
-			'zoom_active_speaker', 'zoom_output_assigned', 'zoom_output_health',
-			'zoom_output_needs_attention', 'zoom_recovery_active',
-			'zoom_iso_recording', 'zoom_speaker_manual',
+			'zoom_active_speaker', 'zoom_output_assigned', 'zoom_recovery_active',
 			'obs_connected', 'obs_recording', 'obs_streaming', 'obs_virtual_cam',
 			'obs_current_scene', 'obs_record_pause',
 			'sidecar_connected', 'show_phase', 'show_phase_color', 'show_template',
