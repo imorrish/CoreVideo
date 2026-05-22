@@ -182,10 +182,10 @@ function tokenClientIds(config) {
 }
 
 async function exchangeZoomToken(config, body) {
-  return exchangeZoomTokenWithClient(config, body, config.clientId);
+  return exchangeZoomTokenWithClient(config, body, config.clientId, "body");
 }
 
-async function exchangeZoomTokenWithClient(config, body, clientId) {
+async function exchangeZoomTokenWithClient(config, body, clientId, mode = "body") {
   const tokenBody = new URLSearchParams(body);
   const headers = {
     "content-type": "application/x-www-form-urlencoded",
@@ -193,20 +193,32 @@ async function exchangeZoomTokenWithClient(config, body, clientId) {
   };
   if (config.clientSecret) {
     headers.authorization = basicAuth(clientId, config.clientSecret);
-  } else {
+  } else if (mode !== "basic-empty-secret") {
     tokenBody.set("client_id", clientId);
+  } else {
+    headers.authorization = basicAuth(clientId, "");
   }
 
-  const response = await fetch("https://zoom.us/oauth/token", {
+  const tokenUrl = new URL("https://zoom.us/oauth/token");
+  let requestBody = tokenBody;
+  if (mode === "query" || mode === "basic-empty-secret") {
+    for (const [key, value] of tokenBody) {
+      tokenUrl.searchParams.set(key, value);
+    }
+    requestBody = "";
+  }
+
+  const response = await fetch(tokenUrl.toString(), {
     method: "POST",
     headers,
-    body: tokenBody,
+    body: requestBody,
   });
   const text = await response.text();
   if (!response.ok) {
     console.warn("Zoom OAuth token exchange failed", {
       status: response.status,
       client_id_tail: clientId.slice(-4),
+      mode,
       body: text.slice(0, 512),
     });
     return { ok: false, status: response.status, text };
@@ -384,7 +396,25 @@ async function handleOauthRedeem(request, env) {
           code: payload.code,
           redirect_uri: config.redirectUri,
           code_verifier: payload.code_verifier,
-        }, clientId);
+        }, clientId, "body");
+        if (finalExchange.ok || !finalExchange.text.includes("invalid_client")) {
+          break;
+        }
+      }
+    }
+    if (!finalExchange.ok && finalExchange.text.includes("invalid_client")) {
+      for (const mode of ["query", "basic-empty-secret"]) {
+        for (const clientId of tokenClientIds(config)) {
+          finalExchange = await exchangeZoomTokenWithClient(config, {
+            grant_type: "authorization_code",
+            code: payload.code,
+            redirect_uri: config.redirectUri,
+            code_verifier: payload.code_verifier,
+          }, clientId, mode);
+          if (finalExchange.ok || !finalExchange.text.includes("invalid_client")) {
+            break;
+          }
+        }
         if (finalExchange.ok || !finalExchange.text.includes("invalid_client")) {
           break;
         }
