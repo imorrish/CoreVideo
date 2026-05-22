@@ -32,6 +32,12 @@ param(
     [switch]$DisableFfmpegHwAccel,
     [Parameter()]
     [string]$FfmpegRoot,
+    [Parameter()]
+    [string]$OAuthClientId,
+    [Parameter()]
+    [string]$OAuthAuthorizationUrl,
+    [Parameter()]
+    [string]$MeetingSdkPublicAppKey,
 
     [Parameter()]
     [switch]$SkipBuild,
@@ -61,6 +67,9 @@ if (-not $FfmpegRoot -and
 if ($FfmpegRoot) {
     $FfmpegRoot = $FfmpegRoot.Replace('\', '/')
 }
+if (-not $OAuthClientId) { $OAuthClientId = $env:ZOOM_EMBED_OAUTH_CLIENT_ID }
+if (-not $OAuthAuthorizationUrl) { $OAuthAuthorizationUrl = $env:ZOOM_EMBED_OAUTH_AUTHORIZATION_URL }
+if (-not $MeetingSdkPublicAppKey) { $MeetingSdkPublicAppKey = $env:ZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY }
 
 function Resolve-RepoPath {
     param([string]$Path)
@@ -156,6 +165,9 @@ try {
         if ($CMakePrefixPath) { $configureArgs += "-DCMAKE_PREFIX_PATH=$CMakePrefixPath" }
         if ($LibObsDir) { $configureArgs += "-DLibObs_DIR=$LibObsDir" }
         if ($ObsFrontendApiDir) { $configureArgs += "-Dobs-frontend-api_DIR=$ObsFrontendApiDir" }
+        if ($OAuthClientId) { $configureArgs += "-DZOOM_EMBED_OAUTH_CLIENT_ID=$OAuthClientId" }
+        if ($OAuthAuthorizationUrl) { $configureArgs += "-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=$OAuthAuthorizationUrl" }
+        if ($MeetingSdkPublicAppKey) { $configureArgs += "-DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=$MeetingSdkPublicAppKey" }
         if ($QtRootDir) {
             if ($CMakePrefixPath) {
                 $configureArgs += "-DCMAKE_PREFIX_PATH=$CMakePrefixPath;$QtRootDir"
@@ -166,10 +178,20 @@ try {
         cmake @configureArgs
     } elseif (-not (Test-Path -LiteralPath $resolvedBuildPath)) {
         throw "Build directory does not exist: $resolvedBuildPath. Rerun with -Configure and the required CMake paths, or provide -BuildPath."
-    } elseif ($DisableFfmpegHwAccel) {
-        cmake -B $resolvedBuildPath -DENABLE_FFMPEG_HW_ACCEL=OFF
-    } elseif ($FfmpegRoot) {
-        cmake -B $resolvedBuildPath -DENABLE_FFMPEG_HW_ACCEL=ON "-DFFMPEG_ROOT=$FfmpegRoot"
+    } else {
+        $reconfigureArgs = @("-B", $resolvedBuildPath)
+        if ($DisableFfmpegHwAccel) {
+            $reconfigureArgs += "-DENABLE_FFMPEG_HW_ACCEL=OFF"
+        } elseif ($FfmpegRoot) {
+            $reconfigureArgs += "-DENABLE_FFMPEG_HW_ACCEL=ON"
+            $reconfigureArgs += "-DFFMPEG_ROOT=$FfmpegRoot"
+        }
+        if ($OAuthClientId) { $reconfigureArgs += "-DZOOM_EMBED_OAUTH_CLIENT_ID=$OAuthClientId" }
+        if ($OAuthAuthorizationUrl) { $reconfigureArgs += "-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=$OAuthAuthorizationUrl" }
+        if ($MeetingSdkPublicAppKey) { $reconfigureArgs += "-DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=$MeetingSdkPublicAppKey" }
+        if ($reconfigureArgs.Count -gt 2) {
+            cmake @reconfigureArgs
+        }
     }
 
     if (-not $SkipBuild) {

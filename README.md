@@ -48,7 +48,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **Output profiles** - save and load named participant-to-source mappings as JSON files
 - **Output manager dock** - dockable OBS panel and API for viewing and reconfiguring all sources at runtime
 - **JWT generation** - CoreVideo generates Meeting SDK JWTs locally from key+secret; manual override available
-- **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE (public client, no secret) for attributed joins and Marketplace compliance; the OAuth Client ID is baked in at build time via `ZOOM_EMBED_OAUTH_CLIENT_ID`; fetches a short-lived ZAK via `GET /v2/users/me/token?type=zak`; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows
+- **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE (public client, no secret) for attributed joins and Marketplace compliance; the OAuth identity and Meeting SDK public app key are baked in at build time; fetches a short-lived ZAK via `GET /v2/users/me/token?type=zak`; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows
 - **SDK 5.17.x and 7.x** - auto-detects flat and subfolder header layouts
 - **Hardened security** - constant-time token comparison, validated IPC input, sanitised participant IDs, SIGPIPE handling
 - **Modern UI** - CoreVideo stylesheet with dark theme, animated `CvStatusDot`, `CvBanner` first-run notices, and button role variants (primary / danger)
@@ -178,7 +178,7 @@ To verify an already-created scene graph without creating or modifying sources:
 .\scripts\obs-scene-smoke-test.ps1 -AuditOnly -SceneName "CoreVideo Smoke Test"
 ```
 
-5. **Set up OAuth (for Marketplace / external-account joins)** - publishers configure this once at build time with `-DZOOM_EMBED_OAUTH_CLIENT_ID=<your_oauth_client_id>`. End users just open the Settings dialog and click **Sign in with Zoom**. See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full walkthrough.
+5. **Set up OAuth (for Marketplace / external-account joins)** - publishers configure this once at build time with `-DZOOM_EMBED_OAUTH_CLIENT_ID`, `-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL`, and `-DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY`. End users just open the Settings dialog and click **Sign in with Zoom**. See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full walkthrough.
 
 6. **Join once, then assign outputs** - use the CoreVideo dock or the TCP/OSC control APIs to join the meeting once per OBS session. Then add **Zoom Participant**, **Zoom Participant Audio**, **Zoom Share**, or **Zoom Interpretation Audio** sources and assign them to participants or dynamic roles.
 
@@ -187,11 +187,14 @@ To verify an already-created scene graph without creating or modifying sources:
 CoreVideo uses user-level OAuth 2.0 with PKCE (public client, no secret) for attributed meeting joins and Zoom App Marketplace compliance. This is required when joining meetings hosted by accounts other than the SDK account. Confidential OAuth is intentionally not supported at runtime: a desktop binary can't hide a client secret.
 
 ### Build-time configuration (publisher, one-time)
-Pass the Marketplace app's OAuth Client ID at CMake configure time:
+Pass the Marketplace app identity at CMake configure time:
 ```
-cmake -B build -DZOOM_EMBED_OAUTH_CLIENT_ID=<your_oauth_client_id> ...
+cmake -B build \
+  -DZOOM_EMBED_OAUTH_CLIENT_ID=<your_oauth_or_public_client_id> \
+  -DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=<your_authorization_url> \
+  -DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=<your_meeting_sdk_public_app_key> ...
 ```
-The value is compiled into `kEmbeddedOAuthClientId` and used as the default for every install of that build. There is no UI for entering it.
+These values are compiled into the plugin and used for every install of that build. There is no UI for entering them, and embedded values override stale `global.ini` entries.
 
 ### Flow
 1. In **Tools -> Zoom Plugin Settings**, click **Authorize with Zoom** (no IDs to enter). The plugin registers the `corevideo://` URL scheme automatically on first use.

@@ -7,9 +7,8 @@
 struct ZoomPluginSettings {
     std::string         sdk_key, sdk_secret, jwt_token;
     std::string         sdk_public_app_key;
-    // OAuth Client ID baked in at build time via ZOOM_EMBED_OAUTH_CLIENT_ID.
-    // Can be overridden by an OAuthClientId key in global.ini for development;
-    // not exposed in the UI because end users should never configure this.
+    // OAuth client ID baked in at build time. global.ini can override this
+    // only in development builds where the embedded value is blank.
     std::string         oauth_client_id;
     // Optional global.ini override for the Zoom authorization URL (dev/staging).
     std::string         oauth_authorization_url;

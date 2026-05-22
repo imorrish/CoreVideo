@@ -15,6 +15,8 @@ set(ZOOM_EMBED_SDK_KEY          "" CACHE STRING "Pre-embedded Zoom SDK key")
 set(ZOOM_EMBED_SDK_SECRET       "" CACHE STRING "Pre-embedded Zoom SDK secret")
 set(ZOOM_EMBED_JWT_TOKEN        "" CACHE STRING "Pre-embedded Zoom JWT token")
 set(ZOOM_EMBED_OAUTH_CLIENT_ID  "" CACHE STRING "Pre-embedded Zoom OAuth (marketplace) client ID")
+set(ZOOM_EMBED_OAUTH_AUTHORIZATION_URL "" CACHE STRING "Pre-embedded Zoom OAuth authorization URL")
+set(ZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY "" CACHE STRING "Pre-embedded Zoom Meeting SDK public app key")
 configure_file(src/zoom-credentials.h.in
                "${CMAKE_CURRENT_BINARY_DIR}/zoom-credentials.h" @ONLY)
 configure_file(src/obs-zoom-version.h.in

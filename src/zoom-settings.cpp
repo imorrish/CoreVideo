@@ -32,6 +32,11 @@ static bool looks_like_jwt(const std::string &token)
         token.find('.', second_dot + 1) == std::string::npos;
 }
 
+static bool has_embedded_value(const char *value)
+{
+    return value && *value;
+}
+
 static std::string protect_secret(const std::string &secret)
 {
     if (secret.empty()) return {};
@@ -79,7 +84,15 @@ ZoomPluginSettings ZoomPluginSettings::load()
     config_t *cfg = obs_frontend_get_global_config();
     ZoomPluginSettings s;
 
-    // User-supplied values take precedence; fall back to compiled-in credentials.
+    const bool embedded_public_app_key =
+        has_embedded_value(kEmbeddedMeetingSdkPublicAppKey);
+    const bool embedded_oauth_client_id =
+        has_embedded_value(kEmbeddedOAuthClientId);
+    const bool embedded_oauth_authorization_url =
+        has_embedded_value(kEmbeddedOAuthAuthorizationUrl);
+
+    // Published builds use compiled-in app identity. Local config is only a
+    // development fallback when the build did not embed the identity.
     const char *key    = config_get_string(cfg, SECTION, "SdkKey");
     const char *secret = config_get_string(cfg, SECTION, "SdkSecret");
     const char *meeting_sdk_client_id =
@@ -99,30 +112,42 @@ ZoomPluginSettings ZoomPluginSettings::load()
     const char *oauth_redirect_uri = config_get_string(cfg, SECTION, "OAuthRedirectUri");
     const char *oauth_scopes = config_get_string(cfg, SECTION, "OAuthScopes");
 
-    s.sdk_key = (meeting_sdk_client_id && *meeting_sdk_client_id)
-        ? meeting_sdk_client_id
-        : ((key && *key) ? key : kEmbeddedSdkKey);
-
-    const std::string protected_meeting_secret =
-        unprotect_secret(meeting_sdk_client_secret);
-    if (!protected_meeting_secret.empty()) {
-        s.sdk_secret = protected_meeting_secret;
+    if (embedded_public_app_key) {
+        s.sdk_public_app_key = kEmbeddedMeetingSdkPublicAppKey;
+        s.sdk_key.clear();
+        s.sdk_secret.clear();
+        s.jwt_token.clear();
     } else {
-        s.sdk_secret = (secret && *secret) ? secret : kEmbeddedSdkSecret;
+        s.sdk_key = (meeting_sdk_client_id && *meeting_sdk_client_id)
+            ? meeting_sdk_client_id
+            : ((key && *key) ? key : kEmbeddedSdkKey);
+
+        const std::string protected_meeting_secret =
+            unprotect_secret(meeting_sdk_client_secret);
+        if (!protected_meeting_secret.empty()) {
+            s.sdk_secret = protected_meeting_secret;
+        } else {
+            s.sdk_secret = (secret && *secret) ? secret : kEmbeddedSdkSecret;
+        }
+        s.jwt_token = (jwt && *jwt) ? jwt : kEmbeddedJwtToken;
+        s.sdk_public_app_key = (meeting_sdk_public_app_key &&
+                                *meeting_sdk_public_app_key)
+            ? meeting_sdk_public_app_key
+            : "";
     }
-    s.jwt_token  = (jwt    && *jwt)    ? jwt    : kEmbeddedJwtToken;
-    s.sdk_public_app_key = (meeting_sdk_public_app_key &&
-                            *meeting_sdk_public_app_key)
-        ? meeting_sdk_public_app_key
-        : "";
-    if (oauth_client_id && *oauth_client_id) {
+
+    if (embedded_oauth_client_id) {
+        s.oauth_client_id = kEmbeddedOAuthClientId;
+    } else if (oauth_client_id && *oauth_client_id) {
         s.oauth_client_id = oauth_client_id;
     } else if (oauth_legacy_public_client_id && *oauth_legacy_public_client_id) {
         s.oauth_client_id = oauth_legacy_public_client_id;
     } else {
         s.oauth_client_id = kEmbeddedOAuthClientId;
     }
-    s.oauth_authorization_url = oauth_authorization_url ? oauth_authorization_url : "";
+    s.oauth_authorization_url = embedded_oauth_authorization_url
+        ? kEmbeddedOAuthAuthorizationUrl
+        : (oauth_authorization_url ? oauth_authorization_url : "");
     if (oauth_redirect_uri && *oauth_redirect_uri)
         s.oauth_redirect_uri = oauth_redirect_uri;
     if (oauth_scopes && *oauth_scopes)
@@ -239,15 +264,38 @@ std::string ZoomPluginSettings::resolved_jwt_token() const
 void ZoomPluginSettings::save() const
 {
     config_t *cfg = obs_frontend_get_global_config();
-    config_set_string(cfg, SECTION, "SdkKey",            sdk_key.c_str());
-    config_set_string(cfg, SECTION, "SdkSecret",         sdk_secret.c_str());
-    config_set_string(cfg, SECTION, "MeetingSdkClientId", sdk_key.c_str());
+    const bool embedded_public_app_key =
+        has_embedded_value(kEmbeddedMeetingSdkPublicAppKey);
+    const bool embedded_oauth_client_id =
+        has_embedded_value(kEmbeddedOAuthClientId);
+    const bool embedded_oauth_authorization_url =
+        has_embedded_value(kEmbeddedOAuthAuthorizationUrl);
+    const std::string saved_sdk_key =
+        embedded_public_app_key ? std::string() : sdk_key;
+    const std::string saved_sdk_secret =
+        embedded_public_app_key ? std::string() : sdk_secret;
+    const std::string saved_jwt =
+        embedded_public_app_key ? std::string() : jwt_token;
+    const std::string saved_public_app_key = embedded_public_app_key
+        ? kEmbeddedMeetingSdkPublicAppKey
+        : sdk_public_app_key;
+    const std::string saved_oauth_client_id = embedded_oauth_client_id
+        ? kEmbeddedOAuthClientId
+        : oauth_client_id;
+    const std::string saved_oauth_authorization_url =
+        embedded_oauth_authorization_url
+            ? kEmbeddedOAuthAuthorizationUrl
+            : oauth_authorization_url;
+
+    config_set_string(cfg, SECTION, "SdkKey",            saved_sdk_key.c_str());
+    config_set_string(cfg, SECTION, "SdkSecret",         saved_sdk_secret.c_str());
+    config_set_string(cfg, SECTION, "MeetingSdkClientId", saved_sdk_key.c_str());
     config_set_string(cfg, SECTION, "MeetingSdkClientSecret",
-                      protect_secret(sdk_secret).c_str());
+                      protect_secret(saved_sdk_secret).c_str());
     config_set_string(cfg, SECTION, "MeetingSdkPublicAppKey",
-                      sdk_public_app_key.c_str());
-    config_set_string(cfg, SECTION, "JwtToken",          jwt_token.c_str());
-    config_set_string(cfg, SECTION, "OAuthClientId",     oauth_client_id.c_str());
+                      saved_public_app_key.c_str());
+    config_set_string(cfg, SECTION, "JwtToken",          saved_jwt.c_str());
+    config_set_string(cfg, SECTION, "OAuthClientId",     saved_oauth_client_id.c_str());
     // Legacy keys cleared so older builds don't resurrect stale values. Public
     // PKCE is the only supported runtime mode; secrets must never be shipped
     // in a desktop binary.
@@ -255,7 +303,7 @@ void ZoomPluginSettings::save() const
     config_set_string(cfg, SECTION, "OAuthClientSecret", "");
     config_set_int   (cfg, SECTION, "OAuthUseClientSecret", 0);
     config_set_string(cfg, SECTION, "OAuthAuthorizationUrl",
-                      oauth_authorization_url.c_str());
+                      saved_oauth_authorization_url.c_str());
     config_set_string(cfg, SECTION, "OAuthRedirectUri",  oauth_redirect_uri.c_str());
     config_set_string(cfg, SECTION, "OAuthScopes",       oauth_scopes.c_str());
     config_set_string(cfg, SECTION, "OAuthAccessToken",
