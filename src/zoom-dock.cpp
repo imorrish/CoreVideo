@@ -1384,8 +1384,10 @@ void ZoomDock::on_join_clicked()
     }
 
     ZoomPluginSettings s = ZoomPluginSettings::load();
-    std::string jwt = s.resolved_jwt_token();
-    if (!ZoomEngineClient::instance().is_authenticated() && jwt.empty()) {
+    const bool use_public_app_key = !s.sdk_public_app_key.empty();
+    std::string jwt = use_public_app_key ? std::string() : s.resolved_jwt_token();
+    if (!ZoomEngineClient::instance().is_authenticated() && jwt.empty() &&
+        !use_public_app_key) {
         QMessageBox::warning(this, "Zoom Authentication",
             "This CoreVideo build does not have Zoom Meeting SDK credentials "
             "configured. Rebuild with embedded SDK credentials or restore a "
@@ -1405,7 +1407,7 @@ void ZoomDock::on_join_clicked()
          parsed.user_zak.empty() ? 0 : 1,
          parsed.app_privilege_token.empty() ? 0 : 1,
          tokens.app_privilege_token.empty() ? 0 : 1,
-         redacted_tail(s.sdk_key).c_str(),
+         use_public_app_key ? "(public_app_key)" : redacted_tail(s.sdk_key).c_str(),
          redacted_tail(s.oauth_client_id).c_str(),
          s.oauth_scopes.c_str());
     if (needs_oauth_zak &&

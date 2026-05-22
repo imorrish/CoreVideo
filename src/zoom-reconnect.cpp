@@ -329,6 +329,8 @@ void ZoomReconnectManager::execute_retry(uint64_t generation)
 
     ZoomEngineClient::instance().stop_for_reconnect();
     const ZoomPluginSettings settings = ZoomPluginSettings::load();
+    if (!settings.sdk_public_app_key.empty())
+        jwt.clear();
     if (!ZoomEngineClient::instance().start(jwt, settings.sdk_public_app_key)) {
         blog(LOG_ERROR, "[obs-zoom-plugin] Failed to start engine on reconnect");
         on_join_failed(false);

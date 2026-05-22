@@ -45,6 +45,7 @@ QString ZoomOAuthManager::random_base64url(int byte_count)
 {
     QByteArray bytes;
     bytes.resize(byte_count);
+    // QRandomGenerator::system() is backed by the platform CSPRNG.
     QRandomGenerator *secure_rng = QRandomGenerator::system(); // flawfinder: ignore
     for (int i = 0; i < byte_count; ++i)
         bytes[i] = static_cast<char>(secure_rng->generate() & 0xff);
@@ -72,8 +73,15 @@ static QByteArray oauth_basic_auth(const QString &client_id,
                                    const QString &client_secret)
 {
     if (client_secret.isEmpty())
-        return "Basic " + client_id.toUtf8().toBase64();
+        return {};
     return "Basic " + (client_id + ":" + client_secret).toUtf8().toBase64();
+}
+
+static std::string redacted_tail(const QString &value)
+{
+    if (value.isEmpty()) return "(empty)";
+    const QString tail = value.right(qMin(4, value.size()));
+    return ("****" + tail).toStdString();
 }
 
 bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
@@ -111,8 +119,12 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     m_pending_verifier = random_base64url(64);
     m_pending_state = random_base64url(32);
     m_pending_client_id = client_id;
+    m_pending_token_client_id =
+        (!s.oauth_use_client_secret && !s.oauth_public_client_id.empty())
+        ? QString::fromStdString(s.oauth_public_client_id)
+        : client_id;
 
-    if (s.oauth_client_id != client_id.toStdString()) {
+    if (s.oauth_use_client_secret && s.oauth_client_id != client_id.toStdString()) {
         s.oauth_client_id = client_id.toStdString();
         s.save();
     }
@@ -139,7 +151,11 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
         return false;
     }
 
-    blog(LOG_INFO, "[obs-zoom-plugin] Zoom OAuth authorization started");
+    blog(LOG_INFO,
+         "[obs-zoom-plugin] Zoom OAuth authorization started auth_client_id=%s token_client_id=%s public_mode=%d",
+         redacted_tail(client_id).c_str(),
+         redacted_tail(m_pending_token_client_id).c_str(),
+         s.oauth_use_client_secret ? 0 : 1);
 
     if (parent) {
         QMessageBox::information(parent, "Zoom OAuth",
@@ -256,14 +272,6 @@ static bool token_attempt_succeeded(const OAuthTokenAttemptResult &result)
         result.status >= 200 && result.status < 300;
 }
 
-static bool token_attempt_invalid_client(const OAuthTokenAttemptResult &result)
-{
-    QJsonParseError parse_error;
-    const QJsonDocument doc = QJsonDocument::fromJson(result.response, &parse_error);
-    return parse_error.error == QJsonParseError::NoError && doc.isObject() &&
-        doc.object().value("error").toString() == "invalid_client";
-}
-
 bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
 {
     blog(LOG_INFO, "[obs-zoom-plugin] Zoom OAuth callback received");
@@ -291,9 +299,14 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
     }
 
     const ZoomPluginSettings s = ZoomPluginSettings::load();
-    const QString client_id = m_pending_client_id.isEmpty()
+    const QString auth_client_id = m_pending_client_id.isEmpty()
         ? QString::fromStdString(s.oauth_client_id)
         : m_pending_client_id;
+    const QString token_client_id = m_pending_token_client_id.isEmpty()
+        ? ((!s.oauth_use_client_secret && !s.oauth_public_client_id.empty())
+            ? QString::fromStdString(s.oauth_public_client_id)
+            : auth_client_id)
+        : m_pending_token_client_id;
     const QString client_secret = s.oauth_use_client_secret
         ? QString::fromStdString(s.oauth_client_secret)
         : QString();
@@ -305,23 +318,21 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
         {"code_verifier", m_pending_verifier},
     };
 
-    OAuthTokenAttemptResult result = post_token_request(
-        manager, fields, oauth_basic_auth(client_id, client_secret));
-
-    if (!s.oauth_use_client_secret && token_attempt_invalid_client(result)) {
-        blog(LOG_INFO, "[obs-zoom-plugin] Zoom OAuth public token exchange retry with client_id form field");
-        fields.insert("client_id", client_id);
+    OAuthTokenAttemptResult result;
+    if (!s.oauth_use_client_secret) {
+        blog(LOG_INFO,
+             "[obs-zoom-plugin] Zoom OAuth public token exchange with client_id form field");
+        fields.insert("client_id", token_client_id);
         result = post_token_request(manager, fields, {});
-    }
-
-    if (!s.oauth_use_client_secret && token_attempt_invalid_client(result)) {
-        blog(LOG_INFO, "[obs-zoom-plugin] Zoom OAuth public token exchange retry with Basic auth and client_id form field");
-        result = post_token_request(manager, fields, oauth_basic_auth(client_id, {}));
+    } else {
+        result = post_token_request(
+            manager, fields, oauth_basic_auth(auth_client_id, client_secret));
     }
 
     m_pending_state.clear();
     m_pending_verifier.clear();
     m_pending_client_id.clear();
+    m_pending_token_client_id.clear();
 
     if (!token_attempt_succeeded(result)) {
         if (error) {
@@ -353,7 +364,10 @@ bool ZoomOAuthManager::refresh_access_token_blocking(QString *error)
     }
 
     QNetworkAccessManager manager;
-    const QString client_id = QString::fromStdString(s.oauth_client_id);
+    const QString client_id =
+        (!s.oauth_use_client_secret && !s.oauth_public_client_id.empty())
+        ? QString::fromStdString(s.oauth_public_client_id)
+        : QString::fromStdString(s.oauth_client_id);
     const QString client_secret = s.oauth_use_client_secret
         ? QString::fromStdString(s.oauth_client_secret)
         : QString();
@@ -361,16 +375,13 @@ bool ZoomOAuthManager::refresh_access_token_blocking(QString *error)
         {"grant_type", "refresh_token"},
         {"refresh_token", QString::fromStdString(s.oauth_refresh_token)},
     };
-    OAuthTokenAttemptResult result = post_token_request(
-        manager, fields, oauth_basic_auth(client_id, client_secret));
-
-    if (!s.oauth_use_client_secret && token_attempt_invalid_client(result)) {
+    OAuthTokenAttemptResult result;
+    if (!s.oauth_use_client_secret) {
         fields.insert("client_id", client_id);
         result = post_token_request(manager, fields, {});
-    }
-
-    if (!s.oauth_use_client_secret && token_attempt_invalid_client(result)) {
-        result = post_token_request(manager, fields, oauth_basic_auth(client_id, {}));
+    } else {
+        result = post_token_request(
+            manager, fields, oauth_basic_auth(client_id, client_secret));
     }
 
     if (!token_attempt_succeeded(result)) {
@@ -405,7 +416,7 @@ bool ZoomOAuthManager::fetch_zak_blocking(std::string &zak,
     }
 
     QNetworkAccessManager manager;
-    QNetworkRequest request(QUrl("https://api.zoom.us/v2/users/me/zak"));
+    QNetworkRequest request(QUrl("https://api.zoom.us/v2/users/me/token?type=zak"));
     request.setRawHeader("Authorization",
                          QByteArray("Bearer ") + QByteArray::fromStdString(s.oauth_access_token));
     request.setRawHeader("Accept", "application/json");

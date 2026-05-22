@@ -604,9 +604,11 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
             blog(LOG_INFO, "[obs-zoom-plugin] Control join fetched OAuth ZAK for Meeting SDK join");
         }
 
+        const std::string jwt = settings.sdk_public_app_key.empty()
+            ? settings.resolved_jwt_token()
+            : std::string();
         const bool ok =
-            ZoomEngineClient::instance().start(settings.resolved_jwt_token(),
-                                               settings.sdk_public_app_key) &&
+            ZoomEngineClient::instance().start(jwt, settings.sdk_public_app_key) &&
             ZoomEngineClient::instance().join(parsed.meeting_id, passcode,
                                               display_name.toStdString(),
                                               MeetingKind::Meeting, tokens);
