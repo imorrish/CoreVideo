@@ -99,7 +99,10 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     }
 
     QUrlQuery query(url);
-    const QString client_id = QString::fromStdString(s.oauth_client_id);
+    const QString configured_client_id = QString::fromStdString(s.oauth_client_id);
+    QString client_id = query.queryItemValue("client_id");
+    if (client_id.isEmpty())
+        client_id = configured_client_id;
     if (client_id.isEmpty()) {
         if (error) {
             *error = "CoreVideo was built without an embedded Zoom OAuth "
@@ -114,13 +117,13 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     m_pending_client_id = client_id;
 
     query.removeAllQueryItems("response_type");
-    query.removeAllQueryItems("client_id");
     query.removeAllQueryItems("redirect_uri");
     query.removeAllQueryItems("scope");
     query.removeAllQueryItems("state");
     query.removeAllQueryItems("code_challenge");
     query.removeAllQueryItems("code_challenge_method");
     query.addQueryItem("response_type", "code");
+    query.removeAllQueryItems("client_id");
     query.addQueryItem("client_id", client_id);
     query.addQueryItem("redirect_uri", QString::fromStdString(s.oauth_redirect_uri));
     if (!s.oauth_scopes.empty())
