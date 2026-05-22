@@ -29,6 +29,7 @@ The Cloudflare Worker serving `corevideo.iamfatness.us` must have these secrets:
 
 ```
 ZOOM_OAUTH_PUBLIC_CLIENT_ID=<Marketplace Public Client ID>
+ZOOM_OAUTH_AUTHORIZE_URL=https://marketplace.zoom.us/v2/authorize
 ZOOM_OAUTH_REDIRECT_URI=https://corevideo.iamfatness.us/oauth/callback
 ZOOM_OAUTH_SCOPES=user:read:token user:read:user
 COREVIDEO_OAUTH_BROKER_SECRET=<random 32+ byte secret>
@@ -69,7 +70,8 @@ local config cannot change the published app identity. Developers can still use
 
 1. CoreVideo opens the system browser at the embedded broker start URL with a
    local `state` and `return_uri=corevideo://oauth/callback`.
-2. The broker generates a PKCE verifier/challenge and redirects to Zoom with
+2. The broker generates a PKCE verifier/challenge and redirects to
+   `https://marketplace.zoom.us/v2/authorize` with
    `redirect_uri=https://corevideo.iamfatness.us/oauth/callback`.
 3. Zoom redirects back to the broker.
 4. The broker returns an encrypted, short-lived broker token containing the
