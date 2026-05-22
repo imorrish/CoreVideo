@@ -145,6 +145,9 @@ function oauthConfig(env, requestUrl) {
     `${requestUrl.origin}/oauth/callback`;
   return {
     clientId: env.ZOOM_OAUTH_PUBLIC_CLIENT_ID || env.ZOOM_OAUTH_CLIENT_ID,
+    authorizeClientId: env.ZOOM_OAUTH_AUTHORIZE_CLIENT_ID ||
+      env.ZOOM_OAUTH_PUBLIC_CLIENT_ID ||
+      env.ZOOM_OAUTH_CLIENT_ID,
     fallbackClientId: env.ZOOM_OAUTH_CLIENT_ID,
     clientSecret: env.ZOOM_OAUTH_CLIENT_SECRET,
     authorizeUrl: env.ZOOM_OAUTH_AUTHORIZE_URL || "https://zoom.us/oauth/authorize",
@@ -299,7 +302,7 @@ async function handleOauthStart(request, env) {
 
   const zoomUrl = new URL(config.authorizeUrl);
   zoomUrl.searchParams.set("response_type", "code");
-  zoomUrl.searchParams.set("client_id", config.clientId);
+  zoomUrl.searchParams.set("client_id", config.authorizeClientId);
   zoomUrl.searchParams.set("redirect_uri", config.redirectUri);
   zoomUrl.searchParams.set("state", state);
   zoomUrl.searchParams.set("code_challenge", await pkceChallenge(verifier));
