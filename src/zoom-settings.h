@@ -13,7 +13,7 @@ struct ZoomPluginSettings {
     // Optional global.ini override for the Zoom authorization URL (dev/staging).
     std::string         oauth_authorization_url;
     std::string         oauth_redirect_uri = "corevideo://oauth/callback";
-    std::string         oauth_scopes = "user:read:zak user:read:user";
+    std::string         oauth_scopes = "user:read:token user:read:user";
     std::string         oauth_access_token;
     std::string         oauth_refresh_token;
     int64_t             oauth_expires_at = 0;

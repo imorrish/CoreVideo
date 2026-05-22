@@ -8,6 +8,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonParseError>
 #include <QMap>
 #include <QMessageBox>
 #include <QNetworkAccessManager>
@@ -76,6 +77,28 @@ static std::string redacted_tail(const QString &value)
     return ("****" + tail).toStdString();
 }
 
+static bool is_broker_start_url(const QUrl &url)
+{
+    return url.scheme().startsWith("http") &&
+        url.path().compare("/oauth/start", Qt::CaseInsensitive) == 0;
+}
+
+static QUrl broker_endpoint(const QString &base_url, const QString &path)
+{
+    QUrl url(base_url);
+    url.setPath(path);
+    url.setQuery(QString());
+    return url;
+}
+
+static QUrl broker_base_from_authorization_url(const std::string &authorization_url)
+{
+    QUrl url(QString::fromStdString(authorization_url));
+    url.setPath("/");
+    url.setQuery(QString());
+    return url;
+}
+
 bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
 {
     ZoomPluginSettings s = ZoomPluginSettings::load();
@@ -98,12 +121,13 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
         return false;
     }
 
+    const bool use_broker = is_broker_start_url(url);
     QUrlQuery query(url);
     const QString configured_client_id = QString::fromStdString(s.oauth_client_id);
     QString client_id = query.queryItemValue("client_id");
     if (client_id.isEmpty())
         client_id = configured_client_id;
-    if (client_id.isEmpty()) {
+    if (!use_broker && client_id.isEmpty()) {
         if (error) {
             *error = "CoreVideo was built without an embedded Zoom OAuth "
                      "client ID. Rebuild with ZOOM_EMBED_OAUTH_CLIENT_ID set "
@@ -112,9 +136,11 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
         return false;
     }
 
-    m_pending_verifier = random_base64url(64);
+    m_pending_verifier = use_broker ? QString() : random_base64url(64);
     m_pending_state = random_base64url(32);
     m_pending_client_id = client_id;
+    m_pending_broker_base_url = use_broker ? broker_base_from_authorization_url(
+        url.toString(QUrl::RemoveQuery).toStdString()).toString() : QString();
 
     query.removeAllQueryItems("response_type");
     query.removeAllQueryItems("redirect_uri");
@@ -122,15 +148,21 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     query.removeAllQueryItems("state");
     query.removeAllQueryItems("code_challenge");
     query.removeAllQueryItems("code_challenge_method");
-    query.addQueryItem("response_type", "code");
     query.removeAllQueryItems("client_id");
-    query.addQueryItem("client_id", client_id);
-    query.addQueryItem("redirect_uri", QString::fromStdString(s.oauth_redirect_uri));
-    if (!s.oauth_scopes.empty())
-        query.addQueryItem("scope", QString::fromStdString(s.oauth_scopes));
-    query.addQueryItem("state", m_pending_state);
-    query.addQueryItem("code_challenge", pkce_challenge(m_pending_verifier));
-    query.addQueryItem("code_challenge_method", "S256");
+    query.removeAllQueryItems("return_uri");
+    if (use_broker) {
+        query.addQueryItem("state", m_pending_state);
+        query.addQueryItem("return_uri", QString::fromStdString(s.oauth_redirect_uri));
+    } else {
+        query.addQueryItem("response_type", "code");
+        query.addQueryItem("client_id", client_id);
+        query.addQueryItem("redirect_uri", QString::fromStdString(s.oauth_redirect_uri));
+        if (!s.oauth_scopes.empty())
+            query.addQueryItem("scope", QString::fromStdString(s.oauth_scopes));
+        query.addQueryItem("state", m_pending_state);
+        query.addQueryItem("code_challenge", pkce_challenge(m_pending_verifier));
+        query.addQueryItem("code_challenge_method", "S256");
+    }
     url.setQuery(query);
 
     if (!QDesktopServices::openUrl(url)) {
@@ -138,9 +170,15 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
         return false;
     }
 
-    blog(LOG_INFO,
-         "[obs-zoom-plugin] Zoom OAuth authorization started (public PKCE) client_id=%s",
-         redacted_tail(client_id).c_str());
+    if (use_broker) {
+        blog(LOG_INFO,
+             "[obs-zoom-plugin] Zoom OAuth authorization started through broker host=%s",
+             url.host().toUtf8().constData());
+    } else {
+        blog(LOG_INFO,
+             "[obs-zoom-plugin] Zoom OAuth authorization started (public PKCE) client_id=%s",
+             redacted_tail(client_id).c_str());
+    }
 
     if (parent) {
         QMessageBox::information(parent, "Zoom OAuth",
@@ -243,6 +281,30 @@ static OAuthTokenAttemptResult post_token_request(
     return result;
 }
 
+static OAuthTokenAttemptResult post_json_request(QNetworkAccessManager &manager,
+                                                 const QUrl &url,
+                                                 const QJsonObject &body)
+{
+    QNetworkRequest request(url);
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Accept", "application/json");
+
+    QEventLoop loop;
+    QNetworkReply *reply =
+        manager.post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    loop.exec();
+
+    OAuthTokenAttemptResult result;
+    result.response = reply->readAll();
+    result.status =
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    result.net_error = reply->error();
+    result.net_error_string = reply->errorString();
+    reply->deleteLater();
+    return result;
+}
+
 static bool token_attempt_succeeded(const OAuthTokenAttemptResult &result)
 {
     return result.net_error == QNetworkReply::NoError &&
@@ -271,6 +333,7 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
     const QUrlQuery query(callback);
     const QString state = query.queryItemValue("state");
     const QString code = query.queryItemValue("code");
+    const QString broker_token = query.queryItemValue("broker_token");
     const QString oauth_error = query.queryItemValue("error");
 
     if (!oauth_error.isEmpty()) {
@@ -279,12 +342,8 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
              oauth_error.toUtf8().constData());
         return false;
     }
-    if (code.isEmpty()) {
-        if (error) *error = "OAuth callback did not include an authorization code.";
-        blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth callback missing authorization code");
-        return false;
-    }
-    if (m_pending_state.isEmpty() || m_pending_verifier.isEmpty()) {
+    if (m_pending_state.isEmpty() ||
+        (broker_token.isEmpty() && m_pending_verifier.isEmpty())) {
         if (error) {
             *error = "Zoom returned a callback but CoreVideo has no active "
                      "sign-in in progress. This usually means OBS was "
@@ -306,6 +365,47 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
     }
 
     const ZoomPluginSettings s = ZoomPluginSettings::load();
+    if (!broker_token.isEmpty()) {
+        const QString broker_base = m_pending_broker_base_url.isEmpty()
+            ? broker_base_from_authorization_url(s.oauth_authorization_url).toString()
+            : m_pending_broker_base_url;
+        QNetworkAccessManager manager;
+        OAuthTokenAttemptResult result = post_json_request(
+            manager,
+            broker_endpoint(broker_base, "/oauth/redeem"),
+            QJsonObject{{"broker_token", broker_token}});
+
+        m_pending_state.clear();
+        m_pending_verifier.clear();
+        m_pending_client_id.clear();
+        m_pending_broker_base_url.clear();
+
+        if (!token_attempt_succeeded(result)) {
+            if (error) {
+                *error = "Zoom broker token redeem failed: " +
+                         oauth_error_message(result.response,
+                                             result.net_error_string);
+            }
+            blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth broker redeem failed: status=%d network=%d error=%s",
+                 result.status, static_cast<int>(result.net_error),
+                 result.net_error_string.toUtf8().constData());
+            if (!result.response.isEmpty()) {
+                blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth broker redeem response: %s",
+                     QString::fromUtf8(result.response.left(512)).toUtf8().constData());
+            }
+            return false;
+        }
+        const bool ok = parse_token_response(result.response, error);
+        if (ok)
+            blog(LOG_INFO, "[obs-zoom-plugin] Zoom OAuth broker authorization completed");
+        return ok;
+    }
+    if (code.isEmpty()) {
+        if (error) *error = "OAuth callback did not include an authorization code.";
+        blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth callback missing authorization code");
+        return false;
+    }
+
     const QString client_id = m_pending_client_id.isEmpty()
         ? QString::fromStdString(s.oauth_client_id)
         : m_pending_client_id;
@@ -323,6 +423,7 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
     m_pending_state.clear();
     m_pending_verifier.clear();
     m_pending_client_id.clear();
+    m_pending_broker_base_url.clear();
 
     if (!token_attempt_succeeded(result)) {
         if (error) {
@@ -353,6 +454,30 @@ bool ZoomOAuthManager::refresh_access_token_blocking(QString *error)
     }
 
     QNetworkAccessManager manager;
+    const QUrl authorization_url(QString::fromStdString(s.oauth_authorization_url));
+    if (is_broker_start_url(authorization_url)) {
+        OAuthTokenAttemptResult result = post_json_request(
+            manager,
+            broker_endpoint(broker_base_from_authorization_url(s.oauth_authorization_url)
+                                .toString(),
+                            "/oauth/refresh"),
+            QJsonObject{{"refresh_token",
+                         QString::fromStdString(s.oauth_refresh_token)}});
+        if (!token_attempt_succeeded(result)) {
+            if (error) {
+                *error = "Zoom broker token refresh failed: " +
+                         oauth_error_message(result.response,
+                                             result.net_error_string);
+            }
+            if (!result.response.isEmpty()) {
+                blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth broker refresh response: %s",
+                     QString::fromUtf8(result.response.left(512)).toUtf8().constData());
+            }
+            return false;
+        }
+        return parse_token_response(result.response, error);
+    }
+
     const QString client_id = QString::fromStdString(s.oauth_client_id);
     QMap<QString, QString> fields = {
         {"grant_type", "refresh_token"},
@@ -382,7 +507,7 @@ bool ZoomOAuthManager::fetch_zak_blocking(std::string &zak,
     Q_UNUSED(meeting_id);
 
     ZoomPluginSettings s = ZoomPluginSettings::load();
-    if (s.oauth_access_token.empty() || s.oauth_client_id.empty())
+    if (s.oauth_access_token.empty())
         return false;
 
     if (s.oauth_expires_at <= QDateTime::currentSecsSinceEpoch()) {

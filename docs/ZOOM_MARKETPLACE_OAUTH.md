@@ -1,110 +1,116 @@
 # Zoom Marketplace OAuth setup
 
-CoreVideo uses a Zoom Meeting SDK JWT to initialize the Meeting SDK helper and
-uses a user-level OAuth token (Authorization Code + PKCE, public client) to
-fetch a short-lived ZAK for attributed joins. This is needed for external-
-account meetings and Marketplace review.
+CoreVideo uses the Zoom Meeting SDK public app key to initialize the Meeting SDK
+helper and uses a user-level OAuth token to fetch a short-lived ZAK for
+attributed joins. This is needed for external-account meetings and Marketplace
+review.
 
-Public PKCE is the only OAuth mode CoreVideo supports at runtime: a desktop
-binary cannot keep a client secret, so confidential OAuth is intentionally
-not available.
+Published builds use an HTTPS OAuth broker at `corevideo.iamfatness.us` so the
+Zoom client secret stays server-side. The OBS plugin only knows the broker
+start URL and the Meeting SDK public app key. End users never enter app
+credentials.
 
 ## Zoom Marketplace app (publisher, one-time)
 
 1. Create a **General** app in the Zoom App Marketplace.
-2. Enable **User-managed** OAuth and configure the app as a **Public Client**
-   (PKCE, no client secret).
+2. Enable **User-managed** OAuth.
 3. Add this Redirect URL:
-   `corevideo://oauth/callback`
+   `https://corevideo.iamfatness.us/oauth/callback`
 4. Add the same value to the OAuth allow list:
-   `corevideo://oauth/callback`
+   `https://corevideo.iamfatness.us/oauth/callback`
 5. Add the minimum scopes used by the build:
-   `user:read:zak`
+   `user:read:token`
    `user:read:user`
-6. Keep the Meeting SDK credentials configured for SDK authentication. OAuth
+6. Keep the Meeting SDK public app key configured for SDK authentication. OAuth
    credentials are separate from Meeting SDK credentials.
+
+## Broker configuration
+
+The Cloudflare Worker serving `corevideo.iamfatness.us` must have these secrets:
+
+```
+ZOOM_OAUTH_CLIENT_ID=<Marketplace OAuth Client ID>
+ZOOM_OAUTH_CLIENT_SECRET=<Marketplace OAuth Client Secret>
+ZOOM_OAUTH_REDIRECT_URI=https://corevideo.iamfatness.us/oauth/callback
+ZOOM_OAUTH_SCOPES=user:read:token user:read:user
+COREVIDEO_OAUTH_BROKER_SECRET=<random 32+ byte secret>
+```
 
 ## Embedding the app identity into the build (publisher)
 
-The OAuth client ID, optional authorization URL, and Meeting SDK public app key
-are part of the published app's identity, not per-user settings. CoreVideo
-bakes them in at compile time:
+The OAuth broker URL and Meeting SDK public app key are part of the published
+app's identity, not per-user settings. CoreVideo bakes them in at compile time:
 
 ```
 cmake -B build \
-  -DZOOM_EMBED_OAUTH_CLIENT_ID=<your_oauth_or_public_client_id> \
-  -DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=<your_authorization_url> \
+  -DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=https://corevideo.iamfatness.us/oauth/start \
   -DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=<your_meeting_sdk_public_app_key> ...
 ```
 
-In CI, pass the value as a GitHub Actions secret so it never lands in the
-source tree. The values are written into `src/zoom-credentials.h` from
+In CI, pass the values as GitHub Actions secrets so they never land in the
+source tree. They are written into `src/zoom-credentials.h` from
 `src/zoom-credentials.h.in` and read by `ZoomPluginSettings::load()`.
 
 When embedded values are present, they win over OBS `global.ini` so a stale
-local config cannot change the published app identity. Developers can still
-use `global.ini` overrides only in local builds where the embedded values are
-blank.
+local config cannot change the published app identity. Developers can still use
+`global.ini` overrides only in local builds where the embedded values are blank.
 
 ## End-user sign-in
 
 1. Install a CoreVideo build that has the app identity embedded.
 2. Open OBS, then open **Tools > Zoom Plugin Settings**.
 3. In the **Zoom Account** section click **Sign in with Zoom** and approve the
-   app in the browser. There are no Client ID, Client Secret, or
-   Authorization URL fields to configure — the build already knows.
+   app in the browser. There are no Client ID, Client Secret, or Authorization
+   URL fields to configure; the build already knows the broker URL.
 4. The callback helper (`CoreVideoOAuthCallback.exe` on Windows,
-   `CoreVideoOAuthCallback.app` on macOS) is registered for the
-   `corevideo://` URL scheme the first time you click Sign in and forwards the
-   redirect to the running plugin on `127.0.0.1:<ControlServerPort>` (default
-   `19870`).
+   `CoreVideoOAuthCallback.app` on macOS) is registered for the `corevideo://`
+   URL scheme the first time you click Sign in and forwards the redirect to the
+   running plugin on `127.0.0.1:<ControlServerPort>` (default `19870`).
 
 ## Runtime flow
 
-1. CoreVideo generates a high-entropy `code_verifier`, derives an S256
-   `code_challenge`, and opens the system browser at
-   `https://zoom.us/oauth/authorize` with the embedded OAuth Client ID,
-   `redirect_uri=corevideo://oauth/callback`, scopes, `state`,
-   `code_challenge`, and `code_challenge_method=S256`.
-2. Zoom redirects to `corevideo://oauth/callback?...`.
-3. The callback helper forwards that URL to the plugin's control server.
-4. The plugin verifies `state`, posts to `https://zoom.us/oauth/token` with
-   `grant_type=authorization_code`, the `code`, the `redirect_uri`, the
-   `code_verifier`, and the OAuth Client ID as a form field (no Authorization
-   header, no client secret), and stores access/refresh tokens.
-5. Before joining a meeting, the plugin refreshes the access token if needed
-   (same PKCE-style refresh request, `client_id` in the form body) and calls
+1. CoreVideo opens the system browser at the embedded broker start URL with a
+   local `state` and `return_uri=corevideo://oauth/callback`.
+2. The broker redirects to Zoom with
+   `redirect_uri=https://corevideo.iamfatness.us/oauth/callback`.
+3. Zoom redirects back to the broker, which exchanges the code server-side using
+   the Marketplace OAuth Client ID and Client Secret.
+4. The broker returns an encrypted, short-lived broker token containing the
+   authorization code to `corevideo://oauth/callback`.
+5. The callback helper forwards that URL to the running plugin. The plugin
+   verifies `state`, redeems the broker token over HTTPS, and the broker
+   exchanges the code for access/refresh tokens server-side.
+6. Before joining a meeting, the plugin refreshes the access token through the
+   broker if needed and calls
    `GET https://api.zoom.us/v2/users/me/token?type=zak`.
-6. The returned ZAK is passed into the Meeting SDK `JoinParam4WithoutLogin`
-   as `userZAK`.
+7. The returned ZAK is passed into the Meeting SDK `JoinParam4WithoutLogin` as
+   `userZAK`.
 
 ## Security notes
 
-- PKCE (S256) is used on every authorization. The verifier is generated from
-  the platform CSPRNG.
 - No client secret is shipped in the binary. The settings dialog does not
-  expose Client ID, Client Secret, or Authorization URL fields, so users
-  cannot misconfigure the integration.
-- Windows token storage uses DPAPI before writing tokens into OBS global
-  config.
+  expose Client ID, Client Secret, or Authorization URL fields, so users cannot
+  misconfigure the integration.
+- Broker state is HMAC-signed and expires after 10 minutes. Broker result
+  tokens are AES-GCM encrypted, contain only the authorization code, and expire
+  after 5 minutes.
+- Windows token storage uses DPAPI before writing tokens into OBS global config.
 - Refresh tokens are rotated; always persist the latest refresh token Zoom
   returns.
 - Windows builds must ship Qt's TLS backend plugins, especially the Schannel
   backend under `obs-plugins/64bit/plugins/tls`, or OAuth HTTPS requests will
   fail before tokens or ZAKs can be fetched.
 - The URL callback command bypasses the local control-server token, but the
-  OAuth `state` and one-time verifier are still required before any token
-  exchange occurs.
-- Do not log access tokens, refresh tokens, ZAKs, authorization codes, or
-  PKCE verifiers.
+  OAuth `state` is still required before any broker token can be redeemed.
+- Do not log access tokens, refresh tokens, ZAKs, authorization codes, broker
+  tokens, or OAuth state values.
 
 ## Marketplace review checklist
 
 - Explain that CoreVideo joins meetings as an OBS capture/ISO recording tool.
 - Request only the scopes used by the build.
 - Provide test credentials and a test meeting hosted outside the app account.
-- Document the visible in-product OAuth sign-in and uninstall/disconnect
-  path.
+- Document the visible in-product OAuth sign-in and uninstall/disconnect path.
 - Make sure the Marketplace listing explains when meeting audio/video is
   captured, where it is processed, and that raw media stays local unless OBS
   outputs it.

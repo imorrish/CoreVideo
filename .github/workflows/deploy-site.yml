@@ -9,6 +9,8 @@ on:
       - "site-assets/**"
       - "scripts/build-site.mjs"
       - "public/**"
+      - "site-worker.js"
+      - "wrangler.jsonc"
       - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
 

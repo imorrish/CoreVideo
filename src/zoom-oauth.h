@@ -31,4 +31,5 @@ private:
     QString m_pending_state;
     QString m_pending_verifier;
     QString m_pending_client_id;
+    QString m_pending_broker_base_url;
 };
