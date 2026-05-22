@@ -48,7 +48,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **Output profiles** - save and load named participant-to-source mappings as JSON files
 - **Output manager dock** - dockable OBS panel and API for viewing and reconfiguring all sources at runtime
 - **JWT generation** - CoreVideo generates Meeting SDK JWTs locally from key+secret; manual override available
-- **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE for attributed joins and Marketplace compliance; fetches a short-lived ZAK via `GET /v2/users/me/zak`; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows; confidential client mode supported
+- **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE (public client, no secret) for attributed joins and Marketplace compliance; the Public Client ID is baked in at build time via `ZOOM_EMBED_OAUTH_CLIENT_ID`; fetches a short-lived ZAK via `GET /v2/users/me/token?type=zak`; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows
 - **SDK 5.17.x and 7.x** - auto-detects flat and subfolder header layouts
 - **Hardened security** - constant-time token comparison, validated IPC input, sanitised participant IDs, SIGPIPE handling
 - **Modern UI** - CoreVideo stylesheet with dark theme, animated `CvStatusDot`, `CvBanner` first-run notices, and button role variants (primary / danger)
@@ -178,22 +178,28 @@ To verify an already-created scene graph without creating or modifying sources:
 .\scripts\obs-scene-smoke-test.ps1 -AuditOnly -SceneName "CoreVideo Smoke Test"
 ```
 
-5. **Set up OAuth (for Marketplace / external-account joins)** - in the Settings dialog, enter your OAuth Client ID, set the Redirect URI to `corevideo://oauth/callback`, click **Register corevideo:// URL Scheme**, then click **Authorize with Zoom**. See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full walkthrough.
+5. **Set up OAuth (for Marketplace / external-account joins)** - publishers configure this once at build time with `-DZOOM_EMBED_OAUTH_CLIENT_ID=<your_public_client_id>`. End users just open the Settings dialog and click **Sign in with Zoom**. See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full walkthrough.
 
 6. **Join once, then assign outputs** - use the CoreVideo dock or the TCP/OSC control APIs to join the meeting once per OBS session. Then add **Zoom Participant**, **Zoom Participant Audio**, **Zoom Share**, or **Zoom Interpretation Audio** sources and assign them to participants or dynamic roles.
 
 ## Zoom OAuth PKCE
 
-CoreVideo supports user-level OAuth 2.0 with PKCE for attributed meeting joins and Zoom App Marketplace compliance. This is required when joining meetings hosted by accounts other than the SDK account.
+CoreVideo uses user-level OAuth 2.0 with PKCE (public client, no secret) for attributed meeting joins and Zoom App Marketplace compliance. This is required when joining meetings hosted by accounts other than the SDK account. Confidential OAuth is intentionally not supported at runtime: a desktop binary can't hide a client secret.
+
+### Build-time configuration (publisher, one-time)
+Pass the Marketplace app's Public Client ID at CMake configure time:
+```
+cmake -B build -DZOOM_EMBED_OAUTH_CLIENT_ID=<your_public_client_id> ...
+```
+The value is compiled into `kEmbeddedOAuthClientId` and used as the default for every install of that build. There is no UI for entering it.
 
 ### Flow
-1. In **Tools -> Zoom Plugin Settings**, enter the OAuth Client ID (and optionally Client Secret for confidential/test apps). Set Redirect URI to `corevideo://oauth/callback`.
-2. Click **Register corevideo:// URL Scheme** - registers the scheme in the OS so the callback helper can intercept the redirect.
-3. Click **Authorize with Zoom** - opens the browser with a PKCE authorization request (S256 code challenge, high-entropy verifier, state CSRF token).
-4. Zoom redirects to `corevideo://oauth/callback?code=...&state=...`.
-5. `CoreVideoOAuthCallback.exe` (Windows) or `CoreVideoOAuthCallback.app` (macOS) forwards the URL to the plugin via the TCP control server (`oauth_callback` command).
-6. The plugin verifies state, exchanges the code at `https://zoom.us/oauth/token`, and persists access + refresh tokens. On Windows, tokens are DPAPI-protected before storage.
-7. Before each meeting join, CoreVideo refreshes the token if needed and fetches a ZAK from `GET /v2/users/me/zak`. The ZAK is passed into the SDK `JoinParam4WithoutLogin`.
+1. In **Tools -> Zoom Plugin Settings**, click **Authorize with Zoom** (no IDs to enter). The plugin registers the `corevideo://` URL scheme automatically on first use.
+2. The browser opens with a PKCE authorization request (S256 code challenge, high-entropy verifier, state CSRF token).
+3. Zoom redirects to `corevideo://oauth/callback?code=...&state=...`.
+4. `CoreVideoOAuthCallback.exe` (Windows) or `CoreVideoOAuthCallback.app` (macOS) forwards the URL to the plugin via the TCP control server (`oauth_callback` command).
+5. The plugin verifies state, posts to `https://zoom.us/oauth/token` with `client_id`, `code`, `redirect_uri`, and `code_verifier` (no Authorization header, no secret), and persists access + refresh tokens. On Windows, tokens are DPAPI-protected before storage.
+6. Before each meeting join, CoreVideo refreshes the token if needed and fetches a ZAK from `GET /v2/users/me/token?type=zak`. The ZAK is passed into the SDK `JoinParam4WithoutLogin`.
 
 See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full setup guide and security notes.
 
