@@ -10,7 +10,9 @@ This is needed for external-account meetings and Marketplace review.
 2. Enable **User-managed** OAuth.
 3. Choose the OAuth client mode that matches the Marketplace app:
    - **Confidential OAuth**: use the app's OAuth Client ID and Client Secret.
-   - **Public PKCE OAuth**: use the Public Client ID with PKCE and no secret.
+   - **Public PKCE OAuth**: use the app's OAuth Client ID with PKCE and no
+     secret. CoreVideo uses the single Client ID for both modes; the checkbox
+     in settings decides whether a secret is also required.
 4. Add this Redirect URL:
    `corevideo://oauth/callback`
 5. Add the same value to the OAuth allow list:
@@ -30,8 +32,9 @@ This is needed for external-account meetings and Marketplace review.
    `client_id`, CoreVideo can infer and store it.
 4. If the Zoom app is configured as a confidential OAuth client, enable **Use
    Client Secret for confidential OAuth** and enter the OAuth Client Secret. If
-   the app is configured as public PKCE, leave this disabled and use the Public
-   Client ID.
+   the app is configured as public PKCE, leave that checkbox unchecked; the
+   Client Secret field is disabled in that mode and only the Client ID is
+   required.
 5. Keep Redirect URI set to `corevideo://oauth/callback`.
 6. Click **Register corevideo:// URL Scheme**. On Windows this registers:
    `HKCU\Software\Classes\corevideo\shell\open\command`

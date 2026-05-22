@@ -107,14 +107,17 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     }
 
     QUrlQuery query(url);
-    const QString client_id = s.oauth_use_client_secret
-        ? QString::fromStdString(s.oauth_client_id)
-        : QString::fromStdString(s.oauth_public_client_id);
+    const QString client_id = QString::fromStdString(s.oauth_client_id);
     if (client_id.isEmpty()) {
+        if (error)
+            *error = "Enter the Zoom OAuth Client ID first.";
+        return false;
+    }
+    if (s.oauth_use_client_secret && s.oauth_client_secret.empty()) {
         if (error) {
-            *error = s.oauth_use_client_secret
-                ? "Enter the Zoom OAuth Client ID first."
-                : "Enter the Zoom Public Client ID first.";
+            *error = "Confidential OAuth is enabled but no Client Secret is "
+                     "set. Either enter the Client Secret or switch to Public "
+                     "Client OAuth (PKCE, no secret).";
         }
         return false;
     }
@@ -122,7 +125,6 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     m_pending_verifier = random_base64url(64);
     m_pending_state = random_base64url(32);
     m_pending_client_id = client_id;
-    m_pending_token_client_id = client_id;
 
     query.removeAllQueryItems("response_type");
     query.removeAllQueryItems("client_id");
@@ -147,9 +149,8 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     }
 
     blog(LOG_INFO,
-         "[obs-zoom-plugin] Zoom OAuth authorization started auth_client_id=%s token_client_id=%s public_mode=%d",
+         "[obs-zoom-plugin] Zoom OAuth authorization started client_id=%s public_mode=%d",
          redacted_tail(client_id).c_str(),
-         redacted_tail(m_pending_token_client_id).c_str(),
          s.oauth_use_client_secret ? 0 : 1);
 
     if (parent) {
@@ -287,21 +288,31 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
         blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth callback missing authorization code");
         return false;
     }
-    if (state.isEmpty() || state != m_pending_state || m_pending_verifier.isEmpty()) {
-        if (error) *error = "OAuth callback state did not match the active login.";
+    if (m_pending_state.isEmpty() || m_pending_verifier.isEmpty()) {
+        if (error) {
+            *error = "Zoom returned a callback but CoreVideo has no active "
+                     "sign-in in progress. This usually means OBS was "
+                     "restarted, the plugin was reloaded, or the browser tab "
+                     "was reused after a previous sign-in already completed. "
+                     "Click Sign in with Zoom again to start a fresh flow.";
+        }
+        blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth callback arrived with no active flow");
+        return false;
+    }
+    if (state.isEmpty() || state != m_pending_state) {
+        if (error) {
+            *error = "Zoom OAuth callback state did not match the active "
+                     "sign-in. Click Sign in with Zoom again and use the new "
+                     "browser tab to approve the request.";
+        }
         blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth callback state mismatch");
         return false;
     }
 
     const ZoomPluginSettings s = ZoomPluginSettings::load();
-    const QString auth_client_id = m_pending_client_id.isEmpty()
+    const QString client_id = m_pending_client_id.isEmpty()
         ? QString::fromStdString(s.oauth_client_id)
         : m_pending_client_id;
-    const QString token_client_id = m_pending_token_client_id.isEmpty()
-        ? ((!s.oauth_use_client_secret && !s.oauth_public_client_id.empty())
-            ? QString::fromStdString(s.oauth_public_client_id)
-            : auth_client_id)
-        : m_pending_token_client_id;
     const QString client_secret = s.oauth_use_client_secret
         ? QString::fromStdString(s.oauth_client_secret)
         : QString();
@@ -317,17 +328,16 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
     if (!s.oauth_use_client_secret) {
         blog(LOG_INFO,
              "[obs-zoom-plugin] Zoom OAuth public token exchange with client_id form field");
-        fields.insert("client_id", token_client_id);
+        fields.insert("client_id", client_id);
         result = post_token_request(manager, fields, {});
     } else {
         result = post_token_request(
-            manager, fields, oauth_basic_auth(auth_client_id, client_secret));
+            manager, fields, oauth_basic_auth(client_id, client_secret));
     }
 
     m_pending_state.clear();
     m_pending_verifier.clear();
     m_pending_client_id.clear();
-    m_pending_token_client_id.clear();
 
     if (!token_attempt_succeeded(result)) {
         if (error) {
@@ -359,10 +369,7 @@ bool ZoomOAuthManager::refresh_access_token_blocking(QString *error)
     }
 
     QNetworkAccessManager manager;
-    const QString client_id =
-        (!s.oauth_use_client_secret && !s.oauth_public_client_id.empty())
-        ? QString::fromStdString(s.oauth_public_client_id)
-        : QString::fromStdString(s.oauth_client_id);
+    const QString client_id = QString::fromStdString(s.oauth_client_id);
     const QString client_secret = s.oauth_use_client_secret
         ? QString::fromStdString(s.oauth_client_secret)
         : QString();

@@ -47,12 +47,20 @@ ZoomSettingsDialog::ZoomSettingsDialog(QWidget *parent)
     m_oauth_public_client_cb = new QCheckBox("Use Public Client OAuth (PKCE, no secret)", this);
     m_oauth_public_client_cb->setChecked(!s.oauth_use_client_secret);
     m_oauth_client_id_edit = new QLineEdit(QString::fromStdString(s.oauth_client_id), this);
-    m_oauth_client_id_edit->setPlaceholderText("Regular Client ID");
-    m_oauth_public_id_edit = new QLineEdit(QString::fromStdString(s.oauth_public_client_id), this);
-    m_oauth_public_id_edit->setPlaceholderText("Public Client ID");
+    m_oauth_client_id_edit->setPlaceholderText("Zoom OAuth Client ID");
     m_oauth_secret_edit = new QLineEdit(QString::fromStdString(s.oauth_client_secret), this);
     m_oauth_secret_edit->setEchoMode(QLineEdit::Password);
     m_oauth_secret_edit->setPlaceholderText("Required only for confidential OAuth");
+    auto sync_secret_enabled = [this]() {
+        const bool needs_secret = !m_oauth_public_client_cb->isChecked();
+        m_oauth_secret_edit->setEnabled(needs_secret);
+        m_oauth_secret_edit->setPlaceholderText(needs_secret
+            ? "Client Secret"
+            : "Not used in Public Client OAuth");
+    };
+    sync_secret_enabled();
+    connect(m_oauth_public_client_cb, &QCheckBox::toggled,
+            this, [sync_secret_enabled](bool) { sync_secret_enabled(); });
     m_oauth_auth_url_edit = new QLineEdit(QString::fromStdString(s.oauth_authorization_url), this);
     m_oauth_auth_url_edit->setPlaceholderText("Optional custom authorization URL");
     m_oauth_status_label->setWordWrap(true);
@@ -77,7 +85,6 @@ ZoomSettingsDialog::ZoomSettingsDialog(QWidget *parent)
     oauth_form->setSpacing(8);
     oauth_form->addRow("", m_oauth_public_client_cb);
     oauth_form->addRow(new QLabel("Client ID:", this), m_oauth_client_id_edit);
-    oauth_form->addRow(new QLabel("Public Client ID:", this), m_oauth_public_id_edit);
     oauth_form->addRow(new QLabel("Client Secret:", this), m_oauth_secret_edit);
     oauth_form->addRow(new QLabel("Authorization URL:", this), m_oauth_auth_url_edit);
     oauth_layout->addLayout(oauth_form);
@@ -209,21 +216,19 @@ bool ZoomSettingsDialog::saveSettings(bool close_dialog, bool restart_servers)
     ZoomPluginSettings s = ZoomPluginSettings::load();
     s.oauth_use_client_secret = !m_oauth_public_client_cb->isChecked();
     s.oauth_client_id = m_oauth_client_id_edit->text().trimmed().toStdString();
-    s.oauth_public_client_id =
-        m_oauth_public_id_edit->text().trimmed().toStdString();
     s.oauth_client_secret =
         m_oauth_secret_edit->text().trimmed().toStdString();
     s.oauth_authorization_url =
         m_oauth_auth_url_edit->text().trimmed().toStdString();
-    if (!s.oauth_use_client_secret && s.oauth_public_client_id.empty()) {
+    if (s.oauth_client_id.empty()) {
         QMessageBox::warning(this, "Zoom OAuth",
-            "Enter the Zoom Public Client ID before using Public Client OAuth.");
+            "Enter the Zoom OAuth Client ID before signing in.");
         return false;
     }
-    if (s.oauth_use_client_secret &&
-        (s.oauth_client_id.empty() || s.oauth_client_secret.empty())) {
+    if (s.oauth_use_client_secret && s.oauth_client_secret.empty()) {
         QMessageBox::warning(this, "Zoom OAuth",
-            "Enter the regular Zoom Client ID and Client Secret before using confidential OAuth.");
+            "Confidential OAuth is enabled but no Client Secret is set. "
+            "Enter the Client Secret or switch to Public Client OAuth.");
         return false;
     }
     s.control_server_port = static_cast<uint16_t>(m_control_port_spin->value());

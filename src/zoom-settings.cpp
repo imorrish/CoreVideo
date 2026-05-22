@@ -90,7 +90,7 @@ ZoomPluginSettings ZoomPluginSettings::load()
         config_get_string(cfg, SECTION, "MeetingSdkPublicAppKey");
     const char *jwt    = config_get_string(cfg, SECTION, "JwtToken");
     const char *oauth_client_id = config_get_string(cfg, SECTION, "OAuthClientId");
-    const char *oauth_public_client_id =
+    const char *oauth_legacy_public_client_id =
         config_get_string(cfg, SECTION, "PublicClientId");
     const char *oauth_client_secret = config_get_string(cfg, SECTION, "OAuthClientSecret");
     const int oauth_use_client_secret =
@@ -115,12 +115,16 @@ ZoomPluginSettings ZoomPluginSettings::load()
                             *meeting_sdk_public_app_key)
         ? meeting_sdk_public_app_key
         : "";
-    s.oauth_client_id = (oauth_client_id && *oauth_client_id)
-        ? oauth_client_id
-        : kEmbeddedOAuthClientId;
-    s.oauth_public_client_id = (oauth_public_client_id && *oauth_public_client_id)
-        ? oauth_public_client_id
-        : s.sdk_public_app_key;
+    // Migration: earlier builds stored the public PKCE client id in a separate
+    // "PublicClientId" key. Collapse it into the single OAuthClientId field so
+    // users only have to manage one identifier.
+    if (oauth_client_id && *oauth_client_id) {
+        s.oauth_client_id = oauth_client_id;
+    } else if (oauth_legacy_public_client_id && *oauth_legacy_public_client_id) {
+        s.oauth_client_id = oauth_legacy_public_client_id;
+    } else {
+        s.oauth_client_id = kEmbeddedOAuthClientId;
+    }
     s.oauth_client_secret = unprotect_secret(oauth_client_secret);
     s.oauth_use_client_secret = oauth_use_client_secret != 0;
     s.oauth_authorization_url = oauth_authorization_url ? oauth_authorization_url : "";
@@ -249,8 +253,8 @@ void ZoomPluginSettings::save() const
                       sdk_public_app_key.c_str());
     config_set_string(cfg, SECTION, "JwtToken",          jwt_token.c_str());
     config_set_string(cfg, SECTION, "OAuthClientId",     oauth_client_id.c_str());
-    config_set_string(cfg, SECTION, "PublicClientId",
-                      oauth_public_client_id.c_str());
+    // Legacy key kept blank so older builds don't resurrect a stale value.
+    config_set_string(cfg, SECTION, "PublicClientId",    "");
     config_set_string(cfg, SECTION, "OAuthClientSecret",
                       protect_secret(oauth_client_secret).c_str());
     config_set_int   (cfg, SECTION, "OAuthUseClientSecret",
