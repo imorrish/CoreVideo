@@ -182,7 +182,7 @@ bool ZoomEngineClient::start(const std::string &jwt_token,
         blog(LOG_ERROR, "[obs-zoom-plugin] %s", message.c_str());
         return false;
     }
-    m_last_jwt = jwt_token;
+    m_last_jwt = public_app_key.empty() ? jwt_token : std::string();
     m_user_leaving.store(false, std::memory_order_release);
     m_authenticated.store(false, std::memory_order_release);
     m_media_active.store(false, std::memory_order_release);

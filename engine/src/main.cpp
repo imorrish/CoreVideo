@@ -1019,6 +1019,7 @@ int main()
     // hold raw pointers — these must outlive the Join/SDKAuth call).
 #if defined(WIN32)
     std::wstring g_wide_jwt;
+    std::wstring g_wide_public_app_key;
     std::wstring g_wide_name;
     std::wstring g_wide_psw;
     std::wstring g_wide_on_behalf_token;
@@ -1026,6 +1027,7 @@ int main()
     std::wstring g_wide_app_privilege_token;
 #else
     std::string g_wide_jwt;
+    std::string g_wide_public_app_key;
     std::string g_wide_name;
     std::string g_wide_psw;
     std::string g_wide_on_behalf_token;
@@ -1083,12 +1085,16 @@ int main()
                 continue;
             }
             auth_svc->SetEvent(&auth_event);
-            g_wide_jwt = to_zstr(jwt); // persists for async SDKAuth call
-            auto public_app_key_zstr = to_zstr(public_app_key);
-            ZOOMSDK::AuthContext ctx;
+            ZOOMSDK::AuthContext ctx{};
             if (!public_app_key.empty()) {
-                ctx.publicAppKey = public_app_key_zstr.c_str();
+                jwt.clear();
+                g_wide_jwt.clear();
+                g_wide_public_app_key = to_zstr(public_app_key);
+                ctx.publicAppKey = g_wide_public_app_key.c_str();
+                ctx.jwt_token = nullptr;
             } else {
+                g_wide_public_app_key.clear();
+                g_wide_jwt = to_zstr(jwt); // persists for async SDKAuth call
                 ctx.jwt_token = g_wide_jwt.c_str();
             }
             EngineIpc::write(
