@@ -107,27 +107,22 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     }
 
     QUrlQuery query(url);
-    const QString url_client_id = query.queryItemValue("client_id");
-    QString client_id = (s.oauth_use_client_secret || url_client_id.isEmpty())
+    const QString client_id = s.oauth_use_client_secret
         ? QString::fromStdString(s.oauth_client_id)
-        : url_client_id;
+        : QString::fromStdString(s.oauth_public_client_id);
     if (client_id.isEmpty()) {
-        if (error) *error = "Enter the Zoom OAuth Client ID first.";
+        if (error) {
+            *error = s.oauth_use_client_secret
+                ? "Enter the Zoom OAuth Client ID first."
+                : "Enter the Zoom Public Client ID first.";
+        }
         return false;
     }
 
     m_pending_verifier = random_base64url(64);
     m_pending_state = random_base64url(32);
     m_pending_client_id = client_id;
-    m_pending_token_client_id =
-        (!s.oauth_use_client_secret && !s.oauth_public_client_id.empty())
-        ? QString::fromStdString(s.oauth_public_client_id)
-        : client_id;
-
-    if (s.oauth_use_client_secret && s.oauth_client_id != client_id.toStdString()) {
-        s.oauth_client_id = client_id.toStdString();
-        s.save();
-    }
+    m_pending_token_client_id = client_id;
 
     query.removeAllQueryItems("response_type");
     query.removeAllQueryItems("client_id");
