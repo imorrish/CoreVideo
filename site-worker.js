@@ -384,16 +384,17 @@ async function fetchAsset(request, env, pathname) {
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-    if (url.pathname === "/oauth/start") {
+    const pathname = url.pathname.replace(/\/$/u, "") || "/";
+    if (pathname === "/oauth/start") {
       return handleOauthStart(request, env);
     }
-    if (url.pathname === "/oauth/callback") {
+    if (pathname === "/oauth/callback") {
       return handleOauthCallback(request, env);
     }
-    if (url.pathname === "/oauth/redeem") {
+    if (pathname === "/oauth/redeem") {
       return handleOauthRedeem(request, env);
     }
-    if (url.pathname === "/oauth/refresh") {
+    if (pathname === "/oauth/refresh") {
       return handleOauthRefresh(request, env);
     }
 
