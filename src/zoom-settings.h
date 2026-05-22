@@ -7,9 +7,11 @@
 struct ZoomPluginSettings {
     std::string         sdk_key, sdk_secret, jwt_token;
     std::string         sdk_public_app_key;
+    // OAuth Public Client ID baked in at build time via ZOOM_EMBED_OAUTH_CLIENT_ID.
+    // Can be overridden by an OAuthClientId key in global.ini for development;
+    // not exposed in the UI because end users should never configure this.
     std::string         oauth_client_id;
-    std::string         oauth_client_secret;
-    bool                oauth_use_client_secret = false;
+    // Optional global.ini override for the Zoom authorization URL (dev/staging).
     std::string         oauth_authorization_url;
     std::string         oauth_redirect_uri = "corevideo://oauth/callback";
     std::string         oauth_scopes = "user:read:zak user:read:user";

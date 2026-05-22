@@ -69,14 +69,6 @@ QString ZoomOAuthManager::form_encode(const QMap<QString, QString> &fields)
     return query.toString(QUrl::FullyEncoded);
 }
 
-static QByteArray oauth_basic_auth(const QString &client_id,
-                                   const QString &client_secret)
-{
-    if (client_secret.isEmpty())
-        return {};
-    return "Basic " + (client_id + ":" + client_secret).toUtf8().toBase64();
-}
-
 static std::string redacted_tail(const QString &value)
 {
     if (value.isEmpty()) return "(empty)";
@@ -109,15 +101,10 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     QUrlQuery query(url);
     const QString client_id = QString::fromStdString(s.oauth_client_id);
     if (client_id.isEmpty()) {
-        if (error)
-            *error = "Enter the Zoom OAuth Client ID first.";
-        return false;
-    }
-    if (s.oauth_use_client_secret && s.oauth_client_secret.empty()) {
         if (error) {
-            *error = "Confidential OAuth is enabled but no Client Secret is "
-                     "set. Either enter the Client Secret or switch to Public "
-                     "Client OAuth (PKCE, no secret).";
+            *error = "CoreVideo was built without an embedded Zoom OAuth "
+                     "client ID. Rebuild with ZOOM_EMBED_OAUTH_CLIENT_ID set "
+                     "to the Marketplace app's Public Client ID.";
         }
         return false;
     }
@@ -149,9 +136,8 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
     }
 
     blog(LOG_INFO,
-         "[obs-zoom-plugin] Zoom OAuth authorization started client_id=%s public_mode=%d",
-         redacted_tail(client_id).c_str(),
-         s.oauth_use_client_secret ? 0 : 1);
+         "[obs-zoom-plugin] Zoom OAuth authorization started (public PKCE) client_id=%s",
+         redacted_tail(client_id).c_str());
 
     if (parent) {
         QMessageBox::information(parent, "Zoom OAuth",
@@ -192,8 +178,7 @@ bool ZoomOAuthManager::parse_token_response(const QByteArray &body, QString *err
 }
 
 static QString oauth_error_message(const QByteArray &body,
-                                   const QString &fallback,
-                                   bool using_client_secret)
+                                   const QString &fallback)
 {
     QJsonParseError parse_error;
     const QJsonDocument doc = QJsonDocument::fromJson(body, &parse_error);
@@ -202,17 +187,10 @@ static QString oauth_error_message(const QByteArray &body,
         const QString oauth_error = obj.value("error").toString();
         const QString reason = obj.value("reason").toString();
         if (oauth_error == "invalid_client") {
-            if (using_client_secret) {
-                return "Zoom rejected the OAuth client credentials. For "
-                       "confidential OAuth, verify the regular Client ID and "
-                       "Client Secret from the same Zoom Marketplace app, then "
-                       "save settings and authorize again.";
-            }
-            return "Zoom rejected the OAuth client. For public PKCE, enable "
-                   "Use Public Client OAuth in the Zoom Marketplace app and "
-                   "use the separate Public Client ID, not the regular Client "
-                   "ID. If you intentionally use a confidential client, enable "
-                   "Use Client Secret in CoreVideo and re-enter the client secret.";
+            return "Zoom rejected the OAuth client. The Public Client ID this "
+                   "build of CoreVideo was compiled with does not match an "
+                   "active Marketplace app, or the Marketplace app is not "
+                   "configured for Public Client OAuth (PKCE).";
         }
         if (!reason.isEmpty())
             return reason;
@@ -313,27 +291,18 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
     const QString client_id = m_pending_client_id.isEmpty()
         ? QString::fromStdString(s.oauth_client_id)
         : m_pending_client_id;
-    const QString client_secret = s.oauth_use_client_secret
-        ? QString::fromStdString(s.oauth_client_secret)
-        : QString();
     QNetworkAccessManager manager;
     QMap<QString, QString> fields = {
         {"grant_type", "authorization_code"},
         {"code", code},
         {"redirect_uri", QString::fromStdString(s.oauth_redirect_uri)},
         {"code_verifier", m_pending_verifier},
+        {"client_id", client_id},
     };
 
-    OAuthTokenAttemptResult result;
-    if (!s.oauth_use_client_secret) {
-        blog(LOG_INFO,
-             "[obs-zoom-plugin] Zoom OAuth public token exchange with client_id form field");
-        fields.insert("client_id", client_id);
-        result = post_token_request(manager, fields, {});
-    } else {
-        result = post_token_request(
-            manager, fields, oauth_basic_auth(client_id, client_secret));
-    }
+    blog(LOG_INFO,
+         "[obs-zoom-plugin] Zoom OAuth public token exchange (PKCE)");
+    OAuthTokenAttemptResult result = post_token_request(manager, fields, {});
 
     m_pending_state.clear();
     m_pending_verifier.clear();
@@ -342,8 +311,7 @@ bool ZoomOAuthManager::handle_redirect_url(const QString &url, QString *error)
     if (!token_attempt_succeeded(result)) {
         if (error) {
             *error = "Zoom token exchange failed: " +
-                     oauth_error_message(result.response, result.net_error_string,
-                                         s.oauth_use_client_secret);
+                     oauth_error_message(result.response, result.net_error_string);
         }
         blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth token exchange failed: status=%d network=%d error=%s",
              result.status, static_cast<int>(result.net_error),
@@ -370,27 +338,17 @@ bool ZoomOAuthManager::refresh_access_token_blocking(QString *error)
 
     QNetworkAccessManager manager;
     const QString client_id = QString::fromStdString(s.oauth_client_id);
-    const QString client_secret = s.oauth_use_client_secret
-        ? QString::fromStdString(s.oauth_client_secret)
-        : QString();
     QMap<QString, QString> fields = {
         {"grant_type", "refresh_token"},
         {"refresh_token", QString::fromStdString(s.oauth_refresh_token)},
+        {"client_id", client_id},
     };
-    OAuthTokenAttemptResult result;
-    if (!s.oauth_use_client_secret) {
-        fields.insert("client_id", client_id);
-        result = post_token_request(manager, fields, {});
-    } else {
-        result = post_token_request(
-            manager, fields, oauth_basic_auth(client_id, client_secret));
-    }
+    OAuthTokenAttemptResult result = post_token_request(manager, fields, {});
 
     if (!token_attempt_succeeded(result)) {
         if (error) {
             *error = "Zoom token refresh failed: " +
-                     oauth_error_message(result.response, result.net_error_string,
-                                         s.oauth_use_client_secret);
+                     oauth_error_message(result.response, result.net_error_string);
         }
         if (!result.response.isEmpty()) {
             blog(LOG_WARNING, "[obs-zoom-plugin] Zoom OAuth token refresh response: %s",

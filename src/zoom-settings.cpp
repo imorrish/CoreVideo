@@ -89,12 +89,12 @@ ZoomPluginSettings ZoomPluginSettings::load()
     const char *meeting_sdk_public_app_key =
         config_get_string(cfg, SECTION, "MeetingSdkPublicAppKey");
     const char *jwt    = config_get_string(cfg, SECTION, "JwtToken");
+    // OAuthClientId is a dev-only override; production builds use the embedded
+    // ZOOM_EMBED_OAUTH_CLIENT_ID value. PublicClientId is a legacy key from
+    // earlier builds and is read once for migration, then cleared on save.
     const char *oauth_client_id = config_get_string(cfg, SECTION, "OAuthClientId");
     const char *oauth_legacy_public_client_id =
         config_get_string(cfg, SECTION, "PublicClientId");
-    const char *oauth_client_secret = config_get_string(cfg, SECTION, "OAuthClientSecret");
-    const int oauth_use_client_secret =
-        config_get_int(cfg, SECTION, "OAuthUseClientSecret");
     const char *oauth_authorization_url = config_get_string(cfg, SECTION, "OAuthAuthorizationUrl");
     const char *oauth_redirect_uri = config_get_string(cfg, SECTION, "OAuthRedirectUri");
     const char *oauth_scopes = config_get_string(cfg, SECTION, "OAuthScopes");
@@ -115,9 +115,6 @@ ZoomPluginSettings ZoomPluginSettings::load()
                             *meeting_sdk_public_app_key)
         ? meeting_sdk_public_app_key
         : "";
-    // Migration: earlier builds stored the public PKCE client id in a separate
-    // "PublicClientId" key. Collapse it into the single OAuthClientId field so
-    // users only have to manage one identifier.
     if (oauth_client_id && *oauth_client_id) {
         s.oauth_client_id = oauth_client_id;
     } else if (oauth_legacy_public_client_id && *oauth_legacy_public_client_id) {
@@ -125,8 +122,6 @@ ZoomPluginSettings ZoomPluginSettings::load()
     } else {
         s.oauth_client_id = kEmbeddedOAuthClientId;
     }
-    s.oauth_client_secret = unprotect_secret(oauth_client_secret);
-    s.oauth_use_client_secret = oauth_use_client_secret != 0;
     s.oauth_authorization_url = oauth_authorization_url ? oauth_authorization_url : "";
     if (oauth_redirect_uri && *oauth_redirect_uri)
         s.oauth_redirect_uri = oauth_redirect_uri;
@@ -253,12 +248,12 @@ void ZoomPluginSettings::save() const
                       sdk_public_app_key.c_str());
     config_set_string(cfg, SECTION, "JwtToken",          jwt_token.c_str());
     config_set_string(cfg, SECTION, "OAuthClientId",     oauth_client_id.c_str());
-    // Legacy key kept blank so older builds don't resurrect a stale value.
+    // Legacy keys cleared so older builds don't resurrect stale values. Public
+    // PKCE is the only supported runtime mode; secrets must never be shipped
+    // in a desktop binary.
     config_set_string(cfg, SECTION, "PublicClientId",    "");
-    config_set_string(cfg, SECTION, "OAuthClientSecret",
-                      protect_secret(oauth_client_secret).c_str());
-    config_set_int   (cfg, SECTION, "OAuthUseClientSecret",
-                      oauth_use_client_secret ? 1 : 0);
+    config_set_string(cfg, SECTION, "OAuthClientSecret", "");
+    config_set_int   (cfg, SECTION, "OAuthUseClientSecret", 0);
     config_set_string(cfg, SECTION, "OAuthAuthorizationUrl",
                       oauth_authorization_url.c_str());
     config_set_string(cfg, SECTION, "OAuthRedirectUri",  oauth_redirect_uri.c_str());
