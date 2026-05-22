@@ -297,8 +297,7 @@ static OAuthTokenAttemptResult post_public_pkce_token_request(
          operation, redacted_tail(oauth_client_id).c_str());
     result = post_token_request(manager, header_fields,
                                 public_client_basic_auth(oauth_client_id));
-    if (token_attempt_succeeded(result) || !token_attempt_invalid_client(result) ||
-        sdk_public_app_key.isEmpty() || sdk_public_app_key == oauth_client_id) {
+    if (token_attempt_succeeded(result) || !token_attempt_invalid_client(result)) {
         return result;
     }
 
@@ -329,6 +328,8 @@ static OAuthTokenAttemptResult post_public_pkce_token_request(
     blog(LOG_INFO,
          "[obs-zoom-plugin] Zoom OAuth %s retry=basic_meeting_public_app_key client_id=%s",
          operation, redacted_tail(sdk_public_app_key).c_str());
+    if (sdk_public_app_key.isEmpty() || sdk_public_app_key == oauth_client_id)
+        return result;
     return post_token_request(manager, header_fields,
                               public_client_basic_auth(sdk_public_app_key));
 }
