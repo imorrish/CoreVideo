@@ -1,5 +1,4 @@
 ﻿#include "zoom-dock.h"
-#include "cv-onboarding.h"
 #include "cv-style.h"
 #include "cv-widgets.h"
 #include "obs-utils.h"
@@ -539,10 +538,11 @@ ZoomDock::ZoomDock(QWidget *parent)
         update_state_indicator();
     });
     vLayout->addWidget(speaker_group);
-    // â”€â”€ Credentials notice (hidden once credentials are set) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // Credentials notice is hidden for published builds with an embedded
+    // Meeting SDK public app key.
     m_credentials_banner = new CvBanner(
         CvBannerKind::Info,
-        "SDK credentials required to join meetings.",
+        "CoreVideo is missing its embedded Zoom app identity.",
         this);
     m_credentials_banner->setActionText("Open Settings");
     connect(m_credentials_banner, &CvBanner::actionClicked, this, [this]() {
@@ -746,20 +746,6 @@ ZoomDock::ZoomDock(QWidget *parent)
     update_credentials_banner();
     refresh();
 
-    // â”€â”€ First-run onboarding wizard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    if (!CvOnboardingWizard::isCompleted()) {
-        const ZoomPluginSettings &cfg = ZoomPluginSettings::load();
-        const bool noCredentials = cfg.sdk_key.empty()
-            && cfg.sdk_secret.empty()
-            && cfg.jwt_token.empty();
-        if (noCredentials) {
-            QTimer::singleShot(0, this, [this]() {
-                CvOnboardingWizard wiz(this);
-                wiz.exec();
-                update_credentials_banner();
-            });
-        }
-    }
 }
 
 ZoomDock::~ZoomDock()
@@ -797,7 +783,10 @@ void ZoomDock::update_credentials_banner()
     if (!m_alive->load(std::memory_order_acquire))
         return;
     const ZoomPluginSettings s = ZoomPluginSettings::load();
-    const bool missing = s.sdk_key.empty() && s.sdk_secret.empty() && s.jwt_token.empty();
+    const bool has_public_app_key = !s.sdk_public_app_key.empty();
+    const bool has_jwt = !s.resolved_jwt_token().empty();
+    const bool has_sdk_pair = !s.sdk_key.empty() && !s.sdk_secret.empty();
+    const bool missing = !has_public_app_key && !has_jwt && !has_sdk_pair;
     m_credentials_banner->setVisible(missing);
 }
 
