@@ -24,13 +24,14 @@ not available.
 6. Keep the Meeting SDK credentials configured for SDK authentication. OAuth
    credentials are separate from Meeting SDK credentials.
 
-## Embedding the Public Client ID into the build (publisher)
+## Embedding the OAuth Client ID into the build (publisher)
 
-The OAuth Public Client ID is part of the published app's identity, not a
-per-user setting. CoreVideo bakes it in at compile time:
+The OAuth Client ID from the Marketplace-generated authorization URL is part
+of the published app's identity, not a per-user setting. CoreVideo bakes it in
+at compile time:
 
 ```
-cmake -B build -DZOOM_EMBED_OAUTH_CLIENT_ID=<your_public_client_id> ...
+cmake -B build -DZOOM_EMBED_OAUTH_CLIENT_ID=<your_oauth_client_id> ...
 ```
 
 In CI, pass the value as a GitHub Actions secret so it never lands in the
@@ -44,7 +45,7 @@ no UI for this; it exists only as a development escape hatch.
 
 ## End-user sign-in
 
-1. Install a CoreVideo build that has the Public Client ID embedded.
+1. Install a CoreVideo build that has the OAuth Client ID embedded.
 2. Open OBS, then open **Tools > Zoom Plugin Settings**.
 3. In the **Zoom Account** section click **Sign in with Zoom** and approve the
    app in the browser. There are no Client ID, Client Secret, or
@@ -59,14 +60,14 @@ no UI for this; it exists only as a development escape hatch.
 
 1. CoreVideo generates a high-entropy `code_verifier`, derives an S256
    `code_challenge`, and opens the system browser at
-   `https://zoom.us/oauth/authorize` with the embedded Public Client ID,
+   `https://zoom.us/oauth/authorize` with the embedded OAuth Client ID,
    `redirect_uri=corevideo://oauth/callback`, scopes, `state`,
    `code_challenge`, and `code_challenge_method=S256`.
 2. Zoom redirects to `corevideo://oauth/callback?...`.
 3. The callback helper forwards that URL to the plugin's control server.
 4. The plugin verifies `state`, posts to `https://zoom.us/oauth/token` with
    `grant_type=authorization_code`, the `code`, the `redirect_uri`, the
-   `code_verifier`, and the Public Client ID as a form field (no Authorization
+   `code_verifier`, and the OAuth Client ID as a form field (no Authorization
    header, no client secret), and stores access/refresh tokens.
 5. Before joining a meeting, the plugin refreshes the access token if needed
    (same PKCE-style refresh request, `client_id` in the form body) and calls

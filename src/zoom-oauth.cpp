@@ -104,7 +104,7 @@ bool ZoomOAuthManager::begin_authorization(QWidget *parent, QString *error)
         if (error) {
             *error = "CoreVideo was built without an embedded Zoom OAuth "
                      "client ID. Rebuild with ZOOM_EMBED_OAUTH_CLIENT_ID set "
-                     "to the Marketplace app's Public Client ID.";
+                     "to the Marketplace app's OAuth Client ID.";
         }
         return false;
     }
@@ -187,7 +187,7 @@ static QString oauth_error_message(const QByteArray &body,
         const QString oauth_error = obj.value("error").toString();
         const QString reason = obj.value("reason").toString();
         if (oauth_error == "invalid_client") {
-            return "Zoom rejected the OAuth client. The Public Client ID this "
+            return "Zoom rejected the OAuth client. The OAuth Client ID this "
                    "build of CoreVideo was compiled with does not match an "
                    "active Marketplace app, or the Marketplace app is not "
                    "configured for Public Client OAuth (PKCE).";
