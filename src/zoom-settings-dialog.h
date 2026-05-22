@@ -29,7 +29,6 @@ private:
     QPushButton *m_oauth_disconnect_btn = nullptr;
     QCheckBox *m_oauth_public_client_cb = nullptr;
     QLineEdit *m_oauth_client_id_edit   = nullptr;
-    QLineEdit *m_oauth_public_id_edit   = nullptr;
     QLineEdit *m_oauth_secret_edit      = nullptr;
     QLineEdit *m_oauth_auth_url_edit    = nullptr;
     QSpinBox  *m_control_port_spin      = nullptr;
