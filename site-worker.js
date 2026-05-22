@@ -183,6 +183,10 @@ async function exchangeZoomToken(config, body) {
   });
   const text = await response.text();
   if (!response.ok) {
+    console.warn("Zoom OAuth token exchange failed", {
+      status: response.status,
+      body: text.slice(0, 512),
+    });
     return { ok: false, status: response.status, text };
   }
   return { ok: true, status: response.status, data: JSON.parse(text) };
@@ -218,6 +222,20 @@ function callbackPage(returnUrl) {
       "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
     },
   }));
+}
+
+function zoomFailureMessage(prefix, exchanged) {
+  let zoomError = exchanged.text;
+  try {
+    const parsed = JSON.parse(exchanged.text);
+    zoomError = parsed.reason || parsed.message || parsed.error || exchanged.text;
+  } catch {
+    // Keep the raw text from Zoom when it is not JSON.
+  }
+  return {
+    error: `${prefix}: ${zoomError}`,
+    zoom_status: exchanged.status,
+  };
 }
 
 async function handleOauthStart(request, env) {
@@ -336,11 +354,8 @@ async function handleOauthRedeem(request, env) {
       code_verifier: payload.code_verifier,
     });
     if (!exchanged.ok) {
-      return jsonResponse({
-        error: "Zoom token exchange failed.",
-        zoom_status: exchanged.status,
-        zoom_response: exchanged.text,
-      }, 502);
+      return jsonResponse(zoomFailureMessage("Zoom token exchange failed",
+                                             exchanged), 502);
     }
     return jsonResponse(exchanged.data);
   } catch (error) {
