@@ -5,10 +5,9 @@ helper and uses a user-level OAuth token to fetch a short-lived ZAK for
 attributed joins. This is needed for external-account meetings and Marketplace
 review.
 
-Published builds use an HTTPS OAuth broker at `corevideo.iamfatness.us` so the
-Zoom client secret stays server-side. The OBS plugin only knows the broker
-start URL and the Meeting SDK public app key. End users never enter app
-credentials.
+Published builds use an HTTPS OAuth broker at `corevideo.iamfatness.us` with
+Zoom Public Client OAuth + PKCE. The OBS plugin only knows the broker start URL
+and the Meeting SDK public app key. End users never enter app credentials.
 
 ## Zoom Marketplace app (publisher, one-time)
 
@@ -29,8 +28,7 @@ credentials.
 The Cloudflare Worker serving `corevideo.iamfatness.us` must have these secrets:
 
 ```
-ZOOM_OAUTH_CLIENT_ID=<Marketplace OAuth Client ID>
-ZOOM_OAUTH_CLIENT_SECRET=<Marketplace OAuth Client Secret>
+ZOOM_OAUTH_PUBLIC_CLIENT_ID=<Marketplace Public Client ID>
 ZOOM_OAUTH_REDIRECT_URI=https://corevideo.iamfatness.us/oauth/callback
 ZOOM_OAUTH_SCOPES=user:read:token user:read:user
 COREVIDEO_OAUTH_BROKER_SECRET=<random 32+ byte secret>
@@ -71,15 +69,16 @@ local config cannot change the published app identity. Developers can still use
 
 1. CoreVideo opens the system browser at the embedded broker start URL with a
    local `state` and `return_uri=corevideo://oauth/callback`.
-2. The broker redirects to Zoom with
+2. The broker generates a PKCE verifier/challenge and redirects to Zoom with
    `redirect_uri=https://corevideo.iamfatness.us/oauth/callback`.
-3. Zoom redirects back to the broker, which exchanges the code server-side using
-   the Marketplace OAuth Client ID and Client Secret.
+3. Zoom redirects back to the broker.
 4. The broker returns an encrypted, short-lived broker token containing the
    authorization code to `corevideo://oauth/callback`.
 5. The callback helper forwards that URL to the running plugin. The plugin
    verifies `state`, redeems the broker token over HTTPS, and the broker
-   exchanges the code for access/refresh tokens server-side.
+   exchanges the code for access/refresh tokens using Public Client OAuth:
+   `client_id` and `code_verifier` in the form body, with no client secret and
+   no Authorization header.
 6. Before joining a meeting, the plugin refreshes the access token through the
    broker if needed and calls
    `GET https://api.zoom.us/v2/users/me/token?type=zak`.
@@ -88,9 +87,9 @@ local config cannot change the published app identity. Developers can still use
 
 ## Security notes
 
-- No client secret is shipped in the binary. The settings dialog does not
-  expose Client ID, Client Secret, or Authorization URL fields, so users cannot
-  misconfigure the integration.
+- No client secret is required for OAuth or shipped in the binary. The settings
+  dialog does not expose Client ID, Client Secret, or Authorization URL fields,
+  so users cannot misconfigure the integration.
 - Broker state is HMAC-signed and expires after 10 minutes. Broker result
   tokens are AES-GCM encrypted, contain only the authorization code, and expire
   after 5 minutes.

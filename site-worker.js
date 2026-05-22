@@ -54,6 +54,16 @@ function base64urlDecode(value) {
   return bytes;
 }
 
+function randomBase64url(byteCount) {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteCount));
+  return base64urlEncode(bytes);
+}
+
+async function pkceChallenge(verifier) {
+  const digest = await crypto.subtle.digest("SHA-256", textEncoder().encode(verifier));
+  return base64urlEncode(digest);
+}
+
 async function hmacKey(secret) {
   return crypto.subtle.importKey(
     "raw",
@@ -134,8 +144,9 @@ function oauthConfig(env, requestUrl) {
   const redirectUri = env.ZOOM_OAUTH_REDIRECT_URI ||
     `${requestUrl.origin}/oauth/callback`;
   return {
-    clientId: env.ZOOM_OAUTH_CLIENT_ID,
+    clientId: env.ZOOM_OAUTH_PUBLIC_CLIENT_ID || env.ZOOM_OAUTH_CLIENT_ID,
     clientSecret: env.ZOOM_OAUTH_CLIENT_SECRET,
+    authorizeUrl: env.ZOOM_OAUTH_AUTHORIZE_URL || "https://zoom.us/oauth/authorize",
     redirectUri,
     scopes: env.ZOOM_OAUTH_SCOPES || "user:read:token user:read:user",
     brokerSecret: env.COREVIDEO_OAUTH_BROKER_SECRET,
@@ -143,8 +154,8 @@ function oauthConfig(env, requestUrl) {
 }
 
 function requireOauthConfig(config) {
-  if (!config.clientId || !config.clientSecret || !config.brokerSecret) {
-    return "OAuth broker is not configured. Set ZOOM_OAUTH_CLIENT_ID, ZOOM_OAUTH_CLIENT_SECRET, and COREVIDEO_OAUTH_BROKER_SECRET.";
+  if (!config.clientId || !config.brokerSecret) {
+    return "OAuth broker is not configured. Set ZOOM_OAUTH_PUBLIC_CLIENT_ID and COREVIDEO_OAUTH_BROKER_SECRET.";
   }
   return "";
 }
@@ -154,14 +165,21 @@ function basicAuth(clientId, clientSecret) {
 }
 
 async function exchangeZoomToken(config, body) {
+  const tokenBody = new URLSearchParams(body);
+  const headers = {
+    "content-type": "application/x-www-form-urlencoded",
+    "accept": "application/json",
+  };
+  if (config.clientSecret) {
+    headers.authorization = basicAuth(config.clientId, config.clientSecret);
+  } else {
+    tokenBody.set("client_id", config.clientId);
+  }
+
   const response = await fetch("https://zoom.us/oauth/token", {
     method: "POST",
-    headers: {
-      "authorization": basicAuth(config.clientId, config.clientSecret),
-      "content-type": "application/x-www-form-urlencoded",
-      "accept": "application/json",
-    },
-    body: new URLSearchParams(body),
+    headers,
+    body: tokenBody,
   });
   const text = await response.text();
   if (!response.ok) {
@@ -219,17 +237,21 @@ async function handleOauthStart(request, env) {
     return jsonResponse({ error: "Unsupported OAuth return URI." }, 400);
   }
 
-  const state = await signPayload({
+  const verifier = randomBase64url(64);
+  const state = await encryptPayload({
     exp: Date.now() + 10 * 60 * 1000,
     local_state: localState,
     return_uri: returnUri,
+    code_verifier: verifier,
   }, config.brokerSecret);
 
-  const zoomUrl = new URL("https://zoom.us/oauth/authorize");
+  const zoomUrl = new URL(config.authorizeUrl);
   zoomUrl.searchParams.set("response_type", "code");
   zoomUrl.searchParams.set("client_id", config.clientId);
   zoomUrl.searchParams.set("redirect_uri", config.redirectUri);
   zoomUrl.searchParams.set("state", state);
+  zoomUrl.searchParams.set("code_challenge", await pkceChallenge(verifier));
+  zoomUrl.searchParams.set("code_challenge_method", "S256");
   if (config.scopes) {
     zoomUrl.searchParams.set("scope", config.scopes);
   }
@@ -252,7 +274,7 @@ async function handleOauthCallback(request, env) {
 
   let state;
   try {
-    state = await verifySignedPayload(stateToken, config.brokerSecret);
+    state = await decryptPayload(stateToken, config.brokerSecret);
   } catch (error) {
     return jsonResponse({ error: error.message }, 400);
   }
@@ -272,6 +294,7 @@ async function handleOauthCallback(request, env) {
   const brokerToken = await encryptPayload({
     exp: Date.now() + 5 * 60 * 1000,
     code,
+    code_verifier: state.code_verifier,
   }, config.brokerSecret);
   returnUrl.searchParams.set("broker_token", brokerToken);
   return callbackPage(returnUrl.toString());
@@ -303,10 +326,14 @@ async function handleOauthRedeem(request, env) {
     if (!payload.code) {
       return jsonResponse({ error: "Broker token did not include an authorization code." }, 400);
     }
+    if (!payload.code_verifier) {
+      return jsonResponse({ error: "Broker token did not include a PKCE verifier." }, 400);
+    }
     const exchanged = await exchangeZoomToken(config, {
       grant_type: "authorization_code",
       code: payload.code,
       redirect_uri: config.redirectUri,
+      code_verifier: payload.code_verifier,
     });
     if (!exchanged.ok) {
       return jsonResponse({
