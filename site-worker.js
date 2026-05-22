@@ -145,6 +145,7 @@ function oauthConfig(env, requestUrl) {
     `${requestUrl.origin}/oauth/callback`;
   return {
     clientId: env.ZOOM_OAUTH_PUBLIC_CLIENT_ID || env.ZOOM_OAUTH_CLIENT_ID,
+    fallbackClientId: env.ZOOM_OAUTH_CLIENT_ID,
     clientSecret: env.ZOOM_OAUTH_CLIENT_SECRET,
     authorizeUrl: env.ZOOM_OAUTH_AUTHORIZE_URL || "https://zoom.us/oauth/authorize",
     redirectUri,
@@ -165,15 +166,19 @@ function basicAuth(clientId, clientSecret) {
 }
 
 async function exchangeZoomToken(config, body) {
+  return exchangeZoomTokenWithClient(config, body, config.clientId);
+}
+
+async function exchangeZoomTokenWithClient(config, body, clientId) {
   const tokenBody = new URLSearchParams(body);
   const headers = {
     "content-type": "application/x-www-form-urlencoded",
     "accept": "application/json",
   };
   if (config.clientSecret) {
-    headers.authorization = basicAuth(config.clientId, config.clientSecret);
+    headers.authorization = basicAuth(clientId, config.clientSecret);
   } else {
-    tokenBody.set("client_id", config.clientId);
+    tokenBody.set("client_id", clientId);
   }
 
   const response = await fetch("https://zoom.us/oauth/token", {
@@ -185,6 +190,7 @@ async function exchangeZoomToken(config, body) {
   if (!response.ok) {
     console.warn("Zoom OAuth token exchange failed", {
       status: response.status,
+      client_id_tail: clientId.slice(-4),
       body: text.slice(0, 512),
     });
     return { ok: false, status: response.status, text };
@@ -353,11 +359,22 @@ async function handleOauthRedeem(request, env) {
       redirect_uri: config.redirectUri,
       code_verifier: payload.code_verifier,
     });
-    if (!exchanged.ok) {
-      return jsonResponse(zoomFailureMessage("Zoom token exchange failed",
-                                             exchanged), 502);
+    let finalExchange = exchanged;
+    if (!finalExchange.ok && config.fallbackClientId &&
+        config.fallbackClientId !== config.clientId &&
+        exchanged.text.includes("invalid_client")) {
+      finalExchange = await exchangeZoomTokenWithClient(config, {
+        grant_type: "authorization_code",
+        code: payload.code,
+        redirect_uri: config.redirectUri,
+        code_verifier: payload.code_verifier,
+      }, config.fallbackClientId);
     }
-    return jsonResponse(exchanged.data);
+    if (!finalExchange.ok) {
+      return jsonResponse(zoomFailureMessage("Zoom token exchange failed",
+                                             finalExchange), 502);
+    }
+    return jsonResponse(finalExchange.data);
   } catch (error) {
     return jsonResponse({ error: error.message }, 400);
   }
