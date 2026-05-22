@@ -165,6 +165,22 @@ function basicAuth(clientId, clientSecret) {
   return `Basic ${btoa(`${clientId}:${clientSecret}`)}`;
 }
 
+function tokenClientIds(config) {
+  const ids = [];
+  const push = (value) => {
+    if (value && !ids.includes(value)) {
+      ids.push(value);
+    }
+  };
+  push(config.clientId);
+  push(btoa(config.clientId));
+  push(config.fallbackClientId);
+  if (config.fallbackClientId) {
+    push(btoa(config.fallbackClientId));
+  }
+  return ids;
+}
+
 async function exchangeZoomToken(config, body) {
   return exchangeZoomTokenWithClient(config, body, config.clientId);
 }
@@ -360,15 +376,19 @@ async function handleOauthRedeem(request, env) {
       code_verifier: payload.code_verifier,
     });
     let finalExchange = exchanged;
-    if (!finalExchange.ok && config.fallbackClientId &&
-        config.fallbackClientId !== config.clientId &&
-        exchanged.text.includes("invalid_client")) {
-      finalExchange = await exchangeZoomTokenWithClient(config, {
-        grant_type: "authorization_code",
-        code: payload.code,
-        redirect_uri: config.redirectUri,
-        code_verifier: payload.code_verifier,
-      }, config.fallbackClientId);
+    if (!finalExchange.ok && exchanged.text.includes("invalid_client")) {
+      const ids = tokenClientIds(config);
+      for (const clientId of ids.slice(1)) {
+        finalExchange = await exchangeZoomTokenWithClient(config, {
+          grant_type: "authorization_code",
+          code: payload.code,
+          redirect_uri: config.redirectUri,
+          code_verifier: payload.code_verifier,
+        }, clientId);
+        if (finalExchange.ok || !finalExchange.text.includes("invalid_client")) {
+          break;
+        }
+      }
     }
     if (!finalExchange.ok) {
       return jsonResponse(zoomFailureMessage("Zoom token exchange failed",
