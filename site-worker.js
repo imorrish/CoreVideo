@@ -148,8 +148,6 @@ function oauthConfig(env, requestUrl) {
     authorizeClientId: env.ZOOM_OAUTH_AUTHORIZE_CLIENT_ID ||
       env.ZOOM_OAUTH_PUBLIC_CLIENT_ID ||
       env.ZOOM_OAUTH_CLIENT_ID,
-    fallbackClientId: env.ZOOM_OAUTH_CLIENT_ID,
-    clientSecret: env.ZOOM_OAUTH_CLIENT_SECRET,
     authorizeUrl: env.ZOOM_OAUTH_AUTHORIZE_URL || "https://zoom.us/oauth/authorize",
     redirectUri,
     scopes: env.ZOOM_OAUTH_SCOPES || "user:read:token user:read:user",
@@ -164,64 +162,25 @@ function requireOauthConfig(config) {
   return "";
 }
 
-function basicAuth(clientId, clientSecret) {
-  return `Basic ${btoa(`${clientId}:${clientSecret}`)}`;
-}
-
-function tokenClientIds(config) {
-  const ids = [];
-  const push = (value) => {
-    if (value && !ids.includes(value)) {
-      ids.push(value);
-    }
-  };
-  push(config.clientId);
-  push(btoa(config.clientId));
-  push(config.fallbackClientId);
-  if (config.fallbackClientId) {
-    push(btoa(config.fallbackClientId));
-  }
-  return ids;
-}
-
 async function exchangeZoomToken(config, body) {
-  return exchangeZoomTokenWithClient(config, body, config.clientId, "body");
-}
-
-async function exchangeZoomTokenWithClient(config, body, clientId, mode = "body") {
   const tokenBody = new URLSearchParams(body);
+  tokenBody.set("client_id", config.clientId);
   const headers = {
     "content-type": "application/x-www-form-urlencoded",
     "accept": "application/json",
   };
-  if (config.clientSecret) {
-    headers.authorization = basicAuth(clientId, config.clientSecret);
-  } else if (mode !== "basic-empty-secret") {
-    tokenBody.set("client_id", clientId);
-  } else {
-    headers.authorization = basicAuth(clientId, "");
-  }
 
-  const tokenUrl = new URL("https://zoom.us/oauth/token");
-  let requestBody = tokenBody;
-  if (mode === "query" || mode === "basic-empty-secret") {
-    for (const [key, value] of tokenBody) {
-      tokenUrl.searchParams.set(key, value);
-    }
-    requestBody = "";
-  }
-
-  const response = await fetch(tokenUrl.toString(), {
+  const response = await fetch("https://zoom.us/oauth/token", {
     method: "POST",
     headers,
-    body: requestBody,
+    body: tokenBody,
   });
   const text = await response.text();
   if (!response.ok) {
     console.warn("Zoom OAuth token exchange failed", {
       status: response.status,
-      client_id_tail: clientId.slice(-4),
-      mode,
+      client_id_tail: config.clientId.slice(-4),
+      redirect_uri: body.redirect_uri,
       body: text.slice(0, 512),
     });
     return { ok: false, status: response.status, text };
@@ -390,44 +349,11 @@ async function handleOauthRedeem(request, env) {
       redirect_uri: config.redirectUri,
       code_verifier: payload.code_verifier,
     });
-    let finalExchange = exchanged;
-    if (!finalExchange.ok && exchanged.text.includes("invalid_client")) {
-      const ids = tokenClientIds(config);
-      for (const clientId of ids.slice(1)) {
-        finalExchange = await exchangeZoomTokenWithClient(config, {
-          grant_type: "authorization_code",
-          code: payload.code,
-          redirect_uri: config.redirectUri,
-          code_verifier: payload.code_verifier,
-        }, clientId, "body");
-        if (finalExchange.ok || !finalExchange.text.includes("invalid_client")) {
-          break;
-        }
-      }
-    }
-    if (!finalExchange.ok && finalExchange.text.includes("invalid_client")) {
-      for (const mode of ["query", "basic-empty-secret"]) {
-        for (const clientId of tokenClientIds(config)) {
-          finalExchange = await exchangeZoomTokenWithClient(config, {
-            grant_type: "authorization_code",
-            code: payload.code,
-            redirect_uri: config.redirectUri,
-            code_verifier: payload.code_verifier,
-          }, clientId, mode);
-          if (finalExchange.ok || !finalExchange.text.includes("invalid_client")) {
-            break;
-          }
-        }
-        if (finalExchange.ok || !finalExchange.text.includes("invalid_client")) {
-          break;
-        }
-      }
-    }
-    if (!finalExchange.ok) {
+    if (!exchanged.ok) {
       return jsonResponse(zoomFailureMessage("Zoom token exchange failed",
-                                             finalExchange), 502);
+                                             exchanged), 502);
     }
-    return jsonResponse(finalExchange.data);
+    return jsonResponse(exchanged.data);
   } catch (error) {
     return jsonResponse({ error: error.message }, 400);
   }
