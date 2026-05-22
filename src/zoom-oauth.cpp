@@ -266,6 +266,13 @@ static QByteArray public_client_basic_auth(const QString &client_id)
     return QByteArray("Basic ") + client_id.toUtf8().toBase64();
 }
 
+static QByteArray public_client_colon_basic_auth(const QString &client_id)
+{
+    if (client_id.isEmpty())
+        return {};
+    return QByteArray("Basic ") + (client_id.toUtf8() + ":").toBase64();
+}
+
 static OAuthTokenAttemptResult post_public_pkce_token_request(
     QNetworkAccessManager &manager,
     const QMap<QString, QString> &fields,
@@ -294,6 +301,30 @@ static OAuthTokenAttemptResult post_public_pkce_token_request(
         sdk_public_app_key.isEmpty() || sdk_public_app_key == oauth_client_id) {
         return result;
     }
+
+    blog(LOG_INFO,
+         "[obs-zoom-plugin] Zoom OAuth %s retry=body_and_basic_public_client client_id=%s",
+         operation, redacted_tail(oauth_client_id).c_str());
+    result = post_token_request(manager, body_fields,
+                                public_client_basic_auth(oauth_client_id));
+    if (token_attempt_succeeded(result) || !token_attempt_invalid_client(result))
+        return result;
+
+    blog(LOG_INFO,
+         "[obs-zoom-plugin] Zoom OAuth %s retry=body_and_basic_public_client_colon client_id=%s",
+         operation, redacted_tail(oauth_client_id).c_str());
+    result = post_token_request(manager, body_fields,
+                                public_client_colon_basic_auth(oauth_client_id));
+    if (token_attempt_succeeded(result) || !token_attempt_invalid_client(result))
+        return result;
+
+    blog(LOG_INFO,
+         "[obs-zoom-plugin] Zoom OAuth %s retry=basic_public_client_colon client_id=%s",
+         operation, redacted_tail(oauth_client_id).c_str());
+    result = post_token_request(manager, header_fields,
+                                public_client_colon_basic_auth(oauth_client_id));
+    if (token_attempt_succeeded(result) || !token_attempt_invalid_client(result))
+        return result;
 
     blog(LOG_INFO,
          "[obs-zoom-plugin] Zoom OAuth %s retry=basic_meeting_public_app_key client_id=%s",
