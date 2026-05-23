@@ -608,8 +608,7 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
         std::string jwt = public_app_key.empty()
             ? settings.resolved_jwt_token()
             : std::string();
-        if (!public_app_key.empty() &&
-            settings.oauth_authorization_url.find("/oauth/start") != std::string::npos) {
+        if (!public_app_key.empty() && settings.use_broker_sdk_jwt()) {
             QString sdk_jwt_error;
             if (!ZoomOAuthManager::instance().fetch_sdk_jwt_blocking(jwt, &sdk_jwt_error)) {
                 write_response(socket, {
@@ -623,6 +622,12 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
             }
             public_app_key.clear();
         }
+        blog(LOG_INFO,
+             "[obs-zoom-plugin] Control join Meeting SDK auth mode=%s jwt_present=%d public_app_key_present=%d broker_jwt=%d",
+             settings.meeting_sdk_auth_mode.c_str(),
+             jwt.empty() ? 0 : 1,
+             public_app_key.empty() ? 0 : 1,
+             settings.use_broker_sdk_jwt() ? 1 : 0);
         const bool ok =
             ZoomEngineClient::instance().start(jwt, public_app_key) &&
             ZoomEngineClient::instance().join(parsed.meeting_id, passcode,

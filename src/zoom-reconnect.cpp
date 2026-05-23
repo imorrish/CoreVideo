@@ -333,7 +333,7 @@ void ZoomReconnectManager::execute_retry(uint64_t generation)
     std::string public_app_key = settings.sdk_public_app_key;
     if (!public_app_key.empty()) {
         jwt.clear();
-        if (settings.oauth_authorization_url.find("/oauth/start") != std::string::npos) {
+        if (settings.use_broker_sdk_jwt()) {
             QString sdk_jwt_error;
             if (ZoomOAuthManager::instance().fetch_sdk_jwt_blocking(jwt, &sdk_jwt_error)) {
                 public_app_key.clear();
@@ -343,6 +343,12 @@ void ZoomReconnectManager::execute_retry(uint64_t generation)
             }
         }
     }
+    blog(LOG_INFO,
+         "[obs-zoom-plugin] Reconnect Meeting SDK auth mode=%s jwt_present=%d public_app_key_present=%d broker_jwt=%d",
+         settings.meeting_sdk_auth_mode.c_str(),
+         jwt.empty() ? 0 : 1,
+         public_app_key.empty() ? 0 : 1,
+         settings.use_broker_sdk_jwt() ? 1 : 0);
     if (!ZoomEngineClient::instance().start(jwt, public_app_key)) {
         blog(LOG_ERROR, "[obs-zoom-plugin] Failed to start engine on reconnect");
         on_join_failed(false);

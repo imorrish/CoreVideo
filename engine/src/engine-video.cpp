@@ -41,16 +41,6 @@ static bool valid_i420_frame(YUVRawDataI420 *data, uint32_t w, uint32_t h, size_
     return true;
 }
 
-static uint64_t target_pixels_for_resolution(uint32_t resolution)
-{
-    switch (resolution) {
-    case 0: return 640ull * 360ull;
-    case 2: return 1920ull * 1080ull;
-    case 1:
-    default: return 1280ull * 720ull;
-    }
-}
-
 ParticipantSubscription::ParticipantSubscription(uint32_t participant_id,
                                                  const std::string &initial_source_uuid,
                                                  IpcFd e2p_fd,
@@ -173,10 +163,8 @@ bool ParticipantSubscription::ensure_shm(SourceTarget &target,
                                          const std::string &source_uuid,
                                          size_t y_len)
 {
-    const uint64_t requested_pixels = target_pixels_for_resolution(m_resolution);
-    const size_t target_y_len = static_cast<size_t>(
-        std::max<uint64_t>(static_cast<uint64_t>(y_len), requested_pixels));
-    const size_t total = sizeof(ShmFrameHeader) + target_y_len + target_y_len / 4 + target_y_len / 4;
+    const size_t total =
+        sizeof(ShmFrameHeader) + y_len + y_len / 4 + y_len / 4;
     if (total < y_len) return false;
     if (target.shm.ptr && target.shm.size >= total) return true;
 

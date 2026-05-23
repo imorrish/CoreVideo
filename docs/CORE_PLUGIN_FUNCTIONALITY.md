@@ -293,7 +293,19 @@ List participants and outputs:
 ```text
 /zoom/list_participants
 /zoom/list_outputs
+/zoom/list_assignments
 ```
+
+`/zoom/list_assignments` replies with one `/zoom/output/assignment` message per
+CoreVideo source:
+
+```text
+/zoom/output/assignment "CoreVideo Participant 1" "participant" 123456 "Alex Rivera" 123456 "Alex Rivera" 1 0
+```
+
+Arguments are `source`, `mode`, configured participant ID/name, resolved
+participant ID/name, spotlight slot, and failover participant ID. Active-speaker
+sources resolve to the current directed speaker.
 
 Retry stale video outputs:
 

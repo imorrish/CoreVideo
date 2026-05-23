@@ -38,6 +38,7 @@ private:
     void send_status(const QHostAddress &to, quint16 port);
     void send_recovery_status(const QHostAddress &to, quint16 port);
     void send_outputs(const QHostAddress &to, quint16 port);
+    void send_assignments(const QHostAddress &to, quint16 port);
     void send_participants(const QHostAddress &to, quint16 port);
 
     void handle_subscribe(const QHostAddress &addr, quint16 port);

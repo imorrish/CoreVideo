@@ -123,6 +123,9 @@ static QByteArray build_osc(const std::string &address,
 }
 
 static bool find_output_by_source(const std::string &source, ZoomOutputInfo &out);
+static std::string assignment_mode_str(AssignmentMode mode);
+static std::string participant_name(uint32_t participant_id);
+static uint32_t resolved_assignment_participant_id(const ZoomOutputInfo &output);
 
 // ── ZoomOscServer ────────────────────────────────────────────────────────────
 
@@ -226,6 +229,11 @@ void ZoomOscServer::dispatch(const QString &address,
     // /zoom/list_outputs  →  reply with all configured outputs
     if (address == "/zoom/list_outputs") {
         send_outputs(sender, sender_port);
+        return;
+    }
+
+    if (address == "/zoom/list_assignments") {
+        send_assignments(sender, sender_port);
         return;
     }
 
@@ -337,8 +345,7 @@ void ZoomOscServer::dispatch(const QString &address,
         std::string jwt = public_app_key.empty()
             ? settings.resolved_jwt_token()
             : std::string();
-        if (!public_app_key.empty() &&
-            settings.oauth_authorization_url.find("/oauth/start") != std::string::npos) {
+        if (!public_app_key.empty() && settings.use_broker_sdk_jwt()) {
             QString sdk_jwt_error;
             if (!ZoomOAuthManager::instance().fetch_sdk_jwt_blocking(jwt, &sdk_jwt_error)) {
                 blog(LOG_WARNING, "[obs-zoom-plugin] OSC /zoom/join: Meeting SDK auth unavailable: %s",
@@ -347,6 +354,12 @@ void ZoomOscServer::dispatch(const QString &address,
             }
             public_app_key.clear();
         }
+        blog(LOG_INFO,
+             "[obs-zoom-plugin] OSC /zoom/join Meeting SDK auth mode=%s jwt_present=%d public_app_key_present=%d broker_jwt=%d",
+             settings.meeting_sdk_auth_mode.c_str(),
+             jwt.empty() ? 0 : 1,
+             public_app_key.empty() ? 0 : 1,
+             settings.use_broker_sdk_jwt() ? 1 : 0);
         if (!ZoomEngineClient::instance().start(jwt, public_app_key)) {
             blog(LOG_WARNING,
                  "[obs-zoom-plugin] OSC /zoom/join: engine failed to start");
@@ -386,6 +399,7 @@ void ZoomOscServer::dispatch(const QString &address,
         }
         ZoomOutputManager::instance().configure_output(
             source, pid, active_speaker, isolate, mode);
+        send_assignments(sender, sender_port);
         return;
     }
 
@@ -405,6 +419,7 @@ void ZoomOscServer::dispatch(const QString &address,
             mode    = current.audio_mode;
         }
         ZoomOutputManager::instance().configure_output(source, 0, true, isolate, mode);
+        send_assignments(sender, sender_port);
         return;
     }
 
@@ -440,6 +455,7 @@ void ZoomOscServer::dispatch(const QString &address,
         }
         ZoomOutputManager::instance().configure_output_ex(
             source, mode, pid, slot, failover, isolate, amode);
+        send_assignments(sender, sender_port);
         return;
     }
 
@@ -462,6 +478,7 @@ void ZoomOscServer::dispatch(const QString &address,
                 source, current.assignment, current.participant_id,
                 current.spotlight_slot, current.failover_participant_id,
                 current.isolate_audio, amode);
+            send_assignments(sender, sender_port);
             return;
         }
         blog(LOG_WARNING, "[obs-zoom-plugin] OSC /zoom/output/audio_mode: unknown source '%s'",
@@ -486,6 +503,7 @@ void ZoomOscServer::dispatch(const QString &address,
                 source, current.assignment, current.participant_id,
                 current.spotlight_slot, failover, current.isolate_audio,
                 current.audio_mode);
+            send_assignments(sender, sender_port);
             return;
         }
         blog(LOG_WARNING, "[obs-zoom-plugin] OSC /zoom/output/failover: unknown source '%s'",
@@ -508,6 +526,7 @@ void ZoomOscServer::dispatch(const QString &address,
             ZoomOutputManager::instance().configure_output(
                 source, current.participant_id, current.active_speaker,
                 isolate, current.audio_mode);
+            send_assignments(sender, sender_port);
             return;
         }
         blog(LOG_WARNING, "[obs-zoom-plugin] OSC /zoom/isolate_audio: unknown source '%s'",
@@ -575,6 +594,36 @@ static bool find_output_by_source(const std::string &source, ZoomOutputInfo &out
     return true;
 }
 
+static std::string assignment_mode_str(AssignmentMode mode)
+{
+    switch (mode) {
+    case AssignmentMode::Participant:    return "participant";
+    case AssignmentMode::ActiveSpeaker:  return "active_speaker";
+    case AssignmentMode::SpotlightIndex: return "spotlight";
+    case AssignmentMode::ScreenShare:    return "screen_share";
+    }
+    return "participant";
+}
+
+static std::string participant_name(uint32_t participant_id)
+{
+    if (participant_id == 0)
+        return {};
+    const auto roster = ZoomEngineClient::instance().roster();
+    const auto it = std::find_if(roster.begin(), roster.end(),
+        [participant_id](const ParticipantInfo &p) {
+            return p.user_id == participant_id;
+        });
+    return it == roster.end() ? std::string{} : it->display_name;
+}
+
+static uint32_t resolved_assignment_participant_id(const ZoomOutputInfo &output)
+{
+    if (output.assignment == AssignmentMode::ActiveSpeaker)
+        return ZoomEngineClient::instance().active_speaker_id();
+    return output.participant_id;
+}
+
 void ZoomOscServer::send_status(const QHostAddress &to, quint16 port)
 {
     if (!m_running || !m_socket)
@@ -610,6 +659,49 @@ void ZoomOscServer::send_outputs(const QHostAddress &to, quint16 port)
         a[4].type = OscArg::Int32;  a[4].i = o.isolate_audio  ? 1 : 0;
         m_socket->writeDatagram(build_osc("/zoom/output", "sisii", a), to, port);
     }
+}
+
+void ZoomOscServer::send_assignments(const QHostAddress &to, quint16 port)
+{
+    if (!m_running || !m_socket)
+        return;
+
+    int32_t count = 0;
+    for (const auto &o : ZoomOutputManager::instance().outputs()) {
+        const uint32_t resolved_id = resolved_assignment_participant_id(o);
+
+        // /zoom/output/assignment ,ssisisii
+        // source, mode, configured_id, configured_name,
+        // resolved_id, resolved_name, spotlight_slot, failover_id
+        std::vector<OscArg> a(8);
+        a[0].type = OscArg::String;
+        a[0].s = o.source_name;
+        a[1].type = OscArg::String;
+        a[1].s = assignment_mode_str(o.assignment);
+        a[2].type = OscArg::Int32;
+        a[2].i = static_cast<int32_t>(o.participant_id);
+        a[3].type = OscArg::String;
+        a[3].s = participant_name(o.participant_id);
+        a[4].type = OscArg::Int32;
+        a[4].i = static_cast<int32_t>(resolved_id);
+        a[5].type = OscArg::String;
+        a[5].s = participant_name(resolved_id);
+        a[6].type = OscArg::Int32;
+        a[6].i = static_cast<int32_t>(o.spotlight_slot);
+        a[7].type = OscArg::Int32;
+        a[7].i = static_cast<int32_t>(o.failover_participant_id);
+        m_socket->writeDatagram(build_osc("/zoom/output/assignment",
+                                          "ssisisii", a),
+                                to, port);
+        ++count;
+    }
+
+    std::vector<OscArg> done(1);
+    done[0].type = OscArg::Int32;
+    done[0].i = count;
+    m_socket->writeDatagram(build_osc("/zoom/output/assignments_done",
+                                      "i", done),
+                            to, port);
 }
 
 void ZoomOscServer::send_recovery_status(const QHostAddress &to, quint16 port)

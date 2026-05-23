@@ -101,6 +101,8 @@ ZoomPluginSettings ZoomPluginSettings::load()
         config_get_string(cfg, SECTION, "MeetingSdkClientSecret");
     const char *meeting_sdk_public_app_key =
         config_get_string(cfg, SECTION, "MeetingSdkPublicAppKey");
+    const char *meeting_sdk_auth_mode =
+        config_get_string(cfg, SECTION, "MeetingSdkAuthMode");
     const char *jwt    = config_get_string(cfg, SECTION, "JwtToken");
     // OAuthClientId is a dev-only override; production builds use the embedded
     // ZOOM_EMBED_OAUTH_CLIENT_ID value. PublicClientId is a legacy key from
@@ -134,6 +136,12 @@ ZoomPluginSettings ZoomPluginSettings::load()
                                 *meeting_sdk_public_app_key)
             ? meeting_sdk_public_app_key
             : "";
+    }
+    if (meeting_sdk_auth_mode && *meeting_sdk_auth_mode)
+        s.meeting_sdk_auth_mode = meeting_sdk_auth_mode;
+    if (s.meeting_sdk_auth_mode != "public_app_key" &&
+        s.meeting_sdk_auth_mode != "broker_jwt") {
+        s.meeting_sdk_auth_mode = "public_app_key";
     }
 
     if (embedded_oauth_client_id) {
@@ -261,6 +269,11 @@ std::string ZoomPluginSettings::resolved_jwt_token() const
     return (signing_input + "." + base64url(signature)).toStdString();
 }
 
+bool ZoomPluginSettings::use_broker_sdk_jwt() const
+{
+    return meeting_sdk_auth_mode == "broker_jwt";
+}
+
 void ZoomPluginSettings::save() const
 {
     config_t *cfg = obs_frontend_get_global_config();
@@ -294,6 +307,8 @@ void ZoomPluginSettings::save() const
                       protect_secret(saved_sdk_secret).c_str());
     config_set_string(cfg, SECTION, "MeetingSdkPublicAppKey",
                       saved_public_app_key.c_str());
+    config_set_string(cfg, SECTION, "MeetingSdkAuthMode",
+                      meeting_sdk_auth_mode.c_str());
     config_set_string(cfg, SECTION, "JwtToken",          saved_jwt.c_str());
     config_set_string(cfg, SECTION, "OAuthClientId",     saved_oauth_client_id.c_str());
     // Legacy keys cleared so older builds don't resurrect stale values. Public

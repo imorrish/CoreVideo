@@ -572,12 +572,13 @@ ZoomDock::ZoomDock(QWidget *parent)
     m_display_name->setPlaceholderText("Display name");
 
     m_join_token_type = new QComboBox(join_group);
-    m_join_token_type->addItem("Auto Zoom sign-in / ZAK", "auto_zak");
+    m_join_token_type->addItem("Zoom sign-in", "auto_zak");
     m_join_token_type->addItem("User ZAK", "user_zak");
     m_join_token_type->addItem("App privilege token", "app_privilege_token");
     m_join_token_type->setToolTip(
-        "Use Auto. App privilege tokens are only for raw media permission; "
-        "CoreVideo will still use Zoom sign-in/ZAK for the meeting join.");
+        "Use Zoom sign-in for normal joins. App privilege tokens are only "
+        "for raw media permission; CoreVideo will still use signed-in Zoom "
+        "context for the meeting join.");
 
     m_join_token = new QLineEdit(join_group);
     m_join_token->setPlaceholderText("Automatic from Zoom sign-in");
@@ -1359,7 +1360,7 @@ void ZoomDock::on_join_clicked()
         tokens.app_privilege_token.empty()) {
         QMessageBox::warning(this, "Zoom Join Token",
             "A manual token type was selected, but the token field is empty. "
-            "Use Auto Zoom sign-in / ZAK, or paste the selected token before joining.");
+            "Use Zoom sign-in, or paste the selected token before joining.");
         return;
     }
     if (!typed_token.empty()) {
@@ -1462,8 +1463,7 @@ void ZoomDock::on_join_clicked()
 
         const ZoomPluginSettings settings = ZoomPluginSettings::load();
         std::string public_app_key = settings.sdk_public_app_key;
-        if (!public_app_key.empty() &&
-            settings.oauth_authorization_url.find("/oauth/start") != std::string::npos) {
+        if (!public_app_key.empty() && settings.use_broker_sdk_jwt()) {
             QString sdk_jwt_error;
             if (ZoomOAuthManager::instance().fetch_sdk_jwt_blocking(jwt, &sdk_jwt_error)) {
                 public_app_key.clear();
@@ -1485,6 +1485,12 @@ void ZoomDock::on_join_clicked()
                 return;
             }
         }
+        blog(LOG_INFO,
+             "[obs-zoom-plugin] Meeting SDK auth mode=%s jwt_present=%d public_app_key_present=%d broker_jwt=%d",
+             settings.meeting_sdk_auth_mode.c_str(),
+             jwt.empty() ? 0 : 1,
+             public_app_key.empty() ? 0 : 1,
+             settings.use_broker_sdk_jwt() ? 1 : 0);
         const bool started = ZoomEngineClient::instance().start(jwt, public_app_key);
         const bool still_current =
             self->m_join_generation.load(std::memory_order_acquire) == join_generation;

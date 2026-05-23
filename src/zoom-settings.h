@@ -7,6 +7,7 @@
 struct ZoomPluginSettings {
     std::string         sdk_key, sdk_secret, jwt_token;
     std::string         sdk_public_app_key;
+    std::string         meeting_sdk_auth_mode = "public_app_key";
     // OAuth client ID baked in at build time. global.ini can override this
     // only in development builds where the embedded value is blank.
     std::string         oauth_client_id;
@@ -42,5 +43,6 @@ struct ZoomPluginSettings {
 
     static ZoomPluginSettings load();
     std::string resolved_jwt_token() const;
+    bool use_broker_sdk_jwt() const;
     void save() const;
 };
