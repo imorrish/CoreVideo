@@ -176,6 +176,7 @@ static void show_dock_widget(Widget *widget)
         parent = parent->parentWidget();
 
     if (auto *dock = qobject_cast<QDockWidget *>(parent)) {
+        widget->show();
         dock->show();
         dock->raise();
         dock->activateWindow();
