@@ -266,7 +266,29 @@ void EngineVideo::subscribe(uint32_t participant_id,
         return;
     }
 
-    unsubscribe_locked(source_uuid);
+    auto existing_source = m_source_participants.find(source_uuid);
+    if (existing_source != m_source_participants.end()) {
+        if (existing_source->second.participant_id == participant_id) {
+            auto existing_sub = m_subs.find(participant_id);
+            if (existing_sub != m_subs.end() && existing_sub->second &&
+                existing_sub->second->active()) {
+                const uint32_t current_resolution = existing_sub->second->resolution();
+                if (resolution <= current_resolution) {
+                    EngineIpc::write(
+                        R"({"cmd":"debug","stage":"video_subscribe_noop_existing","source_uuid":")" +
+                        source_uuid + R"(","participant_id":)" +
+                        std::to_string(participant_id) + R"(,"requested":)" +
+                        std::to_string(resolution) + R"(,"active":)" +
+                        std::to_string(current_resolution) + "}");
+                    return;
+                }
+            } else {
+                unsubscribe_locked(source_uuid);
+            }
+        } else {
+            unsubscribe_locked(source_uuid);
+        }
+    }
 
     if (!m_raw_media_active) {
         m_source_participants[source_uuid] = {
@@ -287,7 +309,13 @@ void EngineVideo::subscribe(uint32_t participant_id,
         if (it->second->active()) {
             if (resolution > it->second->resolution()) {
                 auto targets = it->second->sources();
-                targets.emplace_back(source_uuid, e2p_fd);
+                const auto already_targeted =
+                    std::find_if(targets.begin(), targets.end(),
+                                 [&source_uuid](const auto &target) {
+                                     return target.first == source_uuid;
+                                 }) != targets.end();
+                if (!already_targeted)
+                    targets.emplace_back(source_uuid, e2p_fd);
                 EngineIpc::write(
                     R"({"cmd":"debug","stage":"video_upgrade_subscription","source_uuid":")" +
                     source_uuid + R"(","participant_id":)" +
