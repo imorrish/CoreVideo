@@ -229,10 +229,11 @@
     </p>
     <p>
       For Zoom App Marketplace compliance and attributed joins, <strong>ZoomOAuthManager</strong>
-      implements OAuth 2.0 with PKCE (S256): it opens a browser authorization flow,
-      intercepts the <code>corevideo://oauth/callback</code> redirect via a bundled
-      helper binary, exchanges the authorization code for tokens, and fetches a
-      short-lived <strong>ZAK</strong> from the Zoom API before each join.
+      uses the CoreVideo HTTPS broker to run Zoom Public Client OAuth with PKCE
+      and receive a short-lived broker token through the bundled
+      <code>corevideo://oauth/callback</code> helper. Before each join, the plugin
+      asks the broker for a short-lived Meeting SDK JWT; the broker validates the
+      signed-in Zoom access token before minting the SDK JWT.
       The plugin also exposes TCP and OSC control APIs for external production
       automation, including source assignment, meeting control, and ISO recording.
     </p>
@@ -283,7 +284,7 @@
       <div class="card"><div class="card-icon">🔒</div><h4>Hardened Security</h4>
         <p>Constant-time token comparison, validated IPC input, sanitised participant IDs, SIGPIPE handling, DPAPI token storage (Windows).</p></div>
       <div class="card"><div class="card-icon">🔑</div><h4>Zoom OAuth PKCE</h4>
-        <p>OAuth 2.0 with S256 PKCE for attributed joins and Marketplace compliance. ZAK fetched via <code>/v2/users/me/zak</code>. Custom URL scheme with platform callback helpers.</p></div>
+        <p>Broker-backed OAuth 2.0 with S256 PKCE for attributed joins and Marketplace compliance. Meeting SDK JWTs are minted server-side after token validation. Custom URL scheme with platform callback helpers.</p></div>
       <div class="card"><div class="card-icon">🎨</div><h4>Modern UI</h4>
         <p>CoreVideo dark stylesheet with animated <code>CvStatusDot</code>, <code>CvBanner</code> first-run notices, and button role variants (primary / danger).</p></div>
       <div class="card"><div class="card-icon">ISO</div><h4>Auto ISO Recording</h4>
@@ -303,7 +304,7 @@
       <tr><td>Qt</td><td>6.x</td><td>Core + Network + Widgets</td></tr>
       <tr><td>Zoom Meeting SDK</td><td><strong>5.17.x or 7.x</strong></td><td>Place at <code>third_party/zoom-sdk/</code>. CMake detects flat (5.x) and subfolder (7.x) header layouts automatically.</td></tr>
       <tr><td>C++ Compiler</td><td>C++17</td><td>MSVC 2022 / Clang 14+ / GCC 11+</td></tr>
-      <tr><td>Zoom Developer Account</td><td>—</td><td>SDK key + secret required. OAuth Client ID required for Marketplace / external-account joins. CoreVideo generates Meeting SDK JWT locally.</td></tr>
+      <tr><td>Zoom Developer Account</td><td>—</td><td>Marketplace app with Public Client OAuth + PKCE, Meeting SDK / Embed enabled, and server-side broker secrets for Meeting SDK JWT minting.</td></tr>
       <tr><td>Zoom bandwidth / app entitlements</td><td>—</td><td>Raw data is available through Meeting SDK apps. Standard accounts commonly have a 30 Mbps incoming video envelope; Enhanced Media / HBM can raise that to roughly 100 Mbps. Developers may need an app-level flag to test more than a small number of concurrent raw streams.</td></tr>
       <tr><td>FFmpeg</td><td>—</td><td>Required at runtime for ISO recording. Also used when building with <code>-DCOREVIDEO_HW_ACCEL=ON</code> for hardware-accelerated I420→NV12 conversion.</td></tr>
       <tr><td>Qt TLS backend (Windows)</td><td>—</td><td>Required for OAuth HTTPS. Ship Schannel TLS plugins to <code>obs-plugins/64bit/plugins/tls/</code>.</td></tr>
@@ -343,7 +344,7 @@ graph TB
         ZDock["ZoomDock\n(Control UI · CvStatusDot · CvBanner)"]
         ZEC["ZoomEngineClient\n★ central singleton"]
         ZRM["ZoomReconnectManager\n(auto-reconnect)"]
-        ZOAuth["ZoomOAuthManager\n(OAuth PKCE · ZAK fetch · DPAPI)"]
+        ZOAuth["ZoomOAuthManager\n(OAuth broker · SDK JWT fetch · DPAPI)"]
         ZS["ZoomSource\n(ShmRegion · AssignmentMode)"]
         ZOM["ZoomOutputManager"]
         ZCS["ZoomControlServer :19870"]
@@ -355,7 +356,7 @@ graph TB
         ZEC --> ZS
         ZCS & ZOSC --> ZOM & ZEC
         ZEC --> ZRM
-        ZOAuth -->|"ZAK token"| ZEC
+        ZOAuth -->|"SDK JWT"| ZEC
       end
 
       subgraph Engine["ZoomObsEngine  (ALL SDK access)"]
@@ -388,7 +389,7 @@ graph TB
     style ZoomCloud fill:#2d1a2d,stroke:#bc8cff,color:#e6edf3
     style External fill:#2d2000,stroke:#d29922,color:#e6edf3
       </div>
-      <div class="diagram-caption">Fig 1 — All SDK access is in ZoomObsEngine. ZoomOAuthManager handles OAuth PKCE and ZAK fetching. TCP and OSC provide external control without linking the Zoom SDK into OBS.</div>
+      <div class="diagram-caption">Fig 1 - All SDK access is in ZoomObsEngine. ZoomOAuthManager handles broker-backed OAuth PKCE, token storage, and SDK JWT fetches. TCP and OSC provide external control without linking the Zoom SDK into OBS.</div>
     </div>
   </section>
 
@@ -441,7 +442,7 @@ classDiagram
         +handle_redirect_url(url) bool
         +register_url_scheme() bool
         +refresh_access_token_blocking() bool
-        +fetch_zak_blocking(zak) bool
+        +fetch_sdk_jwt_blocking(jwt) bool
         -m_pending_state : QString
         -m_pending_verifier : QString
     }
@@ -491,7 +492,7 @@ classDiagram
 
     ZoomDock --> ZoomEngineClient : join / leave
     ZoomDock --> ZoomOAuthManager : begin_authorization
-    ZoomOAuthManager ..> ZoomEngineClient : ZAK → join tokens
+    ZoomOAuthManager ..> ZoomEngineClient : SDK JWT → engine init
     ZoomReconnectManager --> ZoomEngineClient : stop_for_reconnect / start / join
     ZoomEngineClient ..> ZoomReconnectManager : trigger / on_join_success
     ZoomSource --> ZoomEngineClient : subscribe / unsubscribe
@@ -748,10 +749,11 @@ flowchart LR
   <section id="flow-auth">
     <h2>Flow: Authentication</h2>
     <p>
-      CoreVideo generates the Zoom Meeting SDK JWT locally from the saved SDK key
-      and secret — no external JWT service needed. A manual JWT override can be
-      supplied in settings. The engine is not started on module load; it is launched
-      the first time a join is requested.
+      Published CoreVideo builds do not ship Meeting SDK secrets in the OBS
+      plugin. After Zoom sign-in, the plugin asks the CoreVideo broker for a
+      short-lived Meeting SDK JWT. The broker validates the signed-in Zoom access
+      token and signs the SDK JWT server-side. The engine is not started on
+      module load; it is launched the first time a join is requested.
     </p>
     <div class="diagram-wrap">
       <div class="mermaid">
@@ -760,22 +762,25 @@ sequenceDiagram
     participant PM as plugin-main
     participant ZDock as ZoomDock
     participant ZEC5 as ZoomEngineClient
-    participant ZS2 as ZoomSettings
+    participant ZOA2 as ZoomOAuthManager
+    participant Broker as CoreVideo Broker
     participant Engine as ZoomObsEngine
     participant SDK as Zoom SDK
 
     OBS->>PM: obs_module_load()
-    PM->>ZS2: load() → {sdk_key, sdk_secret, jwt_override, ports, token}
+    PM->>ZOA2: load OAuth tokens and broker URL
     PM->>ZoomControlServer: start(control_server_port)
     PM->>ZoomOscServer: start(osc_server_port)
     PM->>ZDock: ensure_zoom_dock() [after OBS_FRONTEND_EVENT_FINISHED_LOADING]
 
     Note over ZDock: User clicks Join or API sends join cmd
 
-    ZDock->>ZDock: generate JWT from key+secret (or use override)
-    ZDock->>ZEC5: start(jwt_token)
+    ZDock->>ZOA2: fetch_sdk_jwt_blocking()
+    ZOA2->>Broker: POST /oauth/sdk-jwt with OAuth access token
+    Broker-->>ZOA2: short-lived Meeting SDK JWT
+    ZDock->>ZEC5: start(sdk_jwt)
     ZEC5->>Engine: launch_engine() [fork / CreateProcess]
-    ZEC5->>ZEC5: connect_ipc() [300 × 100ms retries]
+    ZEC5->>ZEC5: connect_ipc() [300 x 100ms retries]
     Engine-->>ZEC5: {"cmd":"ready"}
     ZEC5->>Engine: {"cmd":"init","jwt":"…"}
     Engine->>SDK: InitSDK() + SDKAuth({jwt})
@@ -789,7 +794,7 @@ sequenceDiagram
         Engine-->>ZEC5: {"cmd":"auth_ok"}
     end
       </div>
-      <div class="diagram-caption">Fig 8 — JWT is generated locally from key+secret. Engine is launched on first join. Auth expiry is handled automatically inside the engine.</div>
+      <div class="diagram-caption">Fig 8 - SDK JWT is fetched from the broker after OAuth token validation. Engine is launched on first join. Auth expiry is handled automatically inside the engine.</div>
     </div>
   </section>
 
@@ -798,40 +803,39 @@ sequenceDiagram
   <section id="flow-oauth">
     <h2>Flow: Zoom OAuth PKCE</h2>
     <p>
-      <code>ZoomOAuthManager</code> implements OAuth 2.0 with PKCE (Proof Key for Code
-      Exchange, S256) for user-level attributed meeting joins and Zoom App Marketplace
-      compliance. This is required when joining meetings hosted by accounts other than
-      the SDK account. The flow uses a custom URL scheme
-      (<code>corevideo://oauth/callback</code>) and platform-specific helper binaries
-      to receive the authorization code without an embedded secret.
+      <code>ZoomOAuthManager</code> implements broker-backed OAuth 2.0 with PKCE
+      (Proof Key for Code Exchange, S256) for user-level attributed meeting joins
+      and Zoom App Marketplace compliance. The desktop plugin opens the broker
+      start URL, receives a short-lived broker token through
+      <code>corevideo://oauth/callback</code>, and never stores a Zoom app secret.
     </p>
 
     <h3>Setup (one-time per machine)</h3>
     <div class="steps">
       <div class="step"><div class="step-body">
-        <h4>Configure OAuth credentials</h4>
-        <p>Open <strong>Tools → Zoom Plugin Settings</strong>. Enter your <strong>OAuth Client ID</strong>
-        (from the Zoom Marketplace General app). Optionally enter a Client Secret for confidential/test apps.
-        Leave Redirect URI as <code>corevideo://oauth/callback</code>.</p>
+        <h4>Use the embedded broker</h4>
+        <p>Published builds already contain the CoreVideo broker URL. Open
+        <strong>Tools → Zoom Plugin Settings</strong>; there are no Client ID,
+        Client Secret, or Authorization URL fields for end users to configure.</p>
       </div></div>
       <div class="step"><div class="step-body">
         <h4>Register the URL scheme</h4>
-        <p>Click <strong>Register corevideo:// URL Scheme</strong>. On Windows this writes
-        <code>HKCU\Software\Classes\corevideo\shell\open\command</code> pointing to
-        <code>CoreVideoOAuthCallback.exe</code>. On macOS it registers
-        <code>CoreVideoOAuthCallback.app</code> with Launch Services.</p>
+        <p>Click <strong>Sign in with Zoom</strong>. CoreVideo registers the
+        <code>corevideo://</code> callback helper automatically on first use.</p>
       </div></div>
       <div class="step"><div class="step-body">
         <h4>Authorize</h4>
-        <p>Click <strong>Authorize with Zoom</strong>. CoreVideo opens the browser with
-        the authorization URL. Approve the app in Zoom.</p>
+        <p>CoreVideo opens the browser at
+        <code>https://corevideo.iamfatness.us/oauth/start</code>. Approve the app
+        in Zoom.</p>
       </div></div>
       <div class="step"><div class="step-body">
         <h4>Callback forwarding</h4>
-        <p>Zoom redirects to <code>corevideo://oauth/callback?code=…&amp;state=…</code>.
-        The helper binary forwards this URL to the plugin via the TCP control server
-        (<code>oauth_callback</code> command). Tokens are stored; on Windows they are
-        DPAPI-protected before writing to OBS config.</p>
+        <p>Zoom redirects to the broker callback, then the broker returns an
+        encrypted broker token to <code>corevideo://oauth/callback</code>. The
+        helper forwards that URL to the plugin via the TCP control server
+        (<code>oauth_callback</code> command). Tokens are stored; on Windows they
+        are DPAPI-protected before writing to OBS config.</p>
       </div></div>
     </div>
 
@@ -843,58 +847,66 @@ sequenceDiagram
     participant ZDock3 as ZoomDock
     participant ZOA as ZoomOAuthManager
     participant Browser
+    participant Broker2 as CoreVideo Broker
     participant ZoomCloud2 as Zoom Cloud
     participant Helper as CoreVideoOAuthCallback
     participant ZCS2 as ZoomControlServer
 
-    User->>ZDock3: click "Authorize with Zoom"
+    User->>ZDock3: click "Sign in with Zoom"
     ZDock3->>ZOA: begin_authorization()
-    ZOA->>ZOA: random_base64url(32) → verifier\npkce_challenge(verifier) → challenge\nrandom_base64url(16) → state
-    ZOA->>Browser: QDesktopServices::openUrl(auth_url?code_challenge=…&state=…)
-    Browser->>ZoomCloud2: GET /oauth/authorize?client_id=…&code_challenge=…
+    ZOA->>ZOA: random_base64url(16) → state
+    ZOA->>Browser: QDesktopServices::openUrl(/oauth/start?state=…)
+    Browser->>Broker2: GET /oauth/start
+    Broker2->>Broker2: generate PKCE verifier/challenge
+    Broker2->>ZoomCloud2: redirect to /v2/authorize?client_id=…&code_challenge=…
     ZoomCloud2-->>Browser: consent screen
     User->>Browser: approve
-    ZoomCloud2-->>Browser: redirect to corevideo://oauth/callback?code=…&state=…
+    ZoomCloud2-->>Broker2: redirect to /oauth/callback?code=…&state=…
+    Broker2-->>Browser: redirect to corevideo://oauth/callback?broker_token=…&state=…
     Browser->>Helper: launch CoreVideoOAuthCallback (Windows: .exe / macOS: .app)
-    Helper->>ZCS2: POST {"cmd":"oauth_callback","url":"corevideo://oauth/callback?code=…&state=…"}
+    Helper->>ZCS2: POST {"cmd":"oauth_callback","url":"corevideo://oauth/callback?broker_token=…&state=…"}
     ZCS2->>ZOA: handle_redirect_url(url)
     ZOA->>ZOA: verify state matches m_pending_state
-    ZOA->>ZoomCloud2: POST /oauth/token code=… code_verifier=… (Basic auth: client_id:[secret])
-    ZoomCloud2-->>ZOA: {access_token, refresh_token, expires_in}
+    ZOA->>Broker2: POST /oauth/redeem broker_token=…
+    Broker2->>ZoomCloud2: POST /oauth/token client_id + code_verifier, no secret
+    Broker2-->>ZOA: {access_token, refresh_token, expires_in}
     ZOA->>ZOA: store tokens (DPAPI on Windows)
-    Note over ZOA: Ready for ZAK fetch on next join
+    Note over ZOA: Ready for SDK JWT fetch on next join
       </div>
-      <div class="diagram-caption">Fig 8b — OAuth PKCE flow: browser opens Zoom auth, helper binary forwards callback, plugin exchanges code, stores tokens.</div>
+      <div class="diagram-caption">Fig 8b - OAuth PKCE flow: browser opens broker start URL, broker performs Zoom PKCE exchange, helper binary forwards broker token, plugin stores returned tokens.</div>
     </div>
 
-    <h3>ZAK Fetch (before each join)</h3>
+    <h3>Meeting SDK JWT Fetch (before each join)</h3>
     <div class="diagram-wrap">
       <div class="mermaid">
 sequenceDiagram
     participant ZDock4 as ZoomDock
     participant ZOA2 as ZoomOAuthManager
+    participant Broker3 as CoreVideo Broker
     participant ZoomAPI as Zoom REST API
     participant ZEC8 as ZoomEngineClient
 
-    ZDock4->>ZOA2: fetch_zak_blocking(zak)
+    ZDock4->>ZOA2: fetch_sdk_jwt_blocking(jwt)
     ZOA2->>ZOA2: check token expiry\nrefresh_access_token_blocking() if expired
-    ZOA2->>ZoomAPI: GET /v2/users/me/zak\nAuthorization: Bearer {access_token}
-    ZoomAPI-->>ZOA2: {"token": "…zak…"}
-    ZOA2-->>ZDock4: zak string
-    ZDock4->>ZEC8: join(id, pass, name, kind, tokens{user_zak=zak})
-    ZEC8->>Engine: {"cmd":"join","user_zak":"…","meeting_id":"…"}
+    ZOA2->>Broker3: POST /oauth/sdk-jwt\nAuthorization: Bearer {access_token}
+    Broker3->>ZoomAPI: GET /v2/users/me\nAuthorization: Bearer {access_token}
+    ZoomAPI-->>Broker3: signed-in user profile
+    Broker3-->>ZOA2: {"sdk_jwt": "…"}
+    ZOA2-->>ZDock4: sdk_jwt string
+    ZDock4->>ZEC8: start(sdk_jwt), then join(id, pass, name, kind)
+    ZEC8->>Engine: {"cmd":"init","jwt":"…"} then {"cmd":"join","meeting_id":"…"}
       </div>
-      <div class="diagram-caption">Fig 8c — ZAK is fetched fresh before each join using the stored OAuth access token; token is refreshed automatically if expired.</div>
+      <div class="diagram-caption">Fig 8c - A Meeting SDK JWT is fetched fresh before each join using the stored OAuth access token; token refresh is automatic when expired.</div>
     </div>
 
     <h3>Security Notes</h3>
     <table>
       <tr><th>Property</th><th>Implementation</th></tr>
-      <tr><td>PKCE method</td><td>S256 — SHA-256 of a 32-byte random verifier, base64url-encoded</td></tr>
+      <tr><td>PKCE method</td><td>S256 - SHA-256 of a 32-byte random verifier, base64url-encoded by the broker</td></tr>
       <tr><td>State parameter</td><td>16-byte random base64url value; verified on callback to prevent CSRF</td></tr>
-      <tr><td>Client secret</td><td>Optional. Enable <strong>Use Client Secret for confidential OAuth</strong> when the published Zoom app is configured as a confidential OAuth client; leave disabled for public PKCE apps.</td></tr>
+      <tr><td>Client secret</td><td>No OAuth or Meeting SDK client secret is shipped in the OBS plugin. Meeting SDK secrets live only as Cloudflare Worker secrets used to mint short-lived SDK JWTs.</td></tr>
       <tr><td>Token storage (Windows)</td><td>Access and refresh tokens encrypted with DPAPI before writing to OBS global config</td></tr>
-      <tr><td>No secret logging</td><td>Access tokens, refresh tokens, ZAKs, codes, and verifiers are never written to logs or IPC messages</td></tr>
+      <tr><td>No secret logging</td><td>Access tokens, refresh tokens, SDK JWTs, codes, broker tokens, and verifiers are never written to logs or IPC messages</td></tr>
       <tr><td>Refresh rotation</td><td>Always persist the latest refresh token Zoom returns; stale tokens are discarded</td></tr>
       <tr><td>Callback token bypass</td><td>The <code>oauth_callback</code> TCP command bypasses the control server token; the OAuth <code>state</code> and one-time verifier still guard against replay</td></tr>
     </table>
@@ -1263,9 +1275,9 @@ sequenceDiagram
       <tr><td>Meeting ID field</td><td>Zoom meeting number; persisted from last session</td></tr>
       <tr><td>Passcode field</td><td>Optional meeting passcode</td></tr>
       <tr><td>Display Name field</td><td>Name shown inside the Zoom meeting; persisted from last session</td></tr>
-      <tr><td>Token type selector</td><td>Combo box to choose join auth method: Auto Zoom sign-in / ZAK, User ZAK, or App privilege token</td></tr>
+      <tr><td>Token type selector</td><td>Combo box to choose join auth method. Published builds use Auto Zoom sign-in, which fetches a broker-minted Meeting SDK JWT before joining.</td></tr>
       <tr><td>Webinar checkbox</td><td>Use Zoom Webinar SDK join API instead of regular meeting API; persisted</td></tr>
-      <tr><td>Join button</td><td>Generates JWT or fetches OAuth ZAK and calls <code>ZoomEngineClient::join()</code></td></tr>
+      <tr><td>Join button</td><td>Fetches a broker-minted Meeting SDK JWT when needed, starts <code>ZoomObsEngine</code>, then calls <code>ZoomEngineClient::join()</code></td></tr>
       <tr><td>Leave button</td><td>Calls <code>ZoomEngineClient::leave()</code> and clears reconnect session</td></tr>
       <tr><td>Start Engine button</td><td>Starts raw media capture after the meeting is joined and sends Zoom video/audio to OBS outputs</td></tr>
       <tr><td>Stop Engine button</td><td>Stops raw media capture while staying joined to the meeting</td></tr>
@@ -1365,7 +1377,7 @@ sequenceDiagram
       <tr><td><code>speaker_director_release</code></td><td><code>{"cmd":"speaker_director_release"}</code></td><td><code>speaker_director</code> object with automatic direction restored</td></tr>
       <tr><td><code>join</code></td><td><code>{"cmd":"join","meeting_id":"…","passcode":"…","display_name":"OBS"}</code></td><td><code>ok</code></td></tr>
       <tr><td><code>leave</code></td><td><code>{"cmd":"leave"}</code></td><td><code>ok</code></td></tr>
-      <tr><td><code>oauth_callback</code></td><td><code>{"cmd":"oauth_callback","url":"corevideo://oauth/callback?code=…&amp;state=…"}</code></td><td><code>ok</code> or <code>error</code> — forwards the OS URL-scheme callback to <code>ZoomOAuthManager::handle_redirect_url()</code>. Token check is bypassed for this command; OAuth state/verifier still guard against replay.</td></tr>
+      <tr><td><code>oauth_callback</code></td><td><code>{"cmd":"oauth_callback","url":"corevideo://oauth/callback?broker_token=…&amp;state=…"}</code></td><td><code>ok</code> or <code>error</code> - forwards the OS URL-scheme callback to <code>ZoomOAuthManager::handle_redirect_url()</code>. Token check is bypassed for this command; OAuth state and broker token validation still guard against replay.</td></tr>
     </table>
 
     <h3>Participant object</h3>
@@ -1471,8 +1483,8 @@ sequenceDiagram
     <h3>Plugin → Engine</h3>
     <table>
       <tr><th>Command</th><th>Payload</th><th>Description</th></tr>
-      <tr><td><code>init</code></td><td><code>{"cmd":"init","jwt":"…"}</code></td><td>Initialize SDK and authenticate</td></tr>
-      <tr><td><code>join</code></td><td><code>{"cmd":"join","meeting_id":"…","passcode":"…","display_name":"OBS","kind":"meeting|webinar","user_zak":"…","on_behalf_token":"…"}</code></td><td>Join meeting or webinar; <code>user_zak</code> carries the OAuth ZAK; <code>on_behalf_token</code> carries the app privilege token when present</td></tr>
+      <tr><td><code>init</code></td><td><code>{"cmd":"init","jwt":"…"}</code></td><td>Initialize SDK and authenticate with the broker-minted Meeting SDK JWT</td></tr>
+      <tr><td><code>join</code></td><td><code>{"cmd":"join","meeting_id":"…","passcode":"…","display_name":"OBS","kind":"meeting|webinar","user_zak":"…","on_behalf_token":"…"}</code></td><td>Join meeting or webinar. Published broker-backed joins authenticate the SDK during <code>init</code>; <code>user_zak</code> and <code>on_behalf_token</code> remain developer/manual fallback fields.</td></tr>
       <tr><td><code>leave</code></td><td><code>{"cmd":"leave"}</code></td><td>Leave meeting</td></tr>
       <tr><td><code>subscribe</code></td><td><code>{"cmd":"subscribe","source_uuid":"…","participant_id":N,"isolate_audio":bool}</code></td><td>Subscribe to fixed participant frames</td></tr>
       <tr><td><code>subscribe_spotlight</code></td><td><code>{"cmd":"subscribe_spotlight","source_uuid":"…","slot":N}</code></td><td>Subscribe to spotlight slot N (1-based)</td></tr>
@@ -1500,7 +1512,7 @@ sequenceDiagram
     <h2>Installation</h2>
     <div class="callout info">
       <div class="callout-title">ℹ️ Pre-built releases</div>
-      Download the latest Windows package from <a href="https://github.com/iamfatness/CoreVideo/releases/tag/v0.1.15">CoreVideo v0.1.15</a>. This release includes dockable Zoom Diagnostics and Zoom Output Manager panels, the OBS plugin, ZoomObsEngine, Sidecar runtime files, and the required Zoom SDK runtime DLLs.
+      Download the latest Windows package from <a href="https://github.com/iamfatness/CoreVideo/releases/tag/v0.1.18">CoreVideo v0.1.18</a>. This release includes dockable Zoom Diagnostics and Zoom Output Manager panels, the OBS plugin, ZoomObsEngine, the OAuth callback helper, and the required Zoom SDK runtime DLLs.
     </div>
     <div class="steps">
       <div class="step"><div class="step-body">
@@ -1528,8 +1540,10 @@ sequenceDiagram
       </div></div>
       <div class="step"><div class="step-body">
         <h4>Configure and launch</h4>
-        <p>Open OBS → <strong>Tools → Zoom Plugin Settings</strong> and enter
-        your SDK Key, SDK Secret, JWT token, and (optionally) the control server token.</p>
+        <p>Open OBS → <strong>Tools → Zoom Plugin Settings</strong>, sign in
+        with Zoom, and configure local control-server/reconnect settings. Published
+        builds already know the CoreVideo broker URL; end users do not enter Zoom
+        app credentials.</p>
       </div></div>
     </div>
   </section>
@@ -1541,21 +1555,21 @@ sequenceDiagram
     <h4>SDK Credentials</h4>
     <table>
       <tr><th>Field</th><th>Default</th><th>Description</th></tr>
-      <tr><td>SDK Key</td><td>—</td><td>Zoom Meeting SDK App Key</td></tr>
-      <tr><td>SDK Secret</td><td>—</td><td>Zoom Meeting SDK App Secret</td></tr>
-      <tr><td>JWT Token</td><td>—</td><td>Optional override; leave blank to generate from SDK key/secret</td></tr>
+      <tr><td>SDK Key</td><td>Embedded/brokered</td><td>Developer-only override for local builds. Published builds use broker-minted Meeting SDK JWTs.</td></tr>
+      <tr><td>SDK Secret</td><td>Server-side only</td><td>Not entered by end users and not shipped in the plugin. The Cloudflare broker stores this as a secret.</td></tr>
+      <tr><td>JWT Token</td><td>—</td><td>Optional developer override; leave blank for normal broker-backed joins.</td></tr>
     </table>
     <h4>OAuth Settings</h4>
     <table>
       <tr><th>Field</th><th>Default</th><th>Description</th></tr>
-      <tr><td>OAuth Client ID</td><td>—</td><td>Client ID from Zoom Marketplace General app</td></tr>
-      <tr><td>OAuth Client Secret</td><td>&mdash;</td><td>Used only when <strong>Use Client Secret for confidential OAuth</strong> is enabled; required for confidential OAuth apps.</td></tr>
-      <tr><td>Authorization URL</td><td>—</td><td>Optional custom auth URL (e.g. Zoom test URL); if contains <code>client_id</code>, CoreVideo infers and stores the client ID</td></tr>
-      <tr><td>Redirect URI</td><td><code>corevideo://oauth/callback</code></td><td>Must match the Zoom app configuration</td></tr>
-      <tr><td>Scopes</td><td><code>user:read:zak user:read:user</code></td><td>OAuth scopes requested during authorization</td></tr>
+      <tr><td>OAuth Client ID</td><td>Embedded/brokered</td><td>Developer-only field when the build has no embedded broker URL. Published builds use the broker public client configuration.</td></tr>
+      <tr><td>OAuth Client Secret</td><td>&mdash;</td><td>Not used in published builds. Public Client OAuth uses PKCE and no desktop secret.</td></tr>
+      <tr><td>Authorization URL</td><td>Embedded</td><td>Published builds use <code>https://corevideo.iamfatness.us/oauth/start</code>.</td></tr>
+      <tr><td>Redirect URI</td><td><code>corevideo://oauth/callback</code></td><td>Local return URI used by the callback helper after broker authorization.</td></tr>
+      <tr><td>Scopes</td><td><code>user:read:token user:read:user</code></td><td>OAuth scopes requested during authorization.</td></tr>
       <tr><td>OAuth Status label</td><td>—</td><td>Shows connected/disconnected status and token expiry</td></tr>
-      <tr><td>Register corevideo:// URL Scheme</td><td>—</td><td>Registers the OS URL scheme handler for the callback helper</td></tr>
-      <tr><td>Authorize with Zoom</td><td>—</td><td>Opens browser to begin PKCE authorization flow</td></tr>
+      <tr><td>Register corevideo:// URL Scheme</td><td>—</td><td>Registers the OS URL scheme handler for the callback helper; published builds do this automatically on sign-in.</td></tr>
+      <tr><td>Sign in with Zoom</td><td>—</td><td>Opens browser to begin the broker-backed PKCE authorization flow.</td></tr>
       <tr><td>Refresh Token</td><td>—</td><td>Manually trigger token refresh</td></tr>
       <tr><td>Disconnect</td><td>—</td><td>Clears stored access and refresh tokens</td></tr>
     </table>
@@ -1640,7 +1654,7 @@ sequenceDiagram
     │                                         #   HwVideoPipeline, failover, hotkeys, placeholder)
     ├── zoom-engine-client.*                  # Singleton: IPC, engine launch, roster, callbacks,
     │                                         #   spotlight/screenshare subscribe, monitor thread
-    ├── zoom-oauth.*                          # ZoomOAuthManager: PKCE, ZAK fetch, token storage
+    ├── zoom-oauth.*                          # ZoomOAuthManager: broker PKCE, SDK JWT fetch, token storage
     ├── oauth-callback-helper.cpp             # Windows: CoreVideoOAuthCallback.exe entry point
     ├── oauth-callback-helper-macos.mm        # macOS: CoreVideoOAuthCallback.app entry point
     ├── zoom-dock.*                           # Qt dockable panel: CvStatusDot, CvBanner,
@@ -1652,7 +1666,7 @@ sequenceDiagram
     ├── hw-video-pipeline.*                   # FFmpeg I420→NV12 (CUDA/VAAPI/VideoToolbox/QSV)
     ├── zoom-audio-delegate.*                 # Mixed / isolated SDK audio → OBS
     ├── zoom-audio-router.*                   # Central SDK audio fan-out dispatcher
-    ├── zoom-auth.*                           # JWT auth + observable auth state
+    ├── zoom-auth.*                           # SDK JWT auth + observable auth state
     ├── zoom-meeting.*                        # Meeting state machine
     ├── zoom-participants.*                   # Roster, active speaker, spotlight callbacks
     ├── zoom-participant-audio-source.*       # Per-participant audio OBS source
@@ -1664,8 +1678,8 @@ sequenceDiagram
     ├── zoom-output-dialog.*                  # Qt Output Manager dock widget
     ├── zoom-control-server.*                 # TCP JSON control API (port 19870) + oauth_callback
     ├── zoom-osc-server.*                     # UDP OSC control API (port 19871)
-    ├── zoom-settings.*                       # SDK + OAuth credentials + port persistence
-    ├── zoom-settings-dialog.*                # Qt Settings dialog (SDK + OAuth + reconnect)
+    ├── zoom-settings.*                       # Broker URL, OAuth tokens, local ports + reconnect persistence
+    ├── zoom-settings-dialog.*                # Qt Settings dialog (Zoom sign-in + local settings)
     ├── zoom-credentials.h.in                 # Embedded SDK credentials (CMake-generated)
     ├── obs-zoom-version.h.in                 # Plugin version string (CMake-generated)
     ├── engine-ipc.h                          # IPC constants + cross-platform pipe/socket helpers

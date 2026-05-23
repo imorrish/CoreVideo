@@ -45,7 +45,7 @@
   <rect class="field" x="930" y="244" width="440" height="32" rx="5"/><text class="muted tiny" x="946" y="265">Meeting ID or Zoom URL</text>
   <rect class="field" x="930" y="284" width="216" height="32" rx="5"/><text class="muted tiny" x="946" y="305">Passcode optional</text>
   <rect class="field" x="1154" y="284" width="216" height="32" rx="5"/><text class="text tiny" x="1170" y="305">OBS</text>
-  <rect class="field" x="930" y="324" width="440" height="32" rx="5"/><text class="text tiny" x="946" y="345">Auto Zoom sign-in / ZAK</text>
+  <rect class="field" x="930" y="324" width="440" height="32" rx="5"/><text class="text tiny" x="946" y="345">Auto Zoom sign-in</text>
   <rect class="field" x="930" y="364" width="440" height="32" rx="5"/><text class="muted tiny" x="946" y="385">Join as Webinar / Zoom Events</text>
   <rect class="primary" x="930" y="432" width="210" height="38" rx="7"/><text class="text small" x="1018" y="456">Join</text>
   <rect class="danger" x="1160" y="432" width="210" height="38" rx="7"/><text class="text small" x="1248" y="456">Leave</text>

@@ -39,7 +39,7 @@ controls, and opens the Output Manager for source assignment without leaving OBS
 The dedicated Zoom Output Manager is the primary assignment surface. It supports
 profile save/load workflows and exposes requested resolution, observed signal,
 frame rate, assignment mode, and audio routing information for each output.
-In `v0.1.15` it is a persistent OBS dock, so operators can keep assignments,
+In `v0.1.18` it is a persistent OBS dock, so operators can keep assignments,
 live previews, and feed health visible while working in normal OBS scenes.
 
 Open the **Zoom Diagnostics** dock, or use **Tools > Zoom Diagnostics** to focus it,
@@ -61,13 +61,17 @@ audience audio, resolution, video-loss behavior, and hardware conversion.
 2. Open **Tools > Zoom Control**.
 3. Enter a Zoom meeting ID or full Zoom join URL.
 4. Enter a display name.
-5. Use **Auto Zoom sign-in / ZAK** unless Zoom support gives you a specific ZAK.
+5. Use **Auto Zoom sign-in** for the published broker-backed flow.
 6. Click **Join**.
-7. Click **Start Engine** after joining to request raw media from Zoom.
+7. Use the visible Zoom Meeting SDK window for waiting-room admission, self
+   video/audio, and normal meeting controls.
+8. Click **Start Engine** after joining to request raw media from Zoom.
 
 For external-account meetings, configure OAuth in **Tools > Zoom Plugin
-Settings**. CoreVideo uses the OAuth login to fetch a short-lived ZAK from
-`/v2/users/me/zak` and passes that ZAK to the Meeting SDK join parameters.
+Settings**. Published builds use the embedded CoreVideo broker URL: the browser
+sign-in uses Zoom Public Client OAuth + PKCE, the broker validates the signed-in
+Zoom user, and the broker returns a short-lived Meeting SDK JWT for the helper
+process. End users do not enter client IDs or secrets.
 
 ## Source Assignment
 

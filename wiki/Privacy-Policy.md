@@ -12,7 +12,7 @@ CoreVideo is an open-source OBS Studio plugin. This privacy policy explains what
 
 ### Meeting Audio and Video
 
-CoreVideo receives raw video (I420 YUV) and audio (48 kHz PCM) streams from the Zoom Meeting SDK. These streams are:
+CoreVideo receives raw video (I420 YUV), screen share, interpretation audio, and audio (48 kHz PCM) streams from the Zoom Meeting SDK. These streams are:
 
 - Processed **locally on the operator's machine only**
 - Delivered directly to OBS Studio as native source frames
@@ -24,21 +24,22 @@ CoreVideo receives participant metadata from the Zoom SDK (display names, user I
 
 - Held in memory only for the duration of the meeting session
 - Displayed within OBS for source assignment purposes
-- **Not stored to disk, logged, or transmitted outside the local machine**
+- Not transmitted outside the local machine by CoreVideo
 
-### Credentials
+### Credentials and Tokens
 
-The following credentials may be saved locally by the plugin:
+Published CoreVideo builds use Zoom Public Client OAuth + PKCE through the CoreVideo broker. End users do not enter Zoom app client secrets.
 
-| Credential | Storage location | Purpose |
+The following local settings may be saved by the plugin:
+
+| Credential / setting | Storage location | Purpose |
 |---|---|---|
-| Zoom SDK App Key | OBS plugin config directory | Generating Meeting SDK JWTs |
-| Zoom SDK App Secret | OBS plugin config directory | Generating Meeting SDK JWTs |
-| JWT override token | OBS plugin config directory | Optional manual JWT override |
+| Zoom OAuth access/refresh tokens | OBS plugin config directory | Zoom sign-in, token refresh, and broker-backed Meeting SDK JWT requests |
 | Control server token | OBS plugin config directory | Authenticating TCP/OSC API clients |
 | Control server ports | OBS plugin config directory | TCP JSON and UDP OSC port configuration |
+| Output profiles | OBS plugin config directory | Optional participant-to-source mappings |
 
-Credentials are stored in the OBS plugin configuration directory on the operator's local machine and are **not transmitted to any remote service by CoreVideo**.
+On Windows, OAuth tokens are DPAPI-protected before storage. Meeting SDK client secrets are not stored in the plugin; they live only as server-side Cloudflare Worker secrets for the published broker.
 
 ---
 
@@ -46,10 +47,14 @@ Credentials are stored in the OBS plugin configuration directory on the operator
 
 ### Zoom Meeting SDK
 
-CoreVideo uses the **Zoom Meeting SDK** to join and capture meeting content. When joining a meeting, your machine connects to Zoom's infrastructure (HTTPS/WSS). Zoom's own privacy policy governs all data exchanged with Zoom's servers:
+CoreVideo uses the **Zoom Meeting SDK** to join and capture meeting content. When joining a meeting, your machine connects to Zoom's infrastructure. Zoom's own privacy policy governs all data exchanged with Zoom's servers:
 
 - [Zoom Privacy Policy](https://explore.zoom.us/en/privacy/)
 - [Zoom Marketplace Developer Agreement](https://marketplace.zoom.us/docs/api-reference/developer-agreement)
+
+### CoreVideo OAuth Broker
+
+The broker at `corevideo.iamfatness.us` is used only for Zoom OAuth token exchange, refresh, and short-lived Meeting SDK JWT minting. It does not receive or process meeting audio, video, screen share, or participant media.
 
 ### Cloudflare and GitHub (Documentation)
 
@@ -62,9 +67,10 @@ The documentation site at `corevideo.iamfatness.us` is served through Cloudflare
 
 ## Data Retention
 
-- **No user data is retained by CoreVideo** beyond the local OBS session.
+- **No meeting media is retained by CoreVideo** beyond the local OBS session unless the operator records or streams through OBS.
+- OAuth tokens persist until the user signs out, revokes access, or removes the plugin configuration.
 - Credentials saved in the OBS config directory persist until deleted via the Settings dialog or plugin removal.
-- OBS itself may retain scenes, sources, and recordings per its own configuration — outside the scope of this policy.
+- OBS itself may retain scenes, sources, and recordings per its own configuration - outside the scope of this policy.
 
 ---
 

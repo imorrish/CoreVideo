@@ -17,7 +17,7 @@ This policy defines how data processed by CoreVideo is retained, protected, and 
 This policy covers all data categories processed by CoreVideo:
 - Meeting media (video, audio, screen share)
 - Participant roster information
-- SDK credentials and configuration
+- OAuth tokens, local control settings, and broker-backed SDK authentication data
 - Output profiles
 - Log files and diagnostic data
 - Shared memory regions
@@ -26,7 +26,7 @@ This policy covers all data categories processed by CoreVideo:
 
 | Classification | Examples | Handling Requirement |
 |---|---|---|
-| **Restricted** | SDK Key, SDK Secret, control server token, meeting passcode | Stored only in OS-protected config; never logged; never transmitted except to Zoom auth endpoint |
+| **Restricted** | OAuth access/refresh tokens, control server token, meeting passcode | Stored only in OS-protected config where available; never logged; OAuth tokens are used only with Zoom and the CoreVideo OAuth broker |
 | **Confidential** | Participant display names, user IDs, roster state | In-memory only during session; cleared on leave; treated as PII under applicable law |
 | **Internal** | Output profile JSON files | Stored on local filesystem; operator controls access; may contain historical participant data |
 | **Public** | Plugin version, build metadata, open-source code | No restrictions |
@@ -40,12 +40,12 @@ This policy covers all data categories processed by CoreVideo:
 | Participant roster | Duration of meeting session | Cleared in-memory on `left` IPC event or OBS close |
 | Active speaker state | Duration of meeting session | Cleared on meeting leave |
 | Meeting credentials (ID, passcode) | Duration of join attempt | Cleared from ZoomReconnectManager storage after successful join or final failure |
-| JWT tokens | Single use (≤ 2-hour validity) | Discarded after SDK auth call |
+| SDK JWT tokens | Single use (short-lived) | Discarded after SDK auth call |
 
 ### 4.2 Persistent Data (Filesystem)
 | Data Type | Storage Location | Default Retention | Disposal Procedure |
 |---|---|---|---|
-| SDK Key & Secret | `obs-studio/plugin_config/obs-zoom-plugin/settings.json` | Until manually deleted by operator | Operator deletes file or clears field in Settings dialog |
+| OAuth access/refresh tokens | `obs-studio/plugin_config/obs-zoom-plugin/settings.json` | Until user signs out or token expires/revokes | Use Settings dialog Disconnect/Sign out or delete the settings file |
 | Control server token | Same settings file | Until manually deleted | Same as above |
 | Output profiles | `obs-studio/plugin_config/obs-zoom-plugin/profiles/*.json` | Until manually deleted via Output Manager | Delete via Output Manager dock or remove files directly |
 | OBS recording / stream | Operator-configured OBS output path | Operator-defined | Operator's responsibility |
@@ -54,14 +54,14 @@ This policy covers all data categories processed by CoreVideo:
 Named shared memory regions (prefixed `ZoomObsPlugin_<UUID>`) are created at session start and destroyed when the ZoomObsEngine process exits. They do not persist across reboots. On Linux, `/dev/shm/` entries are removed automatically on process exit.
 
 ### 4.4 No Server-Side Retention
-CoreVideo does not transmit data to any server operated by the CoreVideo project. No cloud retention schedule applies.
+CoreVideo does not transmit meeting media to any server operated by the CoreVideo project. Published builds contact the CoreVideo OAuth broker only for OAuth token exchange, refresh, and short-lived Meeting SDK JWT minting.
 
 ## 5. Data Protection Controls
 
 ### 5.1 Credentials
-- SDK Key, Secret, and control server token are stored in the OBS plugin configuration file with default filesystem permissions (owner read/write only on POSIX; user-profile restricted on Windows).
-- Credentials are never written to log files, debug output, or IPC messages.
-- JWT tokens are generated in-process and used once; the raw secret is never transmitted.
+- OAuth tokens and the control server token are stored in the OBS plugin configuration file with default filesystem permissions (owner read/write only on POSIX; user-profile restricted on Windows). On Windows, OAuth tokens are DPAPI-protected before storage.
+- Credentials, access tokens, refresh tokens, broker tokens, and SDK JWTs are never written to log files, debug output, or IPC messages.
+- Meeting SDK secrets are not stored in the OBS plugin; they live only as server-side broker secrets.
 
 ### 5.2 Participant Data
 - Participant display names are handled as opaque strings; they are never interpolated into shell commands, SQL queries, or format strings.
@@ -90,7 +90,7 @@ CoreVideo is software, not a data controller. Operators deploying CoreVideo are 
 ## 7. Breach Notification
 
 If an operator discovers that credentials or participant data have been exposed due to a vulnerability in CoreVideo, they should:
-1. Immediately revoke and regenerate the exposed credentials (Zoom SDK Key/Secret via the Zoom Developer Portal).
+1. Immediately revoke exposed OAuth tokens or rotate any exposed server-side broker/Meeting SDK secrets.
 2. Report the vulnerability to the CoreVideo project via the private security reporting channel.
 3. Notify affected participants in accordance with applicable law and the operator's own breach notification obligations.
 

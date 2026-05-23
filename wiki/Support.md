@@ -2,9 +2,9 @@
 
 ## Documentation
 
-Before opening an issue, check the full documentation site — most configuration questions and architecture details are covered there:
+Before opening an issue, check the full documentation site - most configuration questions and architecture details are covered there:
 
-📖 **[https://corevideo.iamfatness.us/documentation/](https://corevideo.iamfatness.us/documentation/)**
+**[https://corevideo.iamfatness.us/documentation/](https://corevideo.iamfatness.us/documentation/)**
 
 | Topic | Link |
 |---|---|
@@ -27,13 +27,13 @@ Open an issue at **[github.com/iamfatness/CoreVideo/issues](https://github.com/i
 
 Please include:
 
-- **CoreVideo version** (shown in OBS log: `[obs-zoom-plugin] Loading plugin v…`)
+- **CoreVideo version** (shown in OBS log: `[obs-zoom-plugin] Loading plugin v...`)
 - **OBS Studio version**
 - **Operating system** (Windows 10/11, macOS version, Linux distro)
 - **Zoom Meeting SDK version** (5.17.x or 7.x)
 - **Steps to reproduce** the issue
-- **OBS log file** — in OBS go to Help → Log Files → Upload Current Log File and paste the link
-- **Expected vs. actual behaviour**
+- **OBS log file** - in OBS go to Help -> Log Files -> Upload Current Log File and paste the link
+- **Expected vs. actual behavior**
 
 ---
 
@@ -44,6 +44,18 @@ Please include:
 **Cause:** Raw data access is available through Zoom Meeting SDK apps, but the signed-in account and app entitlements still determine negotiated quality, bandwidth, and stream count. Standard accounts are typically limited to a 30 Mbps incoming video budget; Enhanced Media / HBM can raise that envelope to roughly 100 Mbps. Developers may also need an app-level entitlement flag to test more than a small number of concurrent raw streams.
 
 **Fix:** Verify the Meeting SDK app is approved or beta-enabled for the account joining the meeting, then confirm the expected bandwidth and developer/app entitlements with Zoom. Treat Enhanced Media / HBM as a production quality and bandwidth tier, not as a hard prerequisite for raw data.
+
+---
+
+### OAuth sign-in or join authentication fails
+
+**Cause:** The local plugin, published broker, or Zoom Marketplace app environment is out of sync.
+
+**Fix:**
+1. Sign out and sign back in from **Tools -> Zoom Plugin Settings**.
+2. Confirm the published broker page is available at `https://corevideo.iamfatness.us/oauth/start`.
+3. Confirm the Zoom Marketplace app has Public Client OAuth enabled, the redirect URL is `https://corevideo.iamfatness.us/oauth/callback`, and Meeting SDK / Embed is enabled for the same environment.
+4. Check the OBS log for `[obs-zoom-plugin]` OAuth or SDK JWT errors.
 
 ---
 
@@ -65,7 +77,7 @@ Please include:
 
 **Fix:**
 1. Confirm the participant has their camera enabled in Zoom.
-2. Set **On video loss** → **Hold last frame** in source properties to avoid going black on brief drops.
+2. Set **On video loss** -> **Hold last frame** in source properties to avoid going black on brief drops.
 3. Click **Refresh** in the participant list and re-subscribe.
 
 ---
@@ -78,7 +90,7 @@ Please include:
 1. Set **Audio Channels** to **Mono** or **Stereo** (not None) in source properties.
 2. Confirm the participant is unmuted in Zoom.
 3. If using **Isolate Audio**, confirm the correct participant ID is selected.
-4. Check the OBS audio mixer — the track may be muted or set to Monitor Only.
+4. Check the OBS audio mixer - the track may be muted or set to Monitor Only.
 
 ---
 
@@ -89,7 +101,7 @@ Please include:
 **Fix:**
 1. Check the OBS log for the `RecoveryReason` and error codes.
 2. If the reason is `LicenseError`, see the raw-data permission or stream-count issue above.
-3. If the reason is `AuthFailure`, check your SDK key/secret in **Tools → Zoom Plugin Settings**.
+3. If the reason is `AuthFailure`, sign out and sign back in from **Tools -> Zoom Plugin Settings**.
 4. Click **Cancel Recovery** in the Zoom Control dock, resolve the root cause, then re-join manually.
 
 ---
@@ -97,9 +109,9 @@ Please include:
 ### TCP or OSC control API not responding
 
 **Fix:**
-1. Confirm port numbers in **Tools → Zoom Plugin Settings** match your client (defaults: TCP 19870, OSC 19871).
-2. Both servers bind to `127.0.0.1` (loopback) — external connections are not supported by default.
-3. Check for `TCP control server unavailable` or `OSC server unavailable` in the OBS log — another process may own the port.
+1. Confirm port numbers in **Tools -> Zoom Plugin Settings** match your client (defaults: TCP 19870, OSC 19871).
+2. Both servers bind to `127.0.0.1` (loopback) - external connections are not supported by default.
+3. Check for `TCP control server unavailable` or `OSC server unavailable` in the OBS log - another process may own the port.
 
 ---
 

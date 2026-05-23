@@ -36,8 +36,7 @@ All media is delivered from the Zoom SDK to OBS in real time. CoreVideo does not
 ### 2.3 Credentials
 | Data Type | Storage Location | Notes |
 |---|---|---|
-| Zoom SDK Key | OBS plugin config directory | OS-protected; not transmitted except to Zoom auth endpoint |
-| Zoom SDK Secret | OBS plugin config directory | Used locally for JWT generation only; never transmitted |
+| Zoom OAuth access/refresh tokens | OBS plugin config directory | OS-protected where available; used for Zoom sign-in and broker-backed joins |
 | Control server token | OBS plugin config directory | Loopback API authentication |
 | Meeting passcode | In-memory during join; not persisted | Provided by operator at join time |
 
@@ -47,7 +46,7 @@ Named output profiles (source-to-participant mappings) are saved as JSON files u
 ## 3. Data CoreVideo Does NOT Collect
 
 - CoreVideo does not collect analytics, telemetry, or usage statistics.
-- CoreVideo does not transmit meeting media, participant data, or credentials to any party other than Zoom (via the Zoom Meeting SDK).
+- CoreVideo does not transmit meeting media or participant media to any party other than Zoom (via the Zoom Meeting SDK). Published builds contact the CoreVideo OAuth broker only for Zoom OAuth token exchange, token refresh, and short-lived Meeting SDK JWT minting.
 - CoreVideo does not use cookies, tracking pixels, or persistent identifiers.
 - CoreVideo does not create accounts or user profiles.
 
@@ -67,9 +66,9 @@ CoreVideo does not integrate with analytics platforms, advertising networks, or 
 Operators deploying CoreVideo in a production environment are responsible for:
 
 1. **Participant consent** — Informing meeting participants that their video and audio are being captured and streamed or recorded. This is a legal requirement in most jurisdictions and a condition of the Zoom Meeting SDK Terms of Use.
-2. **Credential protection** — Securing the OBS plugin configuration directory to prevent unauthorised access to SDK credentials.
-3. **Recording compliance** — Ensuring that any OBS recording or stream created using CoreVideo complies with applicable laws, Zoom's Terms of Service, and the operator's organisational policies.
-4. **Zoom account and app entitlements** — Confirming that the Zoom account, meeting configuration, and Meeting SDK app approval support the intended production quality, bandwidth, and stream count before deploying CoreVideo in production.
+2. **Credential protection** - Securing the OBS plugin configuration directory to prevent unauthorized access to OAuth tokens and local control-server settings.
+3. **Recording compliance** - Ensuring that any OBS recording or stream created using CoreVideo complies with applicable laws, Zoom's Terms of Service, and the operator's organizational policies.
+4. **Zoom account and app entitlements** - Confirming that the Zoom account, meeting configuration, and Meeting SDK app approval support the intended production quality, bandwidth, and stream count before deploying CoreVideo in production.
 
 ## 6. Children's Privacy
 

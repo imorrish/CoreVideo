@@ -47,8 +47,9 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **OSC control API** - UDP OSC server on `127.0.0.1:19871` for lighting consoles and broadcast hardware
 - **Output profiles** - save and load named participant-to-source mappings as JSON files
 - **Output manager dock** - dockable OBS panel and API for viewing and reconfiguring all sources at runtime
-- **JWT generation** - CoreVideo generates Meeting SDK JWTs locally from key+secret; manual override available
-- **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE (public client, no secret) for attributed joins and Marketplace compliance; the OAuth identity and Meeting SDK public app key are baked in at build time; fetches a short-lived ZAK via `GET /v2/users/me/token?type=zak`; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows
+- **Broker-backed Meeting SDK authentication** - published builds request a short-lived Meeting SDK JWT from the CoreVideo OAuth broker after Zoom sign-in; SDK secrets stay server-side
+- **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE (public client, no desktop secret) for attributed joins and Marketplace compliance; the broker start URL is baked in at build time; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows
+- **Visible Zoom Meeting SDK window** - the helper process uses Zoom's default Meeting SDK UI so operators can admit waiting-room participants, start self video/audio, and use normal in-meeting controls while OBS receives raw feeds
 - **SDK 5.17.x and 7.x** - auto-detects flat and subfolder header layouts
 - **Hardened security** - constant-time token comparison, validated IPC input, sanitised participant IDs, SIGPIPE handling
 - **Modern UI** - CoreVideo stylesheet with dark theme, animated `CvStatusDot`, `CvBanner` first-run notices, and button role variants (primary / danger)
@@ -64,7 +65,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 | FFmpeg | Runtime executable | Required for auto ISO recording. Must be on `PATH` or supplied via `ffmpeg_path`. |
 | Zoom Meeting SDK | **5.17.x / 7.x** | Place in `third_party/zoom-sdk/`. Windows builds support the older flat header layout and the newer 7.x subfolder header layout. |
 | C++ compiler | C++17 | MSVC 2022 / Clang 14+ / GCC 11+ |
-| Zoom Developer Account | - | Meeting SDK key + secret. OAuth Client ID required for Marketplace / external-account joins. |
+| Zoom Developer Account | - | Marketplace app with Public Client OAuth + PKCE, Meeting SDK / Embed enabled, and server-side broker secrets for Meeting SDK JWT minting. |
 
 ## Quick Start
 
@@ -122,7 +123,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
    cmake --install build --prefix "/path/to/obs-studio"
    ```
 
-4. **Configure credentials** - open OBS -> **Tools -> Zoom Plugin Settings** and enter your SDK Key and SDK Secret. CoreVideo generates a short-lived Meeting SDK JWT locally when joining. The JWT Token field is optional and overrides generated tokens when set. You may also set a control server token and custom ports.
+4. **Configure local settings** - published builds already contain the CoreVideo broker URL and do not require end users to enter Zoom app credentials. Open OBS -> **Tools -> Zoom Plugin Settings** to sign in with Zoom, configure the local control-server token/ports, and manage reconnect behavior. Developer-only builds can still use local credential overrides when the embedded broker identity is blank.
 
 ### Windows release packaging
 
@@ -178,31 +179,30 @@ To verify an already-created scene graph without creating or modifying sources:
 .\scripts\obs-scene-smoke-test.ps1 -AuditOnly -SceneName "CoreVideo Smoke Test"
 ```
 
-5. **Set up OAuth (for Marketplace / external-account joins)** - publishers configure this once at build time with `-DZOOM_EMBED_OAUTH_CLIENT_ID`, `-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL`, and `-DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY`. End users just open the Settings dialog and click **Sign in with Zoom**. See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full walkthrough.
+5. **Set up OAuth (for Marketplace / external-account joins)** - publishers configure the Cloudflare broker and bake `-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=https://corevideo.iamfatness.us/oauth/start` into the build. End users just open the Settings dialog and click **Sign in with Zoom**. See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full walkthrough.
 
 6. **Join once, then assign outputs** - use the CoreVideo dock or the TCP/OSC control APIs to join the meeting once per OBS session. Then add **Zoom Participant**, **Zoom Participant Audio**, **Zoom Share**, or **Zoom Interpretation Audio** sources and assign them to participants or dynamic roles.
 
 ## Zoom OAuth PKCE
 
-CoreVideo uses user-level OAuth 2.0 with PKCE (public client, no secret) for attributed meeting joins and Zoom App Marketplace compliance. This is required when joining meetings hosted by accounts other than the SDK account. Confidential OAuth is intentionally not supported at runtime: a desktop binary can't hide a client secret.
+CoreVideo uses user-level OAuth 2.0 with PKCE through the CoreVideo HTTPS broker for attributed meeting joins and Zoom App Marketplace compliance. Published builds do not ship OAuth or Meeting SDK secrets in the OBS plugin. The broker performs the Zoom token exchange with Public Client OAuth, validates the signed-in user token, and mints a short-lived Meeting SDK JWT server-side for the helper process.
 
 ### Build-time configuration (publisher, one-time)
-Pass the Marketplace app identity at CMake configure time:
+Pass the broker identity at CMake configure time:
 ```
 cmake -B build \
-  -DZOOM_EMBED_OAUTH_CLIENT_ID=<your_oauth_or_public_client_id> \
-  -DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=<your_authorization_url> \
-  -DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=<your_meeting_sdk_public_app_key> ...
+  -DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=https://corevideo.iamfatness.us/oauth/start \
+  -DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=<optional_legacy_public_app_key> ...
 ```
-These values are compiled into the plugin and used for every install of that build. There is no UI for entering them, and embedded values override stale `global.ini` entries.
+These values are compiled into the plugin and used for every install of that build. There is no UI for entering production credentials, and embedded values override stale `global.ini` entries. The public app key is kept only as a legacy/fallback path; current production builds prefer the broker-minted Meeting SDK JWT.
 
 ### Flow
 1. In **Tools -> Zoom Plugin Settings**, click **Authorize with Zoom** (no IDs to enter). The plugin registers the `corevideo://` URL scheme automatically on first use.
-2. The browser opens with a PKCE authorization request (S256 code challenge, high-entropy verifier, state CSRF token).
-3. Zoom redirects to `corevideo://oauth/callback?code=...&state=...`.
+2. The browser opens at `https://corevideo.iamfatness.us/oauth/start`; the broker generates the PKCE verifier/challenge and redirects to Zoom.
+3. Zoom redirects to `https://corevideo.iamfatness.us/oauth/callback`; the broker returns a short-lived broker token to `corevideo://oauth/callback`.
 4. `CoreVideoOAuthCallback.exe` (Windows) or `CoreVideoOAuthCallback.app` (macOS) forwards the URL to the plugin via the TCP control server (`oauth_callback` command).
-5. The plugin verifies state, posts to `https://zoom.us/oauth/token` with `client_id`, `code`, `redirect_uri`, and `code_verifier` (no Authorization header, no secret), and persists access + refresh tokens. On Windows, tokens are DPAPI-protected before storage.
-6. Before each meeting join, CoreVideo refreshes the token if needed and fetches a ZAK from `GET /v2/users/me/token?type=zak`. The ZAK is passed into the SDK `JoinParam4WithoutLogin`.
+5. The plugin verifies state, redeems the broker token over HTTPS, and persists access + refresh tokens. On Windows, tokens are DPAPI-protected before storage.
+6. Before each meeting join, CoreVideo refreshes the token if needed and asks the broker for a short-lived Meeting SDK JWT. The broker validates the OAuth access token against Zoom before minting the SDK JWT. The Zoom helper process initializes the SDK with that JWT, then joins without passing a ZAK.
 
 See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full setup guide and security notes.
 
@@ -221,7 +221,7 @@ echo '{"cmd":"list_participants"}' | nc 127.0.0.1 19870
 echo '{"cmd":"assign_output","source":"Zoom Participant 1","participant_id":123,"isolate_audio":true,"audio_channels":"stereo"}' | nc 127.0.0.1 19870
 
 # Forward OAuth callback URL from custom scheme helper
-echo '{"cmd":"oauth_callback","url":"corevideo://oauth/callback?code=...&state=..."}' | nc 127.0.0.1 19870
+echo '{"cmd":"oauth_callback","url":"corevideo://oauth/callback?broker_token=...&state=..."}' | nc 127.0.0.1 19870
 ```
 
 Commands: `help`, `status`, `list_participants`, `list_outputs`, `assign_output`, `assign_output_ex`, `recover_stale_outputs`, `upgrade_low_quality_outputs`, `join`, `leave`, `oauth_callback`, `iso_recording_start`, `iso_recording_stop`, `iso_recording_status`, `speaker_director_status`, `speaker_director_configure`, `speaker_director_take`, `speaker_director_release`.
@@ -329,10 +329,10 @@ OBS Studio
     |                           Active Speaker Director controls, routing actions;
     |                           CvBanner first-run credentials notice; persists last
     |                           meeting ID + display name
-    |-- ZoomOAuthManager      - OAuth 2.0 PKCE: begin_authorization, handle_redirect_url,
-    |                           register_url_scheme, refresh_access_token_blocking,
-    |                           fetch_zak_blocking; DPAPI token storage on Windows;
-    |                           confidential + public client modes
+    |-- ZoomOAuthManager      - broker-backed OAuth 2.0 PKCE: begin_authorization,
+    |                           handle_redirect_url, register_url_scheme,
+    |                           refresh_access_token_blocking, fetch_sdk_jwt_blocking;
+    |                           DPAPI token storage on Windows
     |-- ZoomEngineClient  *  - IPC singleton: launches engine, owns pipes/sockets,
     |                           tracks roster/speaker, dispatches frame callbacks,
     |                           subscribe_spotlight / subscribe_screenshare
@@ -399,7 +399,7 @@ CoreVideo/
     |                                         #   HwVideoPipeline, failover, hotkeys, placeholder
     |-- zoom-engine-client.*                  # IPC singleton: engine launch, spotlight/screenshare,
     |                                         #   monitor thread, deferred join, roster callbacks
-    |-- zoom-oauth.*                          # OAuth 2.0 PKCE: ZoomOAuthManager, ZAK fetch,
+    |-- zoom-oauth.*                          # Broker PKCE: ZoomOAuthManager, SDK JWT fetch,
     |                                         #   register_url_scheme, token refresh + DPAPI storage
     |-- oauth-callback-helper.cpp             # Windows: CoreVideoOAuthCallback.exe entry point
     |-- oauth-callback-helper-macos.mm        # macOS: CoreVideoOAuthCallback.app entry point
@@ -413,7 +413,7 @@ CoreVideo/
     |-- hw-video-pipeline.*                   # FFmpeg I420->NV12 (CUDA/VAAPI/VideoToolbox/QSV)
     |-- zoom-audio-delegate.*                 # Mixed/isolated SDK audio -> OBS
     |-- zoom-audio-router.*                   # Central SDK audio fan-out
-    |-- zoom-auth.*                           # JWT auth + observable auth state
+    |-- zoom-auth.*                           # SDK JWT auth + observable auth state
     |-- zoom-meeting.*                        # Meeting state machine
     |-- zoom-participants.*                   # Roster, active speaker, spotlight callbacks
     |-- zoom-participant-audio-source.*       # Per-participant audio OBS source
@@ -426,8 +426,8 @@ CoreVideo/
     |-- zoom-diagnostics-dialog.*             # Qt Diagnostics dock widget
     |-- zoom-control-server.*                 # TCP JSON API (port 19870) + oauth_callback command
     |-- zoom-osc-server.*                     # UDP OSC API (port 19871)
-    |-- zoom-settings.*                       # SDK key/secret/JWT + OAuth tokens + port persistence
-    |-- zoom-settings-dialog.*                # Qt Settings dialog with OAuth section
+    |-- zoom-settings.*                       # Broker URL, OAuth tokens, local ports + reconnect persistence
+    |-- zoom-settings-dialog.*                # Qt Settings dialog with Zoom sign-in + local settings
     |-- zoom-credentials.h.in                 # Embedded SDK credentials (CMake-generated)
     |-- obs-zoom-version.h.in                 # Plugin version (CMake-generated)
     |-- engine-ipc.h                          # IPC constants + cross-platform helpers
