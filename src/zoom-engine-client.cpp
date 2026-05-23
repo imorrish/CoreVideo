@@ -423,7 +423,7 @@ bool ZoomEngineClient::launch_engine()
          engine_path.c_str());
 
     if (!CreateProcessA(nullptr, command.data(), nullptr, nullptr, FALSE,
-                        CREATE_NO_WINDOW, nullptr,
+                        0, nullptr,
                         engine_dir.empty() ? nullptr : engine_dir.c_str(),
                         &si, &pi)) {
         const DWORD code = GetLastError();

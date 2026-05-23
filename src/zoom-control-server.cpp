@@ -604,11 +604,27 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
             blog(LOG_INFO, "[obs-zoom-plugin] Control join fetched OAuth ZAK for Meeting SDK join");
         }
 
-        const std::string jwt = settings.sdk_public_app_key.empty()
+        std::string public_app_key = settings.sdk_public_app_key;
+        std::string jwt = public_app_key.empty()
             ? settings.resolved_jwt_token()
             : std::string();
+        if (!public_app_key.empty() &&
+            settings.oauth_authorization_url.find("/oauth/start") != std::string::npos) {
+            QString sdk_jwt_error;
+            if (!ZoomOAuthManager::instance().fetch_sdk_jwt_blocking(jwt, &sdk_jwt_error)) {
+                write_response(socket, {
+                    {"ok", false},
+                    {"error", "zoom_sdk_auth_unavailable"},
+                    {"message", sdk_jwt_error.isEmpty()
+                        ? QStringLiteral("Could not fetch Meeting SDK auth from CoreVideo broker.")
+                        : sdk_jwt_error},
+                });
+                return;
+            }
+            public_app_key.clear();
+        }
         const bool ok =
-            ZoomEngineClient::instance().start(jwt, settings.sdk_public_app_key) &&
+            ZoomEngineClient::instance().start(jwt, public_app_key) &&
             ZoomEngineClient::instance().join(parsed.meeting_id, passcode,
                                               display_name.toStdString(),
                                               MeetingKind::Meeting, tokens);

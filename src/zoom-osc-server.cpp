@@ -333,10 +333,21 @@ void ZoomOscServer::dispatch(const QString &address,
             }
         }
 
-        const std::string jwt = settings.sdk_public_app_key.empty()
+        std::string public_app_key = settings.sdk_public_app_key;
+        std::string jwt = public_app_key.empty()
             ? settings.resolved_jwt_token()
             : std::string();
-        if (!ZoomEngineClient::instance().start(jwt, settings.sdk_public_app_key)) {
+        if (!public_app_key.empty() &&
+            settings.oauth_authorization_url.find("/oauth/start") != std::string::npos) {
+            QString sdk_jwt_error;
+            if (!ZoomOAuthManager::instance().fetch_sdk_jwt_blocking(jwt, &sdk_jwt_error)) {
+                blog(LOG_WARNING, "[obs-zoom-plugin] OSC /zoom/join: Meeting SDK auth unavailable: %s",
+                     sdk_jwt_error.toUtf8().constData());
+                return;
+            }
+            public_app_key.clear();
+        }
+        if (!ZoomEngineClient::instance().start(jwt, public_app_key)) {
             blog(LOG_WARNING,
                  "[obs-zoom-plugin] OSC /zoom/join: engine failed to start");
             return;

@@ -92,6 +92,18 @@ async function signPayload(payload, secret) {
   return `${body}.${base64urlEncode(signature)}`;
 }
 
+async function signJwt(header, payload, secret) {
+  const encodedHeader = base64urlEncode(textEncoder().encode(JSON.stringify(header)));
+  const encodedPayload = base64urlEncode(textEncoder().encode(JSON.stringify(payload)));
+  const signingInput = `${encodedHeader}.${encodedPayload}`;
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    await hmacKey(secret),
+    textEncoder().encode(signingInput),
+  );
+  return `${signingInput}.${base64urlEncode(signature)}`;
+}
+
 async function verifySignedPayload(token, secret) {
   const [body, signature] = token.split(".");
   if (!body || !signature) {
@@ -160,6 +172,28 @@ function requireOauthConfig(config) {
     return "OAuth broker is not configured. Set ZOOM_OAUTH_PUBLIC_CLIENT_ID and COREVIDEO_OAUTH_BROKER_SECRET.";
   }
   return "";
+}
+
+function requireMeetingSdkConfig(env) {
+  if (!env.ZOOM_MEETING_SDK_CLIENT_ID || !env.ZOOM_MEETING_SDK_CLIENT_SECRET) {
+    return "Meeting SDK broker is not configured. Set ZOOM_MEETING_SDK_CLIENT_ID and ZOOM_MEETING_SDK_CLIENT_SECRET.";
+  }
+  return "";
+}
+
+async function mintMeetingSdkJwt(env) {
+  const now = Math.floor(Date.now() / 1000);
+  const exp = now + 2 * 60 * 60;
+  return signJwt(
+    { alg: "HS256", typ: "JWT" },
+    {
+      appKey: env.ZOOM_MEETING_SDK_CLIENT_ID,
+      iat: now - 30,
+      exp,
+      tokenExp: exp,
+    },
+    env.ZOOM_MEETING_SDK_CLIENT_SECRET,
+  );
 }
 
 async function exchangeZoomToken(config, body) {
@@ -386,6 +420,39 @@ async function handleOauthRefresh(request, env) {
   return jsonResponse(refreshed.data);
 }
 
+async function handleMeetingSdkJwt(request, env) {
+  if (request.method !== "POST") {
+    return jsonResponse({ error: "Use POST." }, 405);
+  }
+  const configError = requireMeetingSdkConfig(env);
+  if (configError) {
+    return jsonResponse({ error: configError }, 500);
+  }
+  const body = await readJson(request);
+  if (!body.access_token) {
+    return jsonResponse({ error: "Missing Zoom OAuth access token." }, 400);
+  }
+
+  const userResponse = await fetch("https://api.zoom.us/v2/users/me", {
+    headers: {
+      "authorization": `Bearer ${body.access_token}`,
+      "accept": "application/json",
+    },
+  });
+  if (!userResponse.ok) {
+    return jsonResponse({
+      error: "Zoom OAuth access token could not be validated.",
+      zoom_status: userResponse.status,
+      zoom_response: (await userResponse.text()).slice(0, 512),
+    }, 401);
+  }
+
+  return jsonResponse({
+    sdk_jwt: await mintMeetingSdkJwt(env),
+    expires_in: 7200,
+  });
+}
+
 async function fetchAsset(request, env, pathname) {
   const url = new URL(request.url);
   url.pathname = pathname;
@@ -407,6 +474,9 @@ export default {
     }
     if (pathname === "/oauth/refresh") {
       return handleOauthRefresh(request, env);
+    }
+    if (pathname === "/oauth/sdk-jwt") {
+      return handleMeetingSdkJwt(request, env);
     }
 
     let response = await env.ASSETS.fetch(request);

@@ -19,6 +19,7 @@ public:
     bool fetch_zak_blocking(std::string &zak,
                             const std::string &meeting_id = {},
                             QString *error = nullptr);
+    bool fetch_sdk_jwt_blocking(std::string &jwt, QString *error = nullptr);
 
 private:
     explicit ZoomOAuthManager(QObject *parent = nullptr);

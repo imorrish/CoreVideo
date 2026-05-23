@@ -1,5 +1,6 @@
 #include "zoom-reconnect.h"
 #include "zoom-engine-client.h"
+#include "zoom-oauth.h"
 #include "zoom-output-manager.h"
 #include "zoom-settings.h"
 #include <obs-module.h>
@@ -329,9 +330,20 @@ void ZoomReconnectManager::execute_retry(uint64_t generation)
 
     ZoomEngineClient::instance().stop_for_reconnect();
     const ZoomPluginSettings settings = ZoomPluginSettings::load();
-    if (!settings.sdk_public_app_key.empty())
+    std::string public_app_key = settings.sdk_public_app_key;
+    if (!public_app_key.empty()) {
         jwt.clear();
-    if (!ZoomEngineClient::instance().start(jwt, settings.sdk_public_app_key)) {
+        if (settings.oauth_authorization_url.find("/oauth/start") != std::string::npos) {
+            QString sdk_jwt_error;
+            if (ZoomOAuthManager::instance().fetch_sdk_jwt_blocking(jwt, &sdk_jwt_error)) {
+                public_app_key.clear();
+            } else {
+                blog(LOG_ERROR, "[obs-zoom-plugin] Meeting SDK JWT fetch failed on reconnect: %s",
+                     sdk_jwt_error.toUtf8().constData());
+            }
+        }
+    }
+    if (!ZoomEngineClient::instance().start(jwt, public_app_key)) {
         blog(LOG_ERROR, "[obs-zoom-plugin] Failed to start engine on reconnect");
         on_join_failed(false);
         return;

@@ -1461,8 +1461,31 @@ void ZoomDock::on_join_clicked()
         }
 
         const ZoomPluginSettings settings = ZoomPluginSettings::load();
-        const bool started = ZoomEngineClient::instance().start(
-            jwt, settings.sdk_public_app_key);
+        std::string public_app_key = settings.sdk_public_app_key;
+        if (!public_app_key.empty() &&
+            settings.oauth_authorization_url.find("/oauth/start") != std::string::npos) {
+            QString sdk_jwt_error;
+            if (ZoomOAuthManager::instance().fetch_sdk_jwt_blocking(jwt, &sdk_jwt_error)) {
+                public_app_key.clear();
+            } else {
+                blog(LOG_WARNING, "[obs-zoom-plugin] Meeting SDK JWT fetch failed: %s",
+                     sdk_jwt_error.toUtf8().constData());
+                QMetaObject::invokeMethod(self, [self, alive, sdk_jwt_error, join_generation]() {
+                    if (!alive->load(std::memory_order_acquire)) return;
+                    if (self->m_join_generation.load(std::memory_order_acquire) != join_generation)
+                        return;
+                    self->m_join_in_progress.store(false, std::memory_order_release);
+                    ZoomEngineClient::instance().set_state(MeetingState::Failed);
+                    QMessageBox::warning(self, "Zoom Authentication",
+                        sdk_jwt_error.isEmpty()
+                            ? QStringLiteral("Could not fetch Meeting SDK auth from CoreVideo broker.")
+                            : sdk_jwt_error);
+                    self->update_state_indicator();
+                }, Qt::QueuedConnection);
+                return;
+            }
+        }
+        const bool started = ZoomEngineClient::instance().start(jwt, public_app_key);
         const bool still_current =
             self->m_join_generation.load(std::memory_order_acquire) == join_generation;
         const bool joined = started && still_current &&

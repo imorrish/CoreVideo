@@ -554,6 +554,62 @@ bool ZoomOAuthManager::fetch_zak_blocking(std::string &zak,
     return true;
 }
 
+bool ZoomOAuthManager::fetch_sdk_jwt_blocking(std::string &jwt, QString *error)
+{
+    ZoomPluginSettings s = ZoomPluginSettings::load();
+    if (s.oauth_access_token.empty()) {
+        if (error) *error = "Sign in with Zoom before requesting Meeting SDK auth.";
+        return false;
+    }
+
+    if (s.oauth_expires_at <= QDateTime::currentSecsSinceEpoch()) {
+        if (!refresh_access_token_blocking(error))
+            return false;
+        s = ZoomPluginSettings::load();
+    }
+
+    const QUrl authorization_url(QString::fromStdString(s.oauth_authorization_url));
+    if (!is_broker_start_url(authorization_url)) {
+        if (error) {
+            *error = "Meeting SDK JWT broker is not configured for this build.";
+        }
+        return false;
+    }
+
+    QNetworkAccessManager manager;
+    const OAuthTokenAttemptResult result = post_json_request(
+        manager,
+        broker_endpoint(broker_base_from_authorization_url(s.oauth_authorization_url)
+                            .toString(),
+                        "/oauth/sdk-jwt"),
+        QJsonObject{{"access_token", QString::fromStdString(s.oauth_access_token)}});
+
+    if (!token_attempt_succeeded(result)) {
+        if (error) {
+            *error = "Meeting SDK auth broker failed: " +
+                     oauth_error_message(result.response,
+                                         result.net_error_string);
+        }
+        if (!result.response.isEmpty()) {
+            blog(LOG_WARNING, "[obs-zoom-plugin] Meeting SDK auth broker response: %s",
+                 QString::fromUtf8(result.response.left(512)).toUtf8().constData());
+        }
+        return false;
+    }
+
+    QJsonParseError parse_error;
+    const QJsonDocument doc = QJsonDocument::fromJson(result.response, &parse_error);
+    const QString token = doc.object().value("sdk_jwt").toString();
+    if (parse_error.error != QJsonParseError::NoError || token.isEmpty()) {
+        if (error) *error = "Meeting SDK auth broker did not return an SDK JWT.";
+        return false;
+    }
+
+    jwt = token.toStdString();
+    blog(LOG_INFO, "[obs-zoom-plugin] Meeting SDK JWT fetched from broker");
+    return true;
+}
+
 bool ZoomOAuthManager::register_url_scheme(QString *error)
 {
 #if defined(_WIN32)

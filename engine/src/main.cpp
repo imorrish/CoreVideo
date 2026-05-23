@@ -1062,7 +1062,6 @@ int main()
 #endif
             init_param.enableGenerateDump = true;
             init_param.enableLogByDefault = true;
-            init_param.obConfigOpts.optionalFeatures = ENABLE_CUSTOMIZED_UI_FLAG;
             init_param.rawdataOpts.videoRawdataMemoryMode = ZOOMSDK::ZoomSDKRawDataMemoryModeHeap;
             init_param.rawdataOpts.audioRawdataMemoryMode = ZOOMSDK::ZoomSDKRawDataMemoryModeHeap;
             EngineIpc::write(R"({"cmd":"debug","stage":"before_init_sdk"})");
@@ -1163,7 +1162,7 @@ int main()
                 p.onBehalfToken             = on_behalf_token.empty() ? nullptr : g_wide_on_behalf_token.c_str();
                 p.userZAK                   = user_zak.empty() ? nullptr : g_wide_user_zak.c_str();
                 p.app_privilege_token       = app_privilege_token.empty() ? nullptr : g_wide_app_privilege_token.c_str();
-                p.isVideoOff                = true;
+                p.isVideoOff                = false;
                 p.isAudioOff                = false;
                 p.isMyVoiceInMix            = true;
                 p.eAudioRawdataSamplingRate = ZOOMSDK::AudioRawdataSamplingRate_48K;
