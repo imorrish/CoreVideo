@@ -543,6 +543,10 @@ void ZoomOscServer::dispatch(const QString &address,
     // /zoom/iso/start [,s output_dir]
     if (address == "/zoom/iso/start") {
         ZoomIsoRecordConfig cfg;
+        const ZoomPluginSettings settings = ZoomPluginSettings::load();
+        cfg.ffmpeg_path = settings.iso_ffmpeg_path;
+        cfg.video_encoder = settings.iso_video_encoder;
+        cfg.record_program = settings.iso_record_program;
         if (!args.empty() && args[0].type == OscArg::String)
             cfg.output_dir = args[0].s;
         std::string error;

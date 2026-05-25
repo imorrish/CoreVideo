@@ -202,9 +202,12 @@ ZoomPluginSettings ZoomPluginSettings::load()
 
     const char *iso_output_dir = config_get_string(cfg, SECTION, "IsoOutputDir");
     const char *iso_ffmpeg_path = config_get_string(cfg, SECTION, "IsoFfmpegPath");
+    const char *iso_video_encoder = config_get_string(cfg, SECTION, "IsoVideoEncoder");
     s.iso_output_dir = iso_output_dir ? iso_output_dir : "";
     if (iso_ffmpeg_path && *iso_ffmpeg_path)
         s.iso_ffmpeg_path = iso_ffmpeg_path;
+    if (iso_video_encoder && *iso_video_encoder)
+        s.iso_video_encoder = iso_video_encoder;
     if (config_has_user_value(cfg, SECTION, "IsoRecordProgram"))
         s.iso_record_program =
             config_get_int(cfg, SECTION, "IsoRecordProgram") != 0;
@@ -343,6 +346,7 @@ void ZoomPluginSettings::save() const
     config_set_int   (cfg, SECTION, "LastWasWebinar",         last_was_webinar ? 1 : 0);
     config_set_string(cfg, SECTION, "IsoOutputDir",           iso_output_dir.c_str());
     config_set_string(cfg, SECTION, "IsoFfmpegPath",          iso_ffmpeg_path.c_str());
+    config_set_string(cfg, SECTION, "IsoVideoEncoder",        iso_video_encoder.c_str());
     config_set_int   (cfg, SECTION, "IsoRecordProgram",       iso_record_program ? 1 : 0);
     config_set_int   (cfg, SECTION, "SpeakerSensitivityMs",
                       static_cast<int>(speaker_sensitivity_ms));

@@ -33,13 +33,14 @@ enum OutputColumns {
     ColumnName,
     ColumnAssignment,
     ColumnResolution,
-    ColumnSignal,
+    ColumnDelivered,
+    ColumnSdk,
     ColumnAudio,
     ColumnIsolate,
     ColumnCount
 };
 
-// Fast I420 → RGB888 conversion for preview thumbnails.
+// Fast I420 -> RGB888 conversion for preview thumbnails.
 // Samples every (step) pixels to produce a scaled-down image.
 static QImage i420_to_qimage_scaled(uint32_t w, uint32_t h,
     const uint8_t *y_plane, const uint8_t *u_plane, const uint8_t *v_plane,
@@ -169,6 +170,80 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
     return text;
 }
 
+static QString resolution_label_from_int(int resolution)
+{
+    switch (static_cast<VideoResolution>(resolution)) {
+    case VideoResolution::P360: return QStringLiteral("360p");
+    case VideoResolution::P1080: return QStringLiteral("1080p");
+    case VideoResolution::P720:
+    default: return QStringLiteral("720p");
+    }
+}
+
+static QString sdk_quality_text(const ZoomOutputInfo &output)
+{
+    QStringList lines;
+    if (output.negotiated_resolution >= 0) {
+        lines << QString("Negotiated %1")
+            .arg(resolution_label_from_int(output.negotiated_resolution));
+    } else {
+        lines << QStringLiteral("Negotiating");
+    }
+
+    if (output.last_video_subscribe_code >= 0) {
+        lines << QString("Subscribe %1")
+            .arg(output.last_video_subscribe_code == 0
+                 ? QStringLiteral("OK")
+                 : QString::number(output.last_video_subscribe_code));
+    } else if (!output.last_quality_stage.empty()) {
+        lines << QString::fromStdString(output.last_quality_stage);
+    }
+
+    if (output.subscription_downgraded ||
+        output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution) {
+        lines << QStringLiteral("Downgraded");
+    } else if (output.quality_upgrade_cooldown_ms > 0) {
+        lines << QString("Retry in %1s")
+            .arg(output.quality_upgrade_cooldown_ms / 1000);
+    }
+    return lines.join(QStringLiteral("\n"));
+}
+
+static QString sdk_quality_tooltip(const ZoomOutputInfo &output)
+{
+    QString text = QString("Requested: %1. ")
+        .arg(resolution_label_from_int(static_cast<int>(output.video_resolution)));
+    text += output.negotiated_resolution >= 0
+        ? QString("Negotiated: %1. ")
+            .arg(resolution_label_from_int(output.negotiated_resolution))
+        : QStringLiteral("Negotiated: unknown. ");
+
+    if (output.last_set_resolution_code >= 0)
+        text += QString("setRawDataResolution code: %1. ")
+            .arg(output.last_set_resolution_code);
+    if (output.last_video_subscribe_code >= 0)
+        text += QString("subscribe code: %1. ")
+            .arg(output.last_video_subscribe_code);
+    if (output.last_raw_status >= 0)
+        text += QString("raw status: %1. ").arg(output.last_raw_status);
+    if (!output.last_quality_stage.empty()) {
+        text += QString("Last SDK stage: %1 (%2 ms ago). ")
+            .arg(QString::fromStdString(output.last_quality_stage))
+            .arg(output.last_quality_event_age_ms);
+    }
+    if (output.subscription_downgraded)
+        text += QStringLiteral("Zoom accepted the subscription but negotiated a lower raw feed than requested. ");
+    if (output.quality_upgrade_attempts > 0)
+        text += QString("Quality retry attempts: %1. ")
+            .arg(output.quality_upgrade_attempts);
+    if (output.quality_upgrade_cooldown_ms > 0)
+        text += QString("Next automatic quality retry in %1 ms. ")
+            .arg(output.quality_upgrade_cooldown_ms);
+    if (output.observed_height >= 1080)
+        text += QStringLiteral("Automatic quality retry is disabled because this feed is already 1080p.");
+    return text.trimmed();
+}
+
 static QString assignment_data_for_output(const ZoomOutputInfo &output)
 {
     switch (output.assignment) {
@@ -208,13 +283,13 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     : QWidget(parent)
 {
     setWindowTitle("Zoom Output Manager");
-    setMinimumSize(1320, 820);
-    resize(1480, 900);
+    setMinimumSize(1500, 840);
+    resize(1600, 920);
 
-    // ── Profile toolbar ───────────────────────────────────────────────────────
+    // Profile toolbar.
     m_profile_combo = new QComboBox(this);
     m_profile_combo->setMinimumWidth(180);
-    m_profile_combo->setPlaceholderText("— select profile —");
+    m_profile_combo->setPlaceholderText("- select profile -");
 
     auto *save_btn   = new QPushButton("Save Profile",   this);
     auto *load_btn   = new QPushButton("Load Profile",   this);
@@ -255,21 +330,24 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     m_table = new QTableWidget(this);
     m_table->setColumnCount(ColumnCount);
     m_table->setHorizontalHeaderLabels({
-        "Preview", "Output", "Assignment", "Requested", "Signal", "Audio", "Isolated audio"
+        "Preview", "Output", "Assignment", "Requested", "Delivered",
+        "SDK", "Audio", "Isolated audio"
     });
     m_table->horizontalHeader()->setMinimumSectionSize(90);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnPreview,    QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnName,       QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnAssignment, QHeaderView::Interactive);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnResolution, QHeaderView::Fixed);
-    m_table->horizontalHeader()->setSectionResizeMode(ColumnSignal,     QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(ColumnDelivered,  QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(ColumnSdk,        QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnAudio,      QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnIsolate,    QHeaderView::Fixed);
     m_table->setColumnWidth(ColumnPreview, 162);
     m_table->setColumnWidth(ColumnName, 240);
     m_table->setColumnWidth(ColumnAssignment, 300);
     m_table->setColumnWidth(ColumnResolution, 116);
-    m_table->setColumnWidth(ColumnSignal, 148);
+    m_table->setColumnWidth(ColumnDelivered, 148);
+    m_table->setColumnWidth(ColumnSdk, 180);
     m_table->setColumnWidth(ColumnAudio, 130);
     m_table->setColumnWidth(ColumnIsolate, 138);
     m_table->verticalHeader()->setVisible(false);
@@ -425,7 +503,23 @@ void ZoomOutputDialog::refresh()
             signal->setStyleSheet("color: #ff6b6b; font-weight: 700;");
         else if (output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution)
             signal->setStyleSheet("color: #f0b429; font-weight: 700;");
-        m_table->setCellWidget(row, ColumnSignal, signal);
+        m_table->setCellWidget(row, ColumnDelivered, signal);
+
+        auto *sdk = new QLabel(m_table);
+        sdk->setAlignment(Qt::AlignCenter);
+        sdk->setMinimumWidth(164);
+        sdk->setWordWrap(false);
+        sdk->setMargin(4);
+        sdk->setText(sdk_quality_text(output));
+        sdk->setToolTip(sdk_quality_tooltip(output));
+        if (output.last_video_subscribe_code > 0)
+            sdk->setStyleSheet("color: #ff6b6b; font-weight: 700;");
+        else if (output.subscription_downgraded ||
+                 output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution)
+            sdk->setStyleSheet("color: #f0b429; font-weight: 700;");
+        else if (output.last_video_subscribe_code == 0)
+            sdk->setStyleSheet("color: #66d989; font-weight: 700;");
+        m_table->setCellWidget(row, ColumnSdk, sdk);
 
         m_table->setCellWidget(row, ColumnAudio, audio);
 
@@ -459,15 +553,15 @@ void ZoomOutputDialog::refresh_participants()
         m_participant_table->setItem(row, 0, new QTableWidgetItem(name));
         m_participant_table->setItem(row, 1, new QTableWidgetItem(id));
 
-        auto *video_item = new QTableWidgetItem(p.has_video ? "● On" : "Off");
+        auto *video_item = new QTableWidgetItem(p.has_video ? "* On" : "Off");
         video_item->setForeground(p.has_video ? QColor("#22cc44") : QColor("#666666"));
         m_participant_table->setItem(row, 2, video_item);
 
-        auto *audio_item = new QTableWidgetItem(p.is_muted ? "Muted" : "● Open");
+        auto *audio_item = new QTableWidgetItem(p.is_muted ? "Muted" : "* Open");
         audio_item->setForeground(p.is_muted ? QColor("#f0a000") : QColor("#22cc44"));
         m_participant_table->setItem(row, 3, audio_item);
 
-        auto *talking_item = new QTableWidgetItem(p.is_talking ? "●" : "");
+        auto *talking_item = new QTableWidgetItem(p.is_talking ? "*" : "");
         talking_item->setForeground(QColor("#22cc44"));
         talking_item->setTextAlignment(Qt::AlignCenter);
         m_participant_table->setItem(row, 4, talking_item);

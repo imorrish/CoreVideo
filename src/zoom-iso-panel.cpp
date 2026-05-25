@@ -7,6 +7,7 @@
 #include <QAbstractItemView>
 #include <QCheckBox>
 #include <QColor>
+#include <QComboBox>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
@@ -19,6 +20,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QProcess>
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QStorageInfo>
@@ -61,6 +63,28 @@ static QString bytes_text(qint64 bytes)
         return QString("%1 GB").arg(gb, 0, 'f', 1);
     const double mb = static_cast<double>(bytes) / (1024.0 * 1024.0);
     return QString("%1 MB").arg(mb, 0, 'f', 1);
+}
+
+static int encoder_index(QComboBox *combo, const std::string &encoder)
+{
+    if (!combo)
+        return 0;
+    const int idx = combo->findData(QString::fromStdString(encoder));
+    return idx >= 0 ? idx : 0;
+}
+
+static bool ffmpeg_has_encoder(const QString &path, const QString &encoder)
+{
+    QProcess probe;
+    probe.setProgram(path.trimmed());
+    probe.setArguments({"-hide_banner", "-encoders"});
+    probe.setProcessChannelMode(QProcess::MergedChannels);
+    probe.start(QIODevice::ReadOnly);
+    if (!probe.waitForStarted(2000))
+        return false;
+    if (!probe.waitForFinished(5000))
+        probe.kill();
+    return QString::fromUtf8(probe.readAll()).contains(encoder);
 }
 
 ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
@@ -111,6 +135,24 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     ffmpeg_row->addWidget(m_test_btn);
     config_layout->addLayout(ffmpeg_row);
 
+    auto *encoder_row = new QHBoxLayout;
+    encoder_row->setSpacing(6);
+    m_video_encoder = new QComboBox(config_group);
+    m_video_encoder->addItem("CPU - x264 (safe fallback)", "libx264");
+    m_video_encoder->addItem("NVIDIA NVENC - H.264", "h264_nvenc");
+    m_video_encoder->addItem("Intel Quick Sync - H.264", "h264_qsv");
+    m_video_encoder->addItem("AMD AMF - H.264", "h264_amf");
+    m_video_encoder->setCurrentIndex(
+        encoder_index(m_video_encoder, settings.iso_video_encoder));
+    m_video_encoder->setToolTip(
+        "Hardware encoders reduce CPU load but consume GPU encoder sessions. "
+        "Use CPU x264 if the selected FFmpeg build or GPU does not support the hardware encoder.");
+    connect(m_video_encoder, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this]() { persist_settings(); });
+    encoder_row->addWidget(new QLabel("Video encoder:", config_group));
+    encoder_row->addWidget(m_video_encoder, 1);
+    config_layout->addLayout(encoder_row);
+
     m_record_program = new QCheckBox("Also start/stop OBS program recording",
                                      config_group);
     m_record_program->setChecked(settings.iso_record_program);
@@ -149,9 +191,9 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     auto *sessions_group = new QGroupBox("Active ISO Sessions", this);
     auto *sessions_layout = new QVBoxLayout(sessions_group);
     m_sessions = new QTableWidget(sessions_group);
-    m_sessions->setColumnCount(10);
+    m_sessions->setColumnCount(11);
     m_sessions->setHorizontalHeaderLabels({
-        "Source", "Participant", "Status", "Duration", "Resolution",
+        "Source", "Participant", "Status", "Encoder", "Duration", "Resolution",
         "Video Frames", "Audio Chunks", "Video Size", "Audio Size", "Files"
     });
     m_sessions->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
@@ -163,7 +205,8 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     m_sessions->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
     m_sessions->horizontalHeader()->setSectionResizeMode(7, QHeaderView::ResizeToContents);
     m_sessions->horizontalHeader()->setSectionResizeMode(8, QHeaderView::ResizeToContents);
-    m_sessions->horizontalHeader()->setSectionResizeMode(9, QHeaderView::Stretch);
+    m_sessions->horizontalHeader()->setSectionResizeMode(9, QHeaderView::ResizeToContents);
+    m_sessions->horizontalHeader()->setSectionResizeMode(10, QHeaderView::Stretch);
     m_sessions->verticalHeader()->setVisible(false);
     m_sessions->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_sessions->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -217,12 +260,21 @@ void ZoomIsoPanel::browse_ffmpeg()
 void ZoomIsoPanel::test_ffmpeg()
 {
     persist_settings();
-    if (ffmpeg_exists(m_ffmpeg_path->text())) {
-        set_error(QString());
-        QMessageBox::information(this, "FFmpeg", "FFmpeg was found.");
-    } else {
+    if (!ffmpeg_exists(m_ffmpeg_path->text())) {
         set_error("FFmpeg was not found. Use a full path or make sure ffmpeg is on PATH.");
+        return;
     }
+
+    const QString encoder = m_video_encoder->currentData().toString();
+    if (!ffmpeg_has_encoder(m_ffmpeg_path->text(), encoder)) {
+        set_error(QString("FFmpeg was found, but encoder '%1' is not available in this FFmpeg build.")
+            .arg(encoder));
+        return;
+    }
+
+    set_error(QString());
+    QMessageBox::information(this, "FFmpeg",
+        QString("FFmpeg was found and encoder '%1' is available.").arg(encoder));
 }
 
 void ZoomIsoPanel::start_recording()
@@ -233,6 +285,8 @@ void ZoomIsoPanel::start_recording()
     ZoomIsoRecordConfig config;
     config.output_dir = m_output_dir->text().trimmed().toStdString();
     config.ffmpeg_path = m_ffmpeg_path->text().trimmed().toStdString();
+    config.video_encoder =
+        m_video_encoder->currentData().toString().toStdString();
     config.record_program = m_record_program->isChecked();
 
     std::string error;
@@ -262,6 +316,7 @@ void ZoomIsoPanel::refresh_status()
     m_stop_btn->setEnabled(active);
     m_output_dir->setEnabled(!active);
     m_ffmpeg_path->setEnabled(!active);
+    m_video_encoder->setEnabled(!active);
     m_test_btn->setEnabled(!active);
     m_record_program->setEnabled(!active);
 
@@ -315,19 +370,20 @@ void ZoomIsoPanel::refresh_status()
         if (!ffmpeg_running || video_frames == 0)
             status_item->setForeground(QColor("#f0b429"));
         m_sessions->setItem(row, 2, status_item);
-        m_sessions->setItem(row, 3, item(duration));
-        m_sessions->setItem(row, 4, item(resolution));
-        m_sessions->setItem(row, 5, item(QString::number(video_frames)));
-        m_sessions->setItem(row, 6, item(QString::number(audio_chunks)));
-        m_sessions->setItem(row, 7, item(bytes_text(
-            static_cast<qint64>(s.value("video_bytes").toDouble()))));
+        m_sessions->setItem(row, 3, item(s.value("video_encoder").toString()));
+        m_sessions->setItem(row, 4, item(duration));
+        m_sessions->setItem(row, 5, item(resolution));
+        m_sessions->setItem(row, 6, item(QString::number(video_frames)));
+        m_sessions->setItem(row, 7, item(QString::number(audio_chunks)));
         m_sessions->setItem(row, 8, item(bytes_text(
+            static_cast<qint64>(s.value("video_bytes").toDouble()))));
+        m_sessions->setItem(row, 9, item(bytes_text(
             static_cast<qint64>(s.value("audio_bytes").toDouble()))));
         auto *files = item(QString("%1\n%2")
             .arg(s.value("video_path").toString(),
                  s.value("audio_path").toString()));
         files->setToolTip(files->text());
-        m_sessions->setItem(row, 9, files);
+        m_sessions->setItem(row, 10, files);
     }
 }
 
@@ -338,6 +394,8 @@ void ZoomIsoPanel::persist_settings() const
     ZoomPluginSettings settings = ZoomPluginSettings::load();
     settings.iso_output_dir = m_output_dir->text().trimmed().toStdString();
     settings.iso_ffmpeg_path = m_ffmpeg_path->text().trimmed().toStdString();
+    settings.iso_video_encoder =
+        m_video_encoder->currentData().toString().toStdString();
     settings.iso_record_program = m_record_program->isChecked();
     settings.save();
 }

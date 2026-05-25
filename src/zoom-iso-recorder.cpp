@@ -3,7 +3,9 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonObject>
+#include <QProcess>
 #include <QStandardPaths>
+#include <QStringList>
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <util/platform.h>
@@ -40,6 +42,12 @@ static const char *assignment_label(AssignmentMode mode)
     default: return "participant";
     }
 }
+
+static std::string normalized_video_encoder(const std::string &encoder);
+static bool ffmpeg_encoder_available(const QString &ffmpeg_path,
+                                     const std::string &encoder,
+                                     std::string *error);
+static QStringList ffmpeg_video_encoder_args(const std::string &encoder);
 
 ZoomIsoRecorder &ZoomIsoRecorder::instance()
 {
@@ -118,6 +126,8 @@ bool ZoomIsoRecorder::start(const ZoomIsoRecordConfig &config,
         normalized.output_dir = default_iso_dir().toStdString();
     if (normalized.ffmpeg_path.empty())
         normalized.ffmpeg_path = "ffmpeg";
+    normalized.video_encoder =
+        normalized_video_encoder(normalized.video_encoder);
     const QString ffmpegProgram = QString::fromStdString(normalized.ffmpeg_path);
     const QFileInfo ffmpegInfo(ffmpegProgram);
     if ((ffmpegInfo.isRelative() &&
@@ -129,6 +139,8 @@ bool ZoomIsoRecorder::start(const ZoomIsoRecordConfig &config,
         }
         return false;
     }
+    if (!ffmpeg_encoder_available(ffmpegProgram, normalized.video_encoder, error))
+        return false;
 
     QDir dir(QString::fromStdString(normalized.output_dir));
     if (!dir.exists() && !dir.mkpath(".")) {
@@ -152,8 +164,10 @@ bool ZoomIsoRecorder::start(const ZoomIsoRecordConfig &config,
         m_started_program_recording = true;
     }
 
-    blog(LOG_INFO, "[obs-zoom-plugin] ISO recording started: dir=%s ffmpeg=%s",
-         normalized.output_dir.c_str(), normalized.ffmpeg_path.c_str());
+    blog(LOG_INFO,
+         "[obs-zoom-plugin] ISO recording started: dir=%s ffmpeg=%s encoder=%s",
+         normalized.output_dir.c_str(), normalized.ffmpeg_path.c_str(),
+         normalized.video_encoder.c_str());
     return true;
 }
 
@@ -203,6 +217,7 @@ QJsonArray ZoomIsoRecorder::status_json() const
             : -1.0;
         obj["ffmpeg_running"] =
             s.ffmpeg && s.ffmpeg->state() == QProcess::Running;
+        obj["video_encoder"] = QString::fromStdString(s.video_encoder);
         obj["video_bytes"] = QFileInfo(s.video_path).exists()
             ? static_cast<double>(QFileInfo(s.video_path).size())
             : 0.0;
@@ -291,10 +306,11 @@ ZoomIsoRecorder::ensure_session_locked(const ZoomOutputInfo &info,
     session.base_path = root.absoluteFilePath(base);
     session.video_path = session.base_path + ".mp4";
     session.audio_path = session.base_path + ".wav";
+    session.video_encoder = normalized_video_encoder(m_config.video_encoder);
 
     session.ffmpeg = std::make_unique<QProcess>();
     session.ffmpeg->setProgram(QString::fromStdString(m_config.ffmpeg_path));
-    session.ffmpeg->setArguments({
+    QStringList args = {
         "-hide_banner", "-loglevel", "warning", "-y",
         "-f", "rawvideo",
         "-pix_fmt", "yuv420p",
@@ -302,12 +318,13 @@ ZoomIsoRecorder::ensure_session_locked(const ZoomOutputInfo &info,
         "-r", "30",
         "-i", "pipe:0",
         "-an",
-        "-c:v", "libx264",
-        "-preset", "veryfast",
-        "-crf", "18",
+    };
+    args.append(ffmpeg_video_encoder_args(session.video_encoder));
+    args.append({
         "-movflags", "+faststart",
         session.video_path,
     });
+    session.ffmpeg->setArguments(args);
     session.ffmpeg->setProcessChannelMode(QProcess::MergedChannels);
     session.ffmpeg->start(QIODevice::WriteOnly);
     if (!session.ffmpeg->waitForStarted(2000)) {
@@ -318,8 +335,9 @@ ZoomIsoRecorder::ensure_session_locked(const ZoomOutputInfo &info,
     }
 
     blog(LOG_INFO,
-         "[obs-zoom-plugin] ISO session started: source=%s participant=%u video=%s audio=%s",
+         "[obs-zoom-plugin] ISO session started: source=%s participant=%u encoder=%s video=%s audio=%s",
          session.source_name.c_str(), session.resolved_participant_id,
+         session.video_encoder.c_str(),
          session.video_path.toUtf8().constData(),
          session.audio_path.toUtf8().constData());
 
@@ -412,4 +430,61 @@ void ZoomIsoRecorder::record_audio_frame(const ZoomOutputInfo &info,
         ++session.audio_chunks;
         session.last_audio_ns = timestamp_ns;
     }
+}
+
+static std::string normalized_video_encoder(const std::string &encoder)
+{
+    if (encoder == "h264_nvenc" || encoder == "h264_qsv" ||
+        encoder == "h264_amf" || encoder == "libx264") {
+        return encoder;
+    }
+    return "libx264";
+}
+
+static bool ffmpeg_encoder_available(const QString &ffmpeg_path,
+                                     const std::string &encoder,
+                                     std::string *error)
+{
+    QProcess probe;
+    probe.setProgram(ffmpeg_path);
+    probe.setArguments({"-hide_banner", "-encoders"});
+    probe.setProcessChannelMode(QProcess::MergedChannels);
+    probe.start(QIODevice::ReadOnly);
+    if (!probe.waitForStarted(2000)) {
+        if (error) {
+            *error = "FFmpeg failed to start while checking encoders: " +
+                     probe.errorString().toStdString();
+        }
+        return false;
+    }
+    if (!probe.waitForFinished(5000))
+        probe.kill();
+
+    const QString encoders = QString::fromUtf8(probe.readAll());
+    if (encoders.contains(QString::fromStdString(encoder)))
+        return true;
+
+    if (error) {
+        *error = "FFmpeg encoder '" + encoder +
+                 "' is not available in the selected ffmpeg build.";
+    }
+    return false;
+}
+
+static QStringList ffmpeg_video_encoder_args(const std::string &encoder)
+{
+    if (encoder == "libx264") {
+        return {
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-crf", "18",
+        };
+    }
+
+    return {
+        "-c:v", QString::fromStdString(encoder),
+        "-b:v", "12M",
+        "-maxrate", "20M",
+        "-bufsize", "24M",
+    };
 }

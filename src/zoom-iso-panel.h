@@ -3,6 +3,7 @@
 #include <QWidget>
 
 class QCheckBox;
+class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -28,6 +29,7 @@ private:
 
     QLineEdit *m_output_dir = nullptr;
     QLineEdit *m_ffmpeg_path = nullptr;
+    QComboBox *m_video_encoder = nullptr;
     QCheckBox *m_record_program = nullptr;
     QPushButton *m_start_btn = nullptr;
     QPushButton *m_stop_btn = nullptr;

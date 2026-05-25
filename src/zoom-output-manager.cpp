@@ -3,9 +3,140 @@
 #include "zoom-output-health.h"
 #include "zoom-iso-recorder.h"
 #include "zoom-source.h"
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <algorithm>
 #include <obs-module.h>
 #include <util/platform.h>
+
+namespace {
+
+bool json_int(const QJsonObject &obj, const char *key, int &value)
+{
+    const QJsonValue json_value = obj.value(QLatin1String(key));
+    if (!json_value.isDouble())
+        return false;
+    value = json_value.toInt();
+    return true;
+}
+
+int json_int_or(const QJsonObject &obj, const char *key, int fallback)
+{
+    int value = fallback;
+    json_int(obj, key, value);
+    return value;
+}
+
+void remember_quality_event(ZoomOutputInfo &info,
+                            const ZoomEngineClient::DebugEvent &event,
+                            const QJsonObject &obj,
+                            uint64_t now_ms)
+{
+    info.last_quality_stage = event.stage;
+    info.last_quality_event_age_ms =
+        now_ms > event.timestamp_ms ? now_ms - event.timestamp_ms : 0;
+
+    if (event.stage == "set_resolution") {
+        info.last_set_resolution_code =
+            json_int_or(obj, "code", info.last_set_resolution_code);
+        const int resolution = json_int_or(obj, "resolution", -1);
+        if (resolution >= 0)
+            info.negotiated_resolution = resolution;
+        return;
+    }
+
+    if (event.stage == "video_subscribe") {
+        info.last_video_subscribe_code =
+            json_int_or(obj, "code", info.last_video_subscribe_code);
+        const int resolution = json_int_or(obj, "resolution", -1);
+        if (resolution >= 0)
+            info.negotiated_resolution = resolution;
+        return;
+    }
+
+    if (event.stage == "video_raw_status") {
+        info.last_raw_status = json_int_or(obj, "status", info.last_raw_status);
+        return;
+    }
+
+    if (event.stage == "video_resolution_downgraded" ||
+        event.stage == "video_source_bound" ||
+        event.stage == "video_subscription_upgraded") {
+        const int actual = json_int_or(obj, "actual", -1);
+        const int requested = json_int_or(obj, "requested",
+                                          static_cast<int>(info.video_resolution));
+        if (actual >= 0)
+            info.negotiated_resolution = actual;
+        if (actual >= 0 && requested >= 0 && actual < requested)
+            info.subscription_downgraded = true;
+        return;
+    }
+
+    if (event.stage == "video_source_attached_existing_subscription") {
+        const int resolution = json_int_or(obj, "resolution", -1);
+        if (resolution >= 0)
+            info.negotiated_resolution = resolution;
+        return;
+    }
+
+    if (event.stage == "video_subscribe_noop_existing") {
+        const int active = json_int_or(obj, "active", -1);
+        const int requested = json_int_or(obj, "requested",
+                                          static_cast<int>(info.video_resolution));
+        if (active >= 0)
+            info.negotiated_resolution = active;
+        if (active >= 0 && requested >= 0 && active < requested)
+            info.subscription_downgraded = true;
+        return;
+    }
+}
+
+bool quality_stage_is_interesting(const std::string &stage)
+{
+    return stage == "set_resolution" ||
+           stage == "video_subscribe" ||
+           stage == "video_raw_status" ||
+           stage == "video_resolution_downgraded" ||
+           stage == "video_source_bound" ||
+           stage == "video_subscription_upgraded" ||
+           stage == "video_source_attached_existing_subscription" ||
+           stage == "video_subscribe_noop_existing" ||
+           stage == "video_subscribe_failed_all" ||
+           stage == "video_subscribe_deferred" ||
+           stage == "video_subscribe_skipped";
+}
+
+void attach_quality_events(std::vector<ZoomOutputInfo> &outputs)
+{
+    if (outputs.empty())
+        return;
+
+    const auto events = ZoomEngineClient::instance().recent_debug_events();
+    const uint64_t now_ms = os_gettime_ns() / 1000000ULL;
+    for (auto &output : outputs) {
+        if (output.source_uuid.empty())
+            continue;
+
+        for (const auto &event : events) {
+            if (event.source_uuid != output.source_uuid ||
+                !quality_stage_is_interesting(event.stage)) {
+                continue;
+            }
+            const QJsonDocument doc = QJsonDocument::fromJson(
+                QByteArray::fromStdString(event.message));
+            if (!doc.isObject())
+                continue;
+            remember_quality_event(output, event, doc.object(), now_ms);
+        }
+
+        if (output.negotiated_resolution >= 0 &&
+            output.negotiated_resolution < static_cast<int>(output.video_resolution)) {
+            output.subscription_downgraded = true;
+        }
+    }
+}
+
+} // namespace
 
 ZoomOutputManager &ZoomOutputManager::instance()
 {
@@ -31,15 +162,18 @@ void ZoomOutputManager::unregister_source(ZoomSource *source)
 std::vector<ZoomOutputInfo> ZoomOutputManager::outputs() const
 {
     std::vector<ZoomOutputInfo> out;
-    std::lock_guard<std::mutex> lk(m_mtx);
-    out.reserve(m_sources.size());
-    for (const auto *source : m_sources) {
-        if (!source) continue;
-        ZoomOutputInfo info = source->output_info();
-        out.push_back(info);
+    {
+        std::lock_guard<std::mutex> lk(m_mtx);
+        out.reserve(m_sources.size());
+        for (const auto *source : m_sources) {
+            if (!source) continue;
+            ZoomOutputInfo info = source->output_info();
+            out.push_back(info);
+        }
     }
     apply_output_health(out, ZoomEngineClient::instance().roster(),
                         ZoomEngineClient::instance().is_media_active());
+    attach_quality_events(out);
     return out;
 }
 

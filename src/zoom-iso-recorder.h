@@ -17,6 +17,7 @@
 struct ZoomIsoRecordConfig {
     std::string output_dir;
     std::string ffmpeg_path = "ffmpeg";
+    std::string video_encoder = "libx264";
     bool record_program = true;
 };
 
@@ -81,6 +82,7 @@ private:
         QString base_path;
         QString video_path;
         QString audio_path;
+        std::string video_encoder;
         std::unique_ptr<QProcess> ffmpeg;
         WavFile wav;
     };

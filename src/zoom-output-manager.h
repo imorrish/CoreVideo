@@ -40,6 +40,13 @@ struct ZoomOutputInfo {
     uint32_t quality_upgrade_attempts = 0;
     uint64_t quality_upgrade_cooldown_ms = 0;
     uint64_t subscribed_age_ms = 0;
+    int negotiated_resolution = -1;
+    int last_set_resolution_code = -1;
+    int last_video_subscribe_code = -1;
+    int last_raw_status = -1;
+    uint64_t last_quality_event_age_ms = 0;
+    bool subscription_downgraded = false;
+    std::string last_quality_stage;
     bool duplicate_participant_assignment = false;
     ZoomOutputHealthReason health_reason = ZoomOutputHealthReason::Ok;
     AssignmentMode   assignment = AssignmentMode::Participant;
@@ -145,7 +152,7 @@ public:
     uint32_t recover_stale_sources(bool force = false);
     uint32_t upgrade_low_quality_sources(bool force = false);
 
-    // Preview callbacks — call from the UI thread only.
+    // Preview callbacks - call from the UI thread only.
     void set_preview_cb(const std::string &source_name,
                         ZoomPreviewCallback cb);
     void clear_preview_cb(const std::string &source_name);

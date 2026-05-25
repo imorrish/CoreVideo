@@ -31,10 +31,12 @@ enum OutputDiagnosticColumns {
     DiagParticipant,
     DiagAssignment,
     DiagRequested,
+    DiagNegotiated,
     DiagObserved,
     DiagFps,
     DiagAge,
     DiagRetries,
+    DiagSdk,
     DiagState,
     DiagOutputColumnCount
 };
@@ -88,6 +90,33 @@ static QString observed_text(const ZoomOutputInfo &output)
     if (output.observed_width == 0 || output.observed_height == 0)
         return QStringLiteral("No signal");
     return QString("%1x%2").arg(output.observed_width).arg(output.observed_height);
+}
+
+static QString negotiated_text(const ZoomOutputInfo &output)
+{
+    if (output.negotiated_resolution < 0)
+        return QStringLiteral("-");
+    return resolution_text(static_cast<VideoResolution>(output.negotiated_resolution));
+}
+
+static QString sdk_text(const ZoomOutputInfo &output)
+{
+    QStringList parts;
+    if (output.last_video_subscribe_code >= 0) {
+        parts << QString("subscribe %1")
+            .arg(output.last_video_subscribe_code == 0
+                 ? QStringLiteral("ok")
+                 : QString::number(output.last_video_subscribe_code));
+    }
+    if (output.last_set_resolution_code >= 0)
+        parts << QString("setRes %1").arg(output.last_set_resolution_code);
+    if (output.last_raw_status >= 0)
+        parts << QString("raw %1").arg(output.last_raw_status);
+    if (output.subscription_downgraded)
+        parts << QStringLiteral("downgraded");
+    if (!output.last_quality_stage.empty())
+        parts << QString::fromStdString(output.last_quality_stage);
+    return parts.isEmpty() ? QStringLiteral("-") : parts.join(QStringLiteral(" / "));
 }
 
 static QString retry_text(const ZoomOutputInfo &output)
@@ -182,6 +211,8 @@ static QJsonObject output_json(const ZoomOutputInfo &output)
         video_resolution_width(output.video_resolution));
     obj["requested_height"] = static_cast<double>(
         video_resolution_height(output.video_resolution));
+    obj["negotiated_resolution"] = output.negotiated_resolution;
+    obj["negotiated_resolution_label"] = negotiated_text(output);
     obj["observed_width"] = static_cast<double>(output.observed_width);
     obj["observed_height"] = static_cast<double>(output.observed_height);
     obj["observed_fps"] = output.observed_fps;
@@ -200,6 +231,14 @@ static QJsonObject output_json(const ZoomOutputInfo &output)
     obj["quality_upgrade_cooldown_ms"] =
         static_cast<double>(output.quality_upgrade_cooldown_ms);
     obj["subscribed_age_ms"] = static_cast<double>(output.subscribed_age_ms);
+    obj["last_set_resolution_code"] = output.last_set_resolution_code;
+    obj["last_video_subscribe_code"] = output.last_video_subscribe_code;
+    obj["last_raw_status"] = output.last_raw_status;
+    obj["last_quality_stage"] =
+        QString::fromStdString(output.last_quality_stage);
+    obj["last_quality_event_age_ms"] =
+        static_cast<double>(output.last_quality_event_age_ms);
+    obj["subscription_downgraded"] = output.subscription_downgraded;
     obj["audio_mode"] = output.audio_mode == AudioChannelMode::Stereo
         ? QStringLiteral("stereo")
         : QStringLiteral("mono");
@@ -258,8 +297,8 @@ ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
     m_outputs = new QTableWidget(this);
     m_outputs->setColumnCount(DiagOutputColumnCount);
     m_outputs->setHorizontalHeaderLabels({
-        "Output", "Participant", "Assignment", "Requested", "Observed",
-        "FPS", "Frame Age", "Retries", "State"
+        "Output", "Participant", "Assignment", "Requested", "Negotiated",
+        "Observed", "FPS", "Frame Age", "Retries", "SDK", "State"
     });
     m_outputs->horizontalHeader()->setSectionResizeMode(DiagOutput, QHeaderView::Stretch);
     for (int col = DiagParticipant; col < DiagOutputColumnCount; ++col)
@@ -344,11 +383,18 @@ void ZoomDiagnosticsDialog::refresh()
         m_outputs->setItem(row, DiagParticipant, readonly_item(participant));
         m_outputs->setItem(row, DiagAssignment, readonly_item(assignment_text(output)));
         m_outputs->setItem(row, DiagRequested, readonly_item(resolution_text(output.video_resolution)));
+        m_outputs->setItem(row, DiagNegotiated, readonly_item(negotiated_text(output)));
         m_outputs->setItem(row, DiagObserved, readonly_item(observed_text(output)));
         m_outputs->setItem(row, DiagFps, readonly_item(QString::number(output.observed_fps, 'f', 1)));
         m_outputs->setItem(row, DiagAge, readonly_item(output.last_frame_age_ms == 0
             ? QStringLiteral("-") : QString("%1 ms").arg(output.last_frame_age_ms)));
         m_outputs->setItem(row, DiagRetries, readonly_item(retry_text(output)));
+        auto *sdk_item = readonly_item(sdk_text(output));
+        if (output.last_video_subscribe_code > 0)
+            sdk_item->setForeground(QColor(255, 107, 107));
+        else if (output.subscription_downgraded)
+            sdk_item->setForeground(QColor(240, 180, 41));
+        m_outputs->setItem(row, DiagSdk, sdk_item);
         auto *state_item = readonly_item(signal_state_text(output));
         if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
             state_item->setForeground(QColor(255, 107, 107));
@@ -480,8 +526,10 @@ void ZoomDiagnosticsDialog::export_diagnostics()
             << " | " << assignment_text(output)
             << " | participant " << output.participant_id
             << " | requested " << resolution_text(output.video_resolution)
+            << " | negotiated " << negotiated_text(output)
             << " | observed " << observed_text(output)
             << " | fps " << QString::number(output.observed_fps, 'f', 1)
+            << " | sdk " << sdk_text(output)
             << " | " << output_health_reason_label(output.health_reason)
             << "\n";
     }

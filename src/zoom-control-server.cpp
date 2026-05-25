@@ -501,6 +501,8 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
         ZoomIsoRecordConfig cfg;
         cfg.output_dir = req.value("output_dir").toString().toStdString();
         cfg.ffmpeg_path = req.value("ffmpeg_path").toString("ffmpeg").toStdString();
+        cfg.video_encoder =
+            req.value("video_encoder").toString("libx264").toStdString();
         cfg.record_program = req.value("record_program").toBool(true);
         std::string error;
         const bool ok = ZoomIsoRecorder::instance().start(cfg, &error);
