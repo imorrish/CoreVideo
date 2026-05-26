@@ -44,6 +44,8 @@ param(
     [Parameter()]
     [switch]$Upload,
     [Parameter()]
+    [switch]$SkipInstaller,
+    [Parameter()]
     [switch]$Install,
     [Parameter()]
     [string]$ObsInstallPath
@@ -130,12 +132,86 @@ function Invoke-GitHubApi {
     return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $headers
 }
 
+function Get-MakeNsis {
+    $cmd = Get-Command makensis -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+
+    foreach ($candidate in @(
+        "$env:ProgramFiles\NSIS\makensis.exe",
+        "${env:ProgramFiles(x86)}\NSIS\makensis.exe"
+    )) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+    return $null
+}
+
+function ConvertTo-NsisPath {
+    param([string]$Path)
+    return $Path.Replace('/', '\').Replace('$', '$$')
+}
+
+function New-UninstallFileList {
+    param(
+        [string]$SourceDir,
+        [string]$OutputPath
+    )
+
+    $sourceRoot = [System.IO.Path]::GetFullPath($SourceDir).TrimEnd('\') + '\'
+    $files = Get-ChildItem -LiteralPath $SourceDir -Recurse -File |
+        Sort-Object FullName -Descending
+    $dirs = Get-ChildItem -LiteralPath $SourceDir -Recurse -Directory |
+        Sort-Object FullName -Descending
+
+    $lines = New-Object System.Collections.Generic.List[string]
+    foreach ($file in $files) {
+        $relative = $file.FullName.Substring($sourceRoot.Length)
+        $lines.Add(('Delete "$INSTDIR\{0}"' -f (ConvertTo-NsisPath $relative)))
+    }
+    foreach ($dir in $dirs) {
+        $relative = $dir.FullName.Substring($sourceRoot.Length)
+        $lines.Add(('RMDir "$INSTDIR\{0}"' -f (ConvertTo-NsisPath $relative)))
+    }
+    Set-Content -LiteralPath $OutputPath -Value $lines -Encoding UTF8
+}
+
+function Upload-ReleaseAsset {
+    param(
+        [object]$Release,
+        [string]$Path,
+        [string]$Name,
+        [string]$ContentType
+    )
+
+    foreach ($asset in @($Release.assets)) {
+        if ($asset.name -eq $Name) {
+            Invoke-GitHubApi -Method Delete -Uri "https://api.github.com/repos/$script:RepoFullName/releases/assets/$($asset.id)" | Out-Null
+        }
+    }
+
+    $uploadBase = $Release.upload_url.Split("{")[0]
+    $uploadUri = $uploadBase + "?name=" + [uri]::EscapeDataString($Name)
+    $headers = @{
+        Authorization          = "Bearer $script:GitHubToken"
+        Accept                 = "application/vnd.github+json"
+        "X-GitHub-Api-Version" = "2022-11-28"
+        "User-Agent"           = "CoreVideo-Local-Release"
+        "Content-Type"         = $ContentType
+    }
+    $asset = Invoke-RestMethod -Method Post -Uri $uploadUri -Headers $headers -InFile $Path
+    Write-Host "Uploaded: $($asset.browser_download_url)"
+}
+
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot ".."))
 $resolvedBuildPath = Resolve-RepoPath $BuildPath
 $installPath = Resolve-RepoPath $InstallDir
 $distPath = Resolve-RepoPath $DistDir
 $zipFileName = if ($ZipName) { $ZipName } else { "CoreVideo-Windows-x64-$Version.zip" }
 $zipPath = Join-Path $distPath $zipFileName
+$installerFileName = "CoreVideo-Setup-$Version.exe"
+$installerPath = Join-Path $distPath $installerFileName
+$uninstallListPath = Join-Path $distPath "corevideo-uninstall-files.nsh"
 
 Push-Location $repoRoot
 try {
@@ -220,6 +296,30 @@ try {
     }
     Compress-Archive -Path (Join-Path $installPath "*") -DestinationPath $zipPath -Force
     $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash
+    $installerHash = $null
+
+    if (-not $SkipInstaller) {
+        $makensis = Get-MakeNsis
+        if ($makensis) {
+            New-UninstallFileList -SourceDir $installPath -OutputPath $uninstallListPath
+            if (Test-Path -LiteralPath $installerPath) {
+                Remove-Item -LiteralPath $installerPath -Force
+            }
+            $nsiPath = Resolve-RepoPath "installer/corevideo.nsi"
+            & $makensis `
+                "/DVERSION=$Version" `
+                "/DSOURCE_DIR=$installPath" `
+                "/DOUT_FILE=$installerPath" `
+                "/DFILE_LIST=$uninstallListPath" `
+                $nsiPath
+            if ($LASTEXITCODE -ne 0) {
+                throw "NSIS installer build failed with exit code $LASTEXITCODE"
+            }
+            $installerHash = (Get-FileHash $installerPath -Algorithm SHA256).Hash
+        } else {
+            Write-Warning "NSIS makensis was not found. Skipping installer EXE. Install NSIS or rerun with -SkipInstaller."
+        }
+    }
 
     if ($Install) {
         if (-not (Test-Path -LiteralPath $ObsInstallPath)) {
@@ -234,15 +334,20 @@ try {
             throw "Could not infer GitHub repository from remote.origin.url: $repo"
         }
         $repoFullName = "$($Matches.owner)/$($Matches.name)"
+        $script:RepoFullName = $repoFullName
 
         try {
             $release = Invoke-GitHubApi -Method Get -Uri "https://api.github.com/repos/$repoFullName/releases/tags/$Version"
         } catch {
+            $bodyText = "CoreVideo Windows x64 package. Includes OBS plugin, ZoomObsEngine runtime, and Zoom SDK runtime DLLs.`n`nZIP SHA256: $hash"
+            if ($installerHash) {
+                $bodyText += "`nInstaller SHA256: $installerHash"
+            }
             $body = @{
                 tag_name = $Version
                 target_commitish = $head
                 name = "CoreVideo $Version"
-                body = "CoreVideo Windows x64 package. Includes OBS plugin, ZoomObsEngine runtime, and Zoom SDK runtime DLLs.`n`nSHA256: $hash"
+                body = $bodyText
                 draft = $false
                 prerelease = $Version.Contains("-")
                 generate_release_notes = $true
@@ -250,27 +355,18 @@ try {
             $release = Invoke-GitHubApi -Method Post -Uri "https://api.github.com/repos/$repoFullName/releases" -Body $body
         }
 
-        foreach ($asset in @($release.assets)) {
-            if ($asset.name -eq $zipFileName) {
-                Invoke-GitHubApi -Method Delete -Uri "https://api.github.com/repos/$repoFullName/releases/assets/$($asset.id)" | Out-Null
-            }
+        Upload-ReleaseAsset -Release $release -Path $zipPath -Name $zipFileName -ContentType "application/zip"
+        if ($installerHash) {
+            Upload-ReleaseAsset -Release $release -Path $installerPath -Name $installerFileName -ContentType "application/octet-stream"
         }
-
-        $uploadBase = $release.upload_url.Split("{")[0]
-        $uploadUri = $uploadBase + "?name=" + [uri]::EscapeDataString($zipFileName)
-        $headers = @{
-            Authorization          = "Bearer $script:GitHubToken"
-            Accept                 = "application/vnd.github+json"
-            "X-GitHub-Api-Version" = "2022-11-28"
-            "User-Agent"           = "CoreVideo-Local-Release"
-            "Content-Type"         = "application/zip"
-        }
-        $asset = Invoke-RestMethod -Method Post -Uri $uploadUri -Headers $headers -InFile $zipPath
-        Write-Host "Uploaded: $($asset.browser_download_url)"
     }
 
     Write-Host "Release ZIP: $zipPath"
     Write-Host "SHA256: $hash"
+    if ($installerHash) {
+        Write-Host "Installer: $installerPath"
+        Write-Host "Installer SHA256: $installerHash"
+    }
 } finally {
     Pop-Location
 }

@@ -139,6 +139,13 @@ For fast local releases from a machine that already has the Zoom runtime, use:
 .\scripts\release-local.ps1 -Version v0.1.6 -Upload
 ```
 
+When NSIS is installed, the release script also creates and uploads
+`CoreVideo-Setup-vX.Y.Z.exe`. This is the recommended end-user installer: it
+detects a standard OBS Studio install path, requires OBS to be closed, installs
+the plugin/runtime files, and registers an uninstaller in Windows Apps &
+Features. The ZIP remains available for manual or advanced installs. Pass
+`-SkipInstaller` if you only want the ZIP package.
+
 If an FFmpeg shared development tree exists at `C:\ffmpeg`, local releases
 automatically enable hardware I420->NV12 conversion and bundle the FFmpeg DLLs
 beside the OBS plugin. Pass `-DisableFfmpegHwAccel` to force a CPU-only build.
@@ -152,7 +159,8 @@ Useful options:
 
 The script builds, installs into a staging folder, verifies
 `obs-zoom-plugin.dll`, `ZoomObsEngine.exe`, and `zoom-runtime\sdk.dll`, creates a
-ZIP under `dist/`, and optionally uploads it to the matching GitHub Release.
+ZIP under `dist/`, optionally creates the NSIS setup EXE, and optionally uploads
+both assets to the matching GitHub Release.
 
 ### OBS scene smoke test
 
