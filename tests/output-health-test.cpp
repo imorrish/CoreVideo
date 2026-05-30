@@ -100,5 +100,36 @@ int main()
         return fail("duplicate assignment was not detected on both outputs");
     }
 
+    // Screen share available vs unavailable
+    ZoomOutputInfo share_ok;
+    share_ok.assignment = AssignmentMode::ScreenShare;
+    share_ok.observed_width = 1920;
+    share_ok.observed_height = 1080;
+    ParticipantInfo sharer;
+    sharer.user_id = 99;
+    sharer.is_sharing_screen = true;
+    if (!expect_reason("screen share available", share_ok, {sharer}, true,
+                       ZoomOutputHealthReason::Ok))
+        return 1;
+
+    // Combination: raw media inactive takes precedence over everything
+    ZoomOutputInfo bad;
+    bad.assignment = AssignmentMode::Participant;
+    bad.participant_id = 1;
+    bad.video_stale = true;
+    bad.observed_width = 0;
+    if (!expect_reason("raw media not ready overrides stale", bad, {participant(1)}, false,
+                       ZoomOutputHealthReason::RawMediaNotReady))
+        return 1;
+
+    // Duplicate + participant missing combination (duplicate should win in current logic order)
+    std::vector<ZoomOutputInfo> dup_missing = {output(88), output(88)};
+    dup_missing[0].participant_id = 88;
+    apply_output_health(dup_missing, {}, true); // no roster
+    if (dup_missing[0].health_reason != ZoomOutputHealthReason::DuplicateAssignment ||
+        dup_missing[1].health_reason != ZoomOutputHealthReason::DuplicateAssignment) {
+        return fail("duplicate should be reported even when participant is also missing");
+    }
+
     return 0;
 }
