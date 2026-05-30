@@ -19,6 +19,13 @@ and forwards the same copied buffer to optional plugin-side services such as ISO
 recording. This keeps the engine minimal and makes OBS/plugin features easier to
 test independently from the Zoom SDK.
 
+**Current limitation (high feed counts):** All video frames travel as CPU I420
+through shared memory. At 8+ concurrent 1080p sources this creates substantial
+memory bandwidth pressure due to multiple per-subscription copies. See
+[ROADMAP.md](ROADMAP.md) (Large-meeting capacity guidance) for exploration of
+GPU texture sharing (Spout on Windows, Syphon on macOS) as a lower-CPU
+alternative transport in the future.
+
 ## What It Looks Like in OBS
 
 The CoreVideo plugin is operated from inside OBS. These diagrams mirror the
