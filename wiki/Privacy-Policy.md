@@ -34,12 +34,12 @@ The following local settings may be saved by the plugin:
 
 | Credential / setting | Storage location | Purpose |
 |---|---|---|
-| Zoom OAuth access/refresh tokens | OBS plugin config directory | Zoom sign-in, token refresh, and broker-backed Meeting SDK JWT requests |
+| Zoom OAuth access/refresh tokens | OBS plugin config directory | Zoom sign-in, token refresh, and ZAK requests |
 | Control server token | OBS plugin config directory | Authenticating TCP/OSC API clients |
 | Control server ports | OBS plugin config directory | TCP JSON and UDP OSC port configuration |
 | Output profiles | OBS plugin config directory | Optional participant-to-source mappings |
 
-On Windows, OAuth tokens are DPAPI-protected before storage. Meeting SDK client secrets are not stored in the plugin; they live only as server-side Cloudflare Worker secrets for the published broker.
+On Windows, OAuth tokens are DPAPI-protected before storage. Meeting SDK client secrets are not stored in the plugin or broker for the public-client production path.
 
 ---
 
@@ -54,7 +54,7 @@ CoreVideo uses the **Zoom Meeting SDK** to join and capture meeting content. Whe
 
 ### CoreVideo OAuth Broker
 
-The broker at `corevideo.iamfatness.us` is used only for Zoom OAuth token exchange, refresh, and short-lived Meeting SDK JWT minting. It does not receive or process meeting audio, video, screen share, or participant media.
+The broker at `corevideo.iamfatness.us` is used only for Zoom OAuth token exchange and refresh. It does not receive or process meeting audio, video, screen share, or participant media.
 
 ### Cloudflare and GitHub (Documentation)
 

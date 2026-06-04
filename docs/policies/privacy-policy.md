@@ -46,7 +46,7 @@ Named output profiles (source-to-participant mappings) are saved as JSON files u
 ## 3. Data CoreVideo Does NOT Collect
 
 - CoreVideo does not collect analytics, telemetry, or usage statistics.
-- CoreVideo does not transmit meeting media or participant media to any party other than Zoom (via the Zoom Meeting SDK). Published builds contact the CoreVideo OAuth broker only for Zoom OAuth token exchange, token refresh, and short-lived Meeting SDK JWT minting.
+- CoreVideo does not transmit meeting media or participant media to any party other than Zoom (via the Zoom Meeting SDK). Published builds contact the CoreVideo OAuth broker only for Zoom OAuth token exchange and token refresh.
 - CoreVideo does not use cookies, tracking pixels, or persistent identifiers.
 - CoreVideo does not create accounts or user profiles.
 

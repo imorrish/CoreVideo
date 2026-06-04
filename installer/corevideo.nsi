@@ -64,12 +64,10 @@ done:
 FunctionEnd
 
 Function CheckObsClosed
-  nsExec::ExecToStack 'tasklist /FI "IMAGENAME eq obs64.exe" /NH'
+  nsExec::ExecToStack 'cmd /C tasklist /FI "IMAGENAME eq obs64.exe" /NH ^| findstr /I /R "^obs64\.exe" >NUL'
   Pop $0
   Pop $1
-  ${If} $1 != ""
-  ${AndIf} $1 != "INFO: No tasks are running which match the specified criteria."
-  ${AndIf} $1 != "No tasks are running which match the specified criteria."
+  ${If} $0 == 0
     MessageBox MB_ICONSTOP "OBS Studio is currently running. Close OBS before installing CoreVideo."
     Abort
   ${EndIf}
@@ -98,12 +96,10 @@ Section "Uninstall"
 SectionEnd
 
 Function un.CheckObsClosed
-  nsExec::ExecToStack 'tasklist /FI "IMAGENAME eq obs64.exe" /NH'
+  nsExec::ExecToStack 'cmd /C tasklist /FI "IMAGENAME eq obs64.exe" /NH ^| findstr /I /R "^obs64\.exe" >NUL'
   Pop $0
   Pop $1
-  ${If} $1 != ""
-  ${AndIf} $1 != "INFO: No tasks are running which match the specified criteria."
-  ${AndIf} $1 != "No tasks are running which match the specified criteria."
+  ${If} $0 == 0
     MessageBox MB_ICONSTOP "OBS Studio is currently running. Close OBS before uninstalling CoreVideo."
     Abort
   ${EndIf}

@@ -139,6 +139,8 @@ ZoomPluginSettings ZoomPluginSettings::load()
     }
     if (meeting_sdk_auth_mode && *meeting_sdk_auth_mode)
         s.meeting_sdk_auth_mode = meeting_sdk_auth_mode;
+    if (embedded_public_app_key)
+        s.meeting_sdk_auth_mode = "public_app_key";
     if (s.meeting_sdk_auth_mode != "public_app_key" &&
         s.meeting_sdk_auth_mode != "broker_jwt") {
         s.meeting_sdk_auth_mode = "public_app_key";
@@ -311,7 +313,8 @@ void ZoomPluginSettings::save() const
     config_set_string(cfg, SECTION, "MeetingSdkPublicAppKey",
                       saved_public_app_key.c_str());
     config_set_string(cfg, SECTION, "MeetingSdkAuthMode",
-                      meeting_sdk_auth_mode.c_str());
+                      embedded_public_app_key ? "public_app_key" :
+                          meeting_sdk_auth_mode.c_str());
     config_set_string(cfg, SECTION, "JwtToken",          saved_jwt.c_str());
     config_set_string(cfg, SECTION, "OAuthClientId",     saved_oauth_client_id.c_str());
     // Legacy keys cleared so older builds don't resurrect stale values. Public

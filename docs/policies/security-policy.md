@@ -30,7 +30,7 @@ CoreVideo is designed around the following security principles:
 | **Defence in Depth** | IPC input is validated at both ends; participant IDs are treated as opaque integers; display names are never interpolated into commands |
 | **Secure Defaults** | Control server token authentication is enabled by default; OSC and TCP servers bind to loopback only |
 | **Minimal Attack Surface** | No inbound network listeners accept external connections; all APIs bind to 127.0.0.1 |
-| **Credential Hygiene** | Published builds keep Meeting SDK secrets server-side in the broker; OAuth tokens and SDK JWTs are not logged |
+| **Credential Hygiene** | Published builds use Public Client OAuth and Meeting SDK `publicAppKey`; OAuth tokens and join credentials are not logged |
 | **Fail Safe** | On engine crash or IPC failure, ZoomReconnectManager attempts recovery; sources show placeholder frames rather than stale data |
 
 ## 4. Supported Versions
@@ -70,7 +70,7 @@ The maintainer will acknowledge valid reports within **5 business days** and pro
 
 ### 6.2 Credential Security
 - Published builds do not store Meeting SDK client secrets in the OBS plugin configuration directory
-- Meeting SDK JWTs are minted server-side by the CoreVideo OAuth broker after validating the signed-in Zoom access token
+- Meeting SDK authentication uses the embedded Marketplace Public Client ID as `AuthContext.publicAppKey`
 - OAuth access and refresh tokens are stored in the OBS plugin configuration directory with OS-level protection where available
 - The `zoom-credentials.h.in` template contains only placeholders; no real credentials are committed to VCS
 - GitHub Secret Scanning is active on the repository

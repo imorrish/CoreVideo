@@ -55,7 +55,7 @@ Please include:
 1. Sign out and sign back in from **Tools -> Zoom Plugin Settings**.
 2. Confirm the published broker page is available at `https://corevideo.iamfatness.us/oauth/start`.
 3. Confirm the Zoom Marketplace app has Public Client OAuth enabled, the redirect URL is `https://corevideo.iamfatness.us/oauth/callback`, and Meeting SDK / Embed is enabled for the same environment.
-4. Check the OBS log for `[obs-zoom-plugin]` OAuth or SDK JWT errors.
+4. Check the OBS log for `[obs-zoom-plugin]` OAuth, ZAK, or Meeting SDK auth errors.
 
 ---
 

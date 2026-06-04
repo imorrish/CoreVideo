@@ -28,15 +28,15 @@
 <h3>Credentials and Tokens</h3>
 <p>Published CoreVideo builds use Zoom Public Client OAuth + PKCE through the CoreVideo broker. End users do not enter Zoom app client secrets.</p>
 <p>The following local settings may be saved by the plugin:</p>
-<table><thead><tr><th>Credential / setting</th><th>Storage location</th><th>Purpose</th></tr></thead><tbody><tr><td>Zoom OAuth access/refresh tokens</td><td>OBS plugin config directory</td><td>Zoom sign-in, token refresh, and broker-backed Meeting SDK JWT requests</td></tr><tr><td>Control server token</td><td>OBS plugin config directory</td><td>Authenticating TCP/OSC API clients</td></tr><tr><td>Control server ports</td><td>OBS plugin config directory</td><td>TCP JSON and UDP OSC port configuration</td></tr><tr><td>Output profiles</td><td>OBS plugin config directory</td><td>Optional participant-to-source mappings</td></tr></tbody></table>
-<p>On Windows, OAuth tokens are DPAPI-protected before storage. Meeting SDK client secrets are not stored in the plugin; they live only as server-side Cloudflare Worker secrets for the published broker.</p>
+<table><thead><tr><th>Credential / setting</th><th>Storage location</th><th>Purpose</th></tr></thead><tbody><tr><td>Zoom OAuth access/refresh tokens</td><td>OBS plugin config directory</td><td>Zoom sign-in, token refresh, and ZAK requests</td></tr><tr><td>Control server token</td><td>OBS plugin config directory</td><td>Authenticating TCP/OSC API clients</td></tr><tr><td>Control server ports</td><td>OBS plugin config directory</td><td>TCP JSON and UDP OSC port configuration</td></tr><tr><td>Output profiles</td><td>OBS plugin config directory</td><td>Optional participant-to-source mappings</td></tr></tbody></table>
+<p>On Windows, OAuth tokens are DPAPI-protected before storage. Meeting SDK client secrets are not stored in the plugin or broker for the public-client production path.</p>
 <hr>
 <h2>Third-Party Services</h2>
 <h3>Zoom Meeting SDK</h3>
 <p>CoreVideo uses the <strong>Zoom Meeting SDK</strong> to join and capture meeting content. When joining a meeting, your machine connects to Zoom's infrastructure. Zoom's own privacy policy governs all data exchanged with Zoom's servers:</p>
 <ul><li><a href="https://explore.zoom.us/en/privacy/">Zoom Privacy Policy</a></li><li><a href="https://marketplace.zoom.us/docs/api-reference/developer-agreement">Zoom Marketplace Developer Agreement</a></li></ul>
 <h3>CoreVideo OAuth Broker</h3>
-<p>The broker at <code>corevideo.iamfatness.us</code> is used only for Zoom OAuth token exchange, refresh, and short-lived Meeting SDK JWT minting. It does not receive or process meeting audio, video, screen share, or participant media.</p>
+<p>The broker at <code>corevideo.iamfatness.us</code> is used only for Zoom OAuth token exchange and refresh. It does not receive or process meeting audio, video, screen share, or participant media.</p>
 <h3>Cloudflare and GitHub (Documentation)</h3>
 <p>The documentation site at <code>corevideo.iamfatness.us</code> is served through Cloudflare and sourced from the public CoreVideo GitHub repository. Cloudflare's and GitHub's privacy policies apply to visits to that site:</p>
 <ul><li><a href="https://www.cloudflare.com/privacypolicy/">Cloudflare Privacy Policy</a></li><li><a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a></li></ul>

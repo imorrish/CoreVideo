@@ -69,9 +69,10 @@ audience audio, resolution, video-loss behavior, and hardware conversion.
 
 For external-account meetings, configure OAuth in **Tools > Zoom Plugin
 Settings**. Published builds use the embedded CoreVideo broker URL: the browser
-sign-in uses Zoom Public Client OAuth + PKCE, the broker validates the signed-in
-Zoom user, and the broker returns a short-lived Meeting SDK JWT for the helper
-process. End users do not enter client IDs or secrets.
+sign-in uses Zoom Public Client OAuth + PKCE, CoreVideo fetches the signed-in
+user's ZAK, and the helper authenticates the Meeting SDK with the embedded
+Marketplace Public Client ID as `AuthContext.publicAppKey`. End users do not
+enter client IDs or secrets.
 
 ## Source Assignment
 

@@ -47,7 +47,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **OSC control API** - UDP OSC server on `127.0.0.1:19871` for lighting consoles and broadcast hardware
 - **Output profiles** - save and load named participant-to-source mappings as JSON files
 - **Output manager dock** - dockable OBS panel and API for viewing and reconfiguring all sources at runtime
-- **Broker-backed Meeting SDK authentication** - published builds request a short-lived Meeting SDK JWT from the CoreVideo OAuth broker after Zoom sign-in; SDK secrets stay server-side
+- **Public Client Meeting SDK authentication** - published builds pass the Marketplace Public Client ID as `AuthContext.publicAppKey`; no Meeting SDK secret is shipped in the desktop app
 - **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE (public client, no desktop secret) for attributed joins and Marketplace compliance; the broker start URL is baked in at build time; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows
 - **Visible Zoom Meeting SDK window** - the helper process uses Zoom's default Meeting SDK UI so operators can admit waiting-room participants, start self video/audio, and use normal in-meeting controls while OBS receives raw feeds
 - **SDK 5.17.x and 7.x** - auto-detects flat and subfolder header layouts
@@ -65,7 +65,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 | FFmpeg | Runtime executable | Required for auto ISO recording. Must be on `PATH` or supplied via `ffmpeg_path`. |
 | Zoom Meeting SDK | **5.17.x / 7.x** | Place in `third_party/zoom-sdk/`. Windows builds support the older flat header layout and the newer 7.x subfolder header layout. |
 | C++ compiler | C++17 | MSVC 2022 / Clang 14+ / GCC 11+ |
-| Zoom Developer Account | - | Marketplace app with Public Client OAuth + PKCE, Meeting SDK / Embed enabled, and server-side broker secrets for Meeting SDK JWT minting. |
+| Zoom Developer Account | - | Marketplace app with Public Client OAuth + PKCE and Meeting SDK / Embed enabled for the same environment. |
 
 ## Quick Start
 
@@ -193,16 +193,17 @@ To verify an already-created scene graph without creating or modifying sources:
 
 ## Zoom OAuth PKCE
 
-CoreVideo uses user-level OAuth 2.0 with PKCE through the CoreVideo HTTPS broker for attributed meeting joins and Zoom App Marketplace compliance. Published builds do not ship OAuth or Meeting SDK secrets in the OBS plugin. The broker performs the Zoom token exchange with Public Client OAuth, validates the signed-in user token, and mints a short-lived Meeting SDK JWT server-side for the helper process.
+CoreVideo uses user-level OAuth 2.0 with PKCE through the CoreVideo HTTPS broker for attributed meeting joins and Zoom App Marketplace compliance. Published builds do not ship OAuth or Meeting SDK secrets in the OBS plugin. The broker performs the Zoom token exchange with Public Client OAuth; the helper process authenticates the Meeting SDK with the same Marketplace Public Client ID as `AuthContext.publicAppKey`.
 
 ### Build-time configuration (publisher, one-time)
 Pass the broker identity at CMake configure time:
 ```
 cmake -B build \
+  -DZOOM_EMBED_OAUTH_CLIENT_ID=y6sIWSwiTZe1JygMx4C9EQ \
   -DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=https://corevideo.iamfatness.us/oauth/start \
-  -DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=<optional_legacy_public_app_key> ...
+  -DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=y6sIWSwiTZe1JygMx4C9EQ ...
 ```
-These values are compiled into the plugin and used for every install of that build. There is no UI for entering production credentials, and embedded values override stale `global.ini` entries. The public app key is kept only as a legacy/fallback path; current production builds prefer the broker-minted Meeting SDK JWT.
+These values are compiled into the plugin and used for every install of that build. There is no UI for entering production credentials, and embedded values override stale `global.ini` entries. Current production builds use the Public Client ID for OAuth and pass the same value to the Meeting SDK as `AuthContext.publicAppKey`.
 
 ### Flow
 1. In **Tools -> Zoom Plugin Settings**, click **Authorize with Zoom** (no IDs to enter). The plugin registers the `corevideo://` URL scheme automatically on first use.
@@ -210,7 +211,7 @@ These values are compiled into the plugin and used for every install of that bui
 3. Zoom redirects to `https://corevideo.iamfatness.us/oauth/callback`; the broker returns a short-lived broker token to `corevideo://oauth/callback`.
 4. `CoreVideoOAuthCallback.exe` (Windows) or `CoreVideoOAuthCallback.app` (macOS) forwards the URL to the plugin via the TCP control server (`oauth_callback` command).
 5. The plugin verifies state, redeems the broker token over HTTPS, and persists access + refresh tokens. On Windows, tokens are DPAPI-protected before storage.
-6. Before each meeting join, CoreVideo refreshes the token if needed and asks the broker for a short-lived Meeting SDK JWT. The broker validates the OAuth access token against Zoom before minting the SDK JWT. The Zoom helper process initializes the SDK with that JWT, then joins without passing a ZAK.
+6. Before each meeting join, CoreVideo refreshes the token if needed and fetches the signed-in user's ZAK. The Zoom helper process initializes the SDK with `AuthContext.publicAppKey` set to the embedded Public Client ID and `AuthContext.jwt_token` set to null, then joins with the ZAK.
 
 See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full setup guide and security notes.
 
@@ -407,7 +408,7 @@ CoreVideo/
     |                                         #   HwVideoPipeline, failover, hotkeys, placeholder
     |-- zoom-engine-client.*                  # IPC singleton: engine launch, spotlight/screenshare,
     |                                         #   monitor thread, deferred join, roster callbacks
-    |-- zoom-oauth.*                          # Broker PKCE: ZoomOAuthManager, SDK JWT fetch,
+    |-- zoom-oauth.*                          # Broker PKCE: ZoomOAuthManager, token storage,
     |                                         #   register_url_scheme, token refresh + DPAPI storage
     |-- oauth-callback-helper.cpp             # Windows: CoreVideoOAuthCallback.exe entry point
     |-- oauth-callback-helper-macos.mm        # macOS: CoreVideoOAuthCallback.app entry point

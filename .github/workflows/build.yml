@@ -182,9 +182,9 @@ jobs:
               "-DZOOM_EMBED_SDK_KEY=${{ secrets.ZOOM_EMBED_SDK_KEY }}" `
               "-DZOOM_EMBED_SDK_SECRET=${{ secrets.ZOOM_EMBED_SDK_SECRET }}" `
               "-DZOOM_EMBED_JWT_TOKEN=${{ secrets.ZOOM_EMBED_JWT_TOKEN }}" `
-              "-DZOOM_EMBED_OAUTH_CLIENT_ID=${{ secrets.ZOOM_EMBED_OAUTH_CLIENT_ID }}" `
+              "-DZOOM_EMBED_OAUTH_CLIENT_ID=y6sIWSwiTZe1JygMx4C9EQ" `
               "-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=${{ secrets.ZOOM_EMBED_OAUTH_AUTHORIZATION_URL }}" `
-              "-DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=${{ secrets.ZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY }}"
+              "-DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=y6sIWSwiTZe1JygMx4C9EQ"
 
       - name: Build
         run: cmake --build build --config Release --parallel
@@ -299,9 +299,9 @@ jobs:
               "-DZOOM_EMBED_SDK_KEY=${{ secrets.ZOOM_EMBED_SDK_KEY }}" \
               "-DZOOM_EMBED_SDK_SECRET=${{ secrets.ZOOM_EMBED_SDK_SECRET }}" \
               "-DZOOM_EMBED_JWT_TOKEN=${{ secrets.ZOOM_EMBED_JWT_TOKEN }}" \
-              "-DZOOM_EMBED_OAUTH_CLIENT_ID=${{ secrets.ZOOM_EMBED_OAUTH_CLIENT_ID }}" \
+              "-DZOOM_EMBED_OAUTH_CLIENT_ID=y6sIWSwiTZe1JygMx4C9EQ" \
               "-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=${{ secrets.ZOOM_EMBED_OAUTH_AUTHORIZATION_URL }}" \
-              "-DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=${{ secrets.ZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY }}"
+              "-DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=y6sIWSwiTZe1JygMx4C9EQ"
 
       - name: Build
         run: cmake --build build --parallel

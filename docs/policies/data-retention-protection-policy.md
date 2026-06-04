@@ -40,7 +40,7 @@ This policy covers all data categories processed by CoreVideo:
 | Participant roster | Duration of meeting session | Cleared in-memory on `left` IPC event or OBS close |
 | Active speaker state | Duration of meeting session | Cleared on meeting leave |
 | Meeting credentials (ID, passcode) | Duration of join attempt | Cleared from ZoomReconnectManager storage after successful join or final failure |
-| SDK JWT tokens | Single use (short-lived) | Discarded after SDK auth call |
+| Meeting SDK public app key | Build lifetime | Public Marketplace identifier embedded in the plugin |
 
 ### 4.2 Persistent Data (Filesystem)
 | Data Type | Storage Location | Default Retention | Disposal Procedure |
@@ -54,14 +54,14 @@ This policy covers all data categories processed by CoreVideo:
 Named shared memory regions (prefixed `ZoomObsPlugin_<UUID>`) are created at session start and destroyed when the ZoomObsEngine process exits. They do not persist across reboots. On Linux, `/dev/shm/` entries are removed automatically on process exit.
 
 ### 4.4 No Server-Side Retention
-CoreVideo does not transmit meeting media to any server operated by the CoreVideo project. Published builds contact the CoreVideo OAuth broker only for OAuth token exchange, refresh, and short-lived Meeting SDK JWT minting.
+CoreVideo does not transmit meeting media to any server operated by the CoreVideo project. Published builds contact the CoreVideo OAuth broker only for OAuth token exchange and refresh.
 
 ## 5. Data Protection Controls
 
 ### 5.1 Credentials
 - OAuth tokens and the control server token are stored in the OBS plugin configuration file with default filesystem permissions (owner read/write only on POSIX; user-profile restricted on Windows). On Windows, OAuth tokens are DPAPI-protected before storage.
-- Credentials, access tokens, refresh tokens, broker tokens, and SDK JWTs are never written to log files, debug output, or IPC messages.
-- Meeting SDK secrets are not stored in the OBS plugin; they live only as server-side broker secrets.
+- Credentials, access tokens, refresh tokens, broker tokens, and ZAKs are never written to log files, debug output, or IPC messages.
+- Meeting SDK secrets are not stored in the OBS plugin or broker for the public-client production path.
 
 ### 5.2 Participant Data
 - Participant display names are handled as opaque strings; they are never interpolated into shell commands, SQL queries, or format strings.

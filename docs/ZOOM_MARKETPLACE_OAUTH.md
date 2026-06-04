@@ -1,9 +1,10 @@
 # Zoom Marketplace OAuth setup
 
-CoreVideo uses Zoom Public Client OAuth + PKCE for user sign-in and a
-server-side broker to mint short-lived Meeting SDK JWTs for the helper process.
-This keeps OAuth and Meeting SDK secrets out of the OBS plugin while still
-supporting attributed joins, external-account meetings, and Marketplace review.
+CoreVideo uses Zoom Public Client OAuth + PKCE for user sign-in and the same
+Marketplace Public Client ID as the Meeting SDK `publicAppKey` for the helper
+process. This keeps OAuth and Meeting SDK secrets out of the OBS plugin while
+still supporting attributed joins, external-account meetings, and Marketplace
+review.
 
 Published builds use an HTTPS OAuth broker at `corevideo.iamfatness.us`. The OBS
 plugin only knows the broker start URL. End users never enter app credentials or
@@ -34,12 +35,12 @@ ZOOM_OAUTH_AUTHORIZE_URL=https://marketplace.zoom.us/v2/authorize
 ZOOM_OAUTH_REDIRECT_URI=https://corevideo.iamfatness.us/oauth/callback
 ZOOM_OAUTH_SCOPES=user:read:token user:read:user
 COREVIDEO_OAUTH_BROKER_SECRET=<random 32+ byte secret>
-ZOOM_MEETING_SDK_CLIENT_ID=<Meeting SDK client/app key for this environment>
-ZOOM_MEETING_SDK_CLIENT_SECRET=<Meeting SDK client/app secret for this environment>
 ```
 
-The Meeting SDK secret is stored only as a Cloudflare Worker secret. It must not
-be committed, baked into the OBS plugin, or entered by end users.
+The broker performs OAuth token exchange only. Meeting SDK auth uses the
+public client ID compiled into CoreVideo as `publicAppKey`; no Meeting SDK
+client secret is stored by the broker, committed, baked into the OBS plugin, or
+entered by end users.
 
 ## Embedding the app identity into the build (publisher)
 
@@ -48,7 +49,9 @@ setting. CoreVideo bakes it in at compile time:
 
 ```
 cmake -B build \
+  -DZOOM_EMBED_OAUTH_CLIENT_ID=y6sIWSwiTZe1JygMx4C9EQ \
   -DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=https://corevideo.iamfatness.us/oauth/start ...
+  -DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=y6sIWSwiTZe1JygMx4C9EQ ...
 ```
 
 In CI, pass the values as GitHub Actions secrets so they never land in the
@@ -87,12 +90,11 @@ local config cannot change the published app identity. Developers can still use
    `client_id` and `code_verifier` in the form body, with no client secret and
    no Authorization header.
 6. Before joining a meeting, the plugin refreshes the access token through the
-   broker if needed and calls `/oauth/sdk-jwt`.
-7. The broker validates the OAuth access token against
-   `GET https://api.zoom.us/v2/users/me`, then signs a short-lived Meeting SDK
-   JWT with the server-side Meeting SDK client ID/secret.
-8. The plugin starts `ZoomObsEngine` with that SDK JWT and joins the meeting.
-   The helper uses Zoom's default Meeting SDK window, so the operator can admit
+   broker if needed and fetches the signed-in user's ZAK from Zoom.
+7. The plugin starts `ZoomObsEngine` with `AuthContext.publicAppKey` set to the
+   embedded Marketplace Public Client ID and `AuthContext.jwt_token` set to
+   null. The helper joins with the signed-in user's ZAK.
+8. The helper uses Zoom's default Meeting SDK window, so the operator can admit
    waiting-room participants, manage self video/audio, and use normal meeting
    controls.
 
@@ -109,10 +111,10 @@ local config cannot change the published app identity. Developers can still use
   returns.
 - Windows builds must ship Qt's TLS backend plugins, especially the Schannel
   backend under `obs-plugins/64bit/plugins/tls`, or OAuth HTTPS requests will
-  fail before broker tokens or SDK JWTs can be fetched.
+  fail before broker tokens or ZAKs can be fetched.
 - The URL callback command bypasses the local control-server token, but the
   OAuth `state` is still required before any broker token can be redeemed.
-- Do not log access tokens, refresh tokens, SDK JWTs, authorization codes,
+- Do not log access tokens, refresh tokens, ZAKs, authorization codes,
   broker tokens, OAuth state values, or Meeting SDK secrets.
 
 ## Marketplace review checklist

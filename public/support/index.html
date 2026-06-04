@@ -32,7 +32,7 @@
 <h3>OAuth sign-in or join authentication fails</h3>
 <p><strong>Cause:</strong> The local plugin, published broker, or Zoom Marketplace app environment is out of sync.</p>
 <p><strong>Fix:</strong></p>
-<ol><li>Sign out and sign back in from <strong>Tools -&gt; Zoom Plugin Settings</strong>.</li><li>Confirm the published broker page is available at <code>https://corevideo.iamfatness.us/oauth/start</code>.</li><li>Confirm the Zoom Marketplace app has Public Client OAuth enabled, the redirect URL is <code>https://corevideo.iamfatness.us/oauth/callback</code>, and Meeting SDK / Embed is enabled for the same environment.</li><li>Check the OBS log for <code>[obs-zoom-plugin]</code> OAuth or SDK JWT errors.</li></ol>
+<ol><li>Sign out and sign back in from <strong>Tools -&gt; Zoom Plugin Settings</strong>.</li><li>Confirm the published broker page is available at <code>https://corevideo.iamfatness.us/oauth/start</code>.</li><li>Confirm the Zoom Marketplace app has Public Client OAuth enabled, the redirect URL is <code>https://corevideo.iamfatness.us/oauth/callback</code>, and Meeting SDK / Embed is enabled for the same environment.</li><li>Check the OBS log for <code>[obs-zoom-plugin]</code> OAuth, ZAK, or Meeting SDK auth errors.</li></ol>
 <hr>
 <h3>Engine fails to start / IPC connection timeout</h3>
 <p><strong>Cause:</strong> <code>ZoomObsEngine</code> could not be launched or located.</p>
