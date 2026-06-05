@@ -40,7 +40,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **Webinar support** - join Zoom Webinars using the dedicated SDK entry point (Webinar checkbox in control dock)
 - **Participant roster** - live list with video, mute, talking, host, co-host, raised hand, spotlight slot, and screen-sharing state
 - **Control dock** - dockable Qt panel with animated status dot, join/leave, token-type selector, recovery countdown, Active Speaker Director controls, and a routing section that opens the dedicated Output Manager; persists last meeting ID and display name across sessions
-- **Diagnostics dock** - dockable OBS panel showing requested vs observed resolution, FPS, frame age, retry counts, and recent engine debug events for live troubleshooting
+- **Diagnostics dock** - dockable OBS panel showing requested vs observed resolution, FPS, frame age, retry counts, recent engine debug events, and a redacted support-bundle export for live troubleshooting
 - **Auto-reconnect** - exponential back-off recovery after engine crash, network drop, or unexpected disconnect
 - **OBS hotkeys** - per-source hotkeys to enable/disable active speaker mode
 - **TCP control API** - JSON server on `127.0.0.1:19870` for scripts and dashboards; includes `oauth_callback` command for custom URL scheme forwarding
@@ -63,13 +63,13 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 | CMake | 3.16+ | Build system |
 | Qt | 6.x | Core + Network + Widgets |
 | FFmpeg | Runtime executable | Required for auto ISO recording. Must be on `PATH` or supplied via `ffmpeg_path`. |
-| Zoom Meeting SDK | **5.17.x / 7.x** | Place in `third_party/zoom-sdk/`. Windows builds support the older flat header layout and the newer 7.x subfolder header layout. |
+| Zoom Meeting SDK | **5.17.x / 7.x** | Source builds only: place in `third_party/zoom-sdk/`. Official Windows release downloads bundle the runtime files needed by end users. |
 | C++ compiler | C++17 | MSVC 2022 / Clang 14+ / GCC 11+ |
 | Zoom Developer Account | - | Marketplace app with Public Client OAuth + PKCE and Meeting SDK / Embed enabled for the same environment. |
 
 ## Quick Start
 
-1. **Get the Zoom SDK** - download from the [Zoom Developer Portal](https://developers.zoom.us/docs/meeting-sdk/releases/) and place it at `third_party/zoom-sdk/`. CMake auto-detects x64/arm64/x86 sub-layouts on Windows.
+1. **For source builds, get the Zoom SDK** - download from the [Zoom Developer Portal](https://developers.zoom.us/docs/meeting-sdk/releases/) and place it at `third_party/zoom-sdk/`. CMake auto-detects x64/arm64/x86 sub-layouts on Windows. End users installing an official Windows release do not need to download or provide SDK files.
 
 2. **Configure & build**
    ```sh
@@ -128,10 +128,10 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 ### Windows release packaging
 
 GitHub Actions can validate the Windows build without the restricted Zoom
-runtime, but public client releases must include `zoom-runtime\sdk.dll` and the
-other Zoom SDK runtime DLLs. If `ZOOM_SDK_WINDOWS_URL` is not configured as a
-GitHub repository secret, CI skips publishing a GitHub Release instead of
-shipping an incomplete package.
+runtime, but public client releases must include `ZoomObsEngine.exe`,
+`zoom-runtime\sdk.dll`, Qt TLS plugins, and the other bundled runtime files. If
+`ZOOM_SDK_WINDOWS_URL` is not configured as a GitHub repository secret, CI skips
+publishing a GitHub Release instead of shipping an incomplete package.
 
 For fast local releases from a machine that already has the Zoom runtime, use:
 
@@ -141,10 +141,11 @@ For fast local releases from a machine that already has the Zoom runtime, use:
 
 When NSIS is installed, the release script also creates and uploads
 `CoreVideo-Setup-vX.Y.Z.exe`. This is the recommended end-user installer: it
-detects a standard OBS Studio install path, requires OBS to be closed, installs
-the plugin/runtime files, and registers an uninstaller in Windows Apps &
-Features. The ZIP remains available for manual or advanced installs. Pass
-`-SkipInstaller` if you only want the ZIP package.
+verifies the staged plugin/runtime files, detects a standard OBS Studio install
+path, requires OBS to be closed, installs the files, verifies the installed
+runtime, and registers an uninstaller in Windows Apps & Features. The ZIP
+remains available for manual or advanced installs. Pass `-SkipInstaller` if you
+only want the ZIP package.
 
 If an FFmpeg shared development tree exists at `C:\ffmpeg`, local releases
 automatically enable hardware I420->NV12 conversion and bundle the FFmpeg DLLs
@@ -157,16 +158,17 @@ Useful options:
 .\scripts\release-local.ps1 -Version v0.1.6 -BuildPath build-nmake -Upload
 ```
 
-The script builds, installs into a staging folder, verifies
-`obs-zoom-plugin.dll`, `ZoomObsEngine.exe`, and `zoom-runtime\sdk.dll`, creates a
-ZIP under `dist/`, optionally creates the NSIS setup EXE, and optionally uploads
-both assets to the matching GitHub Release.
+The script builds, installs into a staging folder, verifies the plugin, OAuth
+callback helper, Qt TLS backend, `ZoomObsEngine.exe`, and `zoom-runtime\sdk.dll`,
+creates a ZIP under `dist/`, optionally creates the NSIS setup EXE, and
+optionally uploads both assets to the matching GitHub Release.
 
 ### OBS scene smoke test
 
-Use the OBS smoke test when validating Sidecar/OBS scene graph behavior on a
-machine with OBS running and obs-websocket enabled. The script connects directly
-to obs-websocket v5, creates a deterministic CoreVideo test scene, links
+Use the OBS smoke test when validating plugin-created OBS scene graph behavior
+on a machine with OBS running and obs-websocket enabled. It does not exercise
+the optional Sidecar UI. The script connects directly to obs-websocket v5,
+creates a deterministic CoreVideo test scene, links
 participant sources through nested slot scenes, switches OBS to the test scene,
 and audits that the expected scenes, inputs, and scene items are present.
 
@@ -238,8 +240,11 @@ Commands: `help`, `status`, `list_participants`, `list_outputs`, `assign_output`
 ### Auto ISO Recording
 
 Use **OBS -> Tools -> Zoom ISO Recorder** for the operator UI. The dock provides
-an output-folder picker, FFmpeg path/test controls, a program-recording toggle,
-Start/Stop buttons, and a live table of active ISO sessions and file paths.
+an output-folder picker, FFmpeg path/test controls, CPU/GPU H.264 encoder
+selection, a program-recording toggle, Start/Stop buttons, disk-space warnings,
+and a live table of active ISO sessions and file paths. The recorder blocks
+starts below 2 GB free, warns below 10 GB free, and surfaces FFmpeg process
+errors in the session table and TCP/OSC status JSON.
 
 ```sh
 # Start ISO recording. record_program=true also starts OBS program recording.
@@ -340,7 +345,7 @@ OBS Studio
     |                           meeting ID + display name
     |-- ZoomOAuthManager      - broker-backed OAuth 2.0 PKCE: begin_authorization,
     |                           handle_redirect_url, register_url_scheme,
-    |                           refresh_access_token_blocking, fetch_sdk_jwt_blocking;
+    |                           refresh_access_token_blocking, fetch_user_zak_blocking;
     |                           DPAPI token storage on Windows
     |-- ZoomEngineClient  *  - IPC singleton: launches engine, owns pipes/sockets,
     |                           tracks roster/speaker, dispatches frame callbacks,
@@ -422,7 +427,7 @@ CoreVideo/
     |-- hw-video-pipeline.*                   # FFmpeg I420->NV12 (CUDA/VAAPI/VideoToolbox/QSV)
     |-- zoom-audio-delegate.*                 # Mixed/isolated SDK audio -> OBS
     |-- zoom-audio-router.*                   # Central SDK audio fan-out
-    |-- zoom-auth.*                           # SDK JWT auth + observable auth state
+    |-- zoom-auth.*                           # legacy/manual SDK auth state helpers
     |-- zoom-meeting.*                        # Meeting state machine
     |-- zoom-participants.*                   # Roster, active speaker, spotlight callbacks
     |-- zoom-participant-audio-source.*       # Per-participant audio OBS source

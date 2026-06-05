@@ -152,6 +152,16 @@ static uint32_t height_for_resolution(VideoResolution res)
     }
 }
 
+static bool observed_satisfies_resolution(uint32_t observed_w,
+                                          uint32_t observed_h,
+                                          VideoResolution requested)
+{
+    if (observed_w == 0 || observed_h == 0)
+        return false;
+    return observed_w + 8 >= width_for_resolution(requested) &&
+           observed_h + 8 >= height_for_resolution(requested);
+}
+
 static uint8_t clamp_u8(int value)
 {
     return static_cast<uint8_t>(std::max(0, std::min(255, value)));
@@ -683,6 +693,13 @@ void ZoomSource::configure_output_ex(AssignmentMode mode,
 void ZoomSource::subscribe()
 {
     if (source_uuid.empty()) source_uuid = make_source_uuid();
+    if (!ZoomEngineClient::instance().is_running()) {
+        m_subscribed = false;
+        m_current_subscription_id = 0;
+        m_director_preview_subscription_id = 0;
+        m_last_subscribe_ns.store(0, std::memory_order_release);
+        return;
+    }
 
     const AssignmentMode mode = assignment.load(std::memory_order_acquire);
     switch (mode) {
@@ -757,6 +774,8 @@ void ZoomSource::unsubscribe()
     m_subscribed = false;
     m_current_subscription_id = 0;
     m_director_preview_subscription_id = 0;
+    m_width.store(0, std::memory_order_relaxed);
+    m_height.store(0, std::memory_order_relaxed);
     m_observed_fps_x100.store(0, std::memory_order_relaxed);
     m_last_frame_ns.store(0, std::memory_order_relaxed);
     m_last_subscribe_ns.store(0, std::memory_order_relaxed);
@@ -770,6 +789,10 @@ bool ZoomSource::recover_stale_video(uint64_t now_ns, bool force)
 {
     if (!m_active.load(std::memory_order_acquire) ||
         !m_subscribed.load(std::memory_order_acquire))
+        return false;
+    if (!ZoomEngineClient::instance().is_running() ||
+        ZoomEngineClient::instance().state() != MeetingState::InMeeting ||
+        !ZoomEngineClient::instance().is_media_active())
         return false;
 
     const uint64_t last_frame_ns =
@@ -820,10 +843,15 @@ bool ZoomSource::upgrade_low_quality_video(uint64_t now_ns, bool force)
     if (!m_active.load(std::memory_order_acquire) ||
         !m_subscribed.load(std::memory_order_acquire))
         return false;
+    if (!ZoomEngineClient::instance().is_running() ||
+        ZoomEngineClient::instance().state() != MeetingState::InMeeting ||
+        !ZoomEngineClient::instance().is_media_active())
+        return false;
 
     const uint32_t observed_w = m_width.load(std::memory_order_relaxed);
     const uint32_t observed_h = m_height.load(std::memory_order_relaxed);
-    if (observed_w == 0 || observed_h == 0 || observed_h >= 1080)
+    if (observed_w == 0 || observed_h == 0 ||
+        observed_satisfies_resolution(observed_w, observed_h, resolution))
         return false;
 
     const uint32_t requested_w = width_for_resolution(resolution);
@@ -888,9 +916,15 @@ void ZoomSource::deactivate()
 
 void ZoomSource::on_roster_changed()
 {
-    if (!m_subscribed) return;
-
     const AssignmentMode mode = assignment.load(std::memory_order_acquire);
+    if (!m_subscribed) {
+        if (m_active.load(std::memory_order_acquire) &&
+            source_wants_subscription(
+                mode, participant_id.load(std::memory_order_acquire)))
+            subscribe();
+        return;
+    }
+
     // Spotlight & screen-share assignments are resolved by the engine on
     // every roster change; nothing for the plugin to do here.
     if (mode == AssignmentMode::SpotlightIndex ||
@@ -1175,6 +1209,10 @@ bool ZoomSource::output_video_from_shared_memory(
     m_last_frame_ns.store(ts, std::memory_order_relaxed);
     m_last_stale_recover_ns.store(0, std::memory_order_relaxed);
     m_stale_recover_attempts.store(0, std::memory_order_relaxed);
+    if (observed_satisfies_resolution(observed_w, observed_h, resolution)) {
+        m_last_quality_upgrade_ns.store(0, std::memory_order_relaxed);
+        m_quality_upgrade_attempts.store(0, std::memory_order_relaxed);
+    }
 
     const uint64_t now_ns = os_gettime_ns();
     if (m_preview_cb && now_ns - m_preview_last_ns >= kPreviewIntervalNs) {

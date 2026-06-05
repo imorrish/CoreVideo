@@ -30,12 +30,21 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+static constexpr qint64 kIsoMinimumFreeBytes = 2ll * 1024ll * 1024ll * 1024ll;
+static constexpr qint64 kIsoWarningFreeBytes = 10ll * 1024ll * 1024ll * 1024ll;
+
 static QString default_iso_output_dir()
 {
     const QString docs = QStandardPaths::writableLocation(
         QStandardPaths::DocumentsLocation);
     const QString base = docs.isEmpty() ? QDir::homePath() : docs;
     return QDir(base).absoluteFilePath("CoreVideo ISOs");
+}
+
+static QString effective_output_dir(const QString &text)
+{
+    const QString trimmed = text.trimmed();
+    return trimmed.isEmpty() ? default_iso_output_dir() : trimmed;
 }
 
 static bool ffmpeg_exists(const QString &path)
@@ -63,6 +72,16 @@ static QString bytes_text(qint64 bytes)
         return QString("%1 GB").arg(gb, 0, 'f', 1);
     const double mb = static_cast<double>(bytes) / (1024.0 * 1024.0);
     return QString("%1 MB").arg(mb, 0, 'f', 1);
+}
+
+static QStorageInfo storage_for_output_dir(const QString &path)
+{
+    QFileInfo info(effective_output_dir(path));
+    while (!info.exists() && !info.absolutePath().isEmpty() &&
+           info.absolutePath() != info.absoluteFilePath()) {
+        info = QFileInfo(info.absolutePath());
+    }
+    return QStorageInfo(info.absoluteFilePath());
 }
 
 static int encoder_index(QComboBox *combo, const std::string &encoder)
@@ -282,6 +301,28 @@ void ZoomIsoPanel::start_recording()
     persist_settings();
     set_error(QString());
 
+    const QStorageInfo storage = storage_for_output_dir(m_output_dir->text());
+    if (storage.isValid() && storage.isReady()) {
+        const qint64 available = storage.bytesAvailable();
+        if (available < kIsoMinimumFreeBytes) {
+            set_error(QString("Only %1 is free in the ISO output folder. "
+                              "Free at least %2 before starting ISO recording.")
+                          .arg(bytes_text(available),
+                               bytes_text(kIsoMinimumFreeBytes)));
+            return;
+        }
+        if (available < kIsoWarningFreeBytes) {
+            const int choice = QMessageBox::warning(
+                this, "Low Disk Space",
+                QString("Only %1 is free in the ISO output folder. ISO files "
+                        "can grow quickly. Continue recording?")
+                    .arg(bytes_text(available)),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (choice != QMessageBox::Yes)
+                return;
+        }
+    }
+
     ZoomIsoRecordConfig config;
     config.output_dir = m_output_dir->text().trimmed().toStdString();
     config.ffmpeg_path = m_ffmpeg_path->text().trimmed().toStdString();
@@ -326,11 +367,11 @@ void ZoomIsoPanel::refresh_status()
               .arg(sessions.size() == 1 ? "" : "s")
         : QStringLiteral("Idle"));
 
-    const QStorageInfo storage(m_output_dir->text());
+    const QStorageInfo storage = storage_for_output_dir(m_output_dir->text());
     if (storage.isValid() && storage.isReady()) {
         m_disk_status->setText(QString("Free space: %1")
             .arg(bytes_text(storage.bytesAvailable())));
-        m_disk_status->setStyleSheet(storage.bytesAvailable() < 10ll * 1024ll * 1024ll * 1024ll
+        m_disk_status->setStyleSheet(storage.bytesAvailable() < kIsoWarningFreeBytes
             ? "color: #f0b429; font-weight: 700;"
             : QString());
     } else {
@@ -349,10 +390,14 @@ void ZoomIsoPanel::refresh_status()
             .arg(elapsed_ms / 60000)
             .arg((elapsed_ms / 1000) % 60, 2, 10, QLatin1Char('0'));
         const bool ffmpeg_running = s.value("ffmpeg_running").toBool();
+        const QString ffmpeg_error = s.value("ffmpeg_error").toString();
+        const QString ffmpeg_output = s.value("ffmpeg_output_tail").toString();
         const int video_frames = s.value("video_frames").toInt();
         const int audio_chunks = s.value("audio_chunks").toInt();
         QString status = ffmpeg_running ? QStringLiteral("Recording") : QStringLiteral("Encoder stopped");
-        if (video_frames == 0)
+        if (!ffmpeg_error.isEmpty())
+            status = QStringLiteral("Encoder error");
+        else if (video_frames == 0)
             status = QStringLiteral("Waiting for video");
         else if (audio_chunks == 0)
             status += QStringLiteral(" / no audio yet");
@@ -367,6 +412,12 @@ void ZoomIsoPanel::refresh_status()
         m_sessions->setItem(row, 0, item(s.value("source").toString()));
         m_sessions->setItem(row, 1, item(participant));
         auto *status_item = item(status);
+        if (!ffmpeg_error.isEmpty()) {
+            QString tooltip = ffmpeg_error;
+            if (!ffmpeg_output.isEmpty())
+                tooltip += QString("\n\nFFmpeg output:\n%1").arg(ffmpeg_output);
+            status_item->setToolTip(tooltip);
+        }
         if (!ffmpeg_running || video_frames == 0)
             status_item->setForeground(QColor("#f0b429"));
         m_sessions->setItem(row, 2, status_item);

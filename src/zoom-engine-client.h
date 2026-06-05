@@ -65,6 +65,7 @@ public:
     void unsubscribe(const std::string &source_uuid);
 
     MeetingState state() const { return m_state.load(std::memory_order_acquire); }
+    bool is_running() const { return m_running.load(std::memory_order_acquire); }
     bool is_authenticated() const { return m_authenticated.load(std::memory_order_acquire); }
     bool is_media_active() const { return m_media_active.load(std::memory_order_acquire); }
     std::string last_error() const;

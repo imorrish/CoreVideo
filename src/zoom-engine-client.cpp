@@ -40,11 +40,43 @@ static bool is_permanent_meeting_failure(int code)
     }
 }
 
+static std::string redacted_tail(const std::string &value)
+{
+    if (value.empty()) return "empty";
+    if (value.size() <= 4) return "****";
+    return "****" + value.substr(value.size() - 4);
+}
+
 static std::string zoom_error_message(const QJsonObject &obj)
 {
+    const QString cmd = obj.value("cmd").toString();
     const QString msg = obj.value("msg").toString();
     const QString reason = obj.value("reason").toString();
+    const QString name = obj.value("name").toString();
+    const QString stage = obj.value("stage").toString();
+    const QString auth_mode = obj.value("auth_mode").toString();
     const int code = obj.value("code").toInt(0);
+
+    if (cmd == "auth_fail") {
+        std::string out = auth_mode == "public_app_key"
+            ? "Zoom SDK public app key authentication failed"
+            : "Zoom SDK authentication failed";
+        if (!stage.isEmpty())
+            out += " at " + stage.toStdString();
+        if (code != 0 || (!name.isEmpty() && auth_mode != "public_app_key")) {
+            out += " (";
+            if (code != 0)
+                out += std::to_string(code);
+            if (!name.isEmpty() && auth_mode != "public_app_key") {
+                if (code != 0) out += " ";
+                out += name.toStdString();
+            }
+            out += ")";
+        }
+        if (auth_mode == "public_app_key")
+            out += ". Confirm the Marketplace Public Client ID is enabled for Meeting SDK Embed on this app/environment.";
+        return out;
+    }
 
     if (msg == "meeting_failed") {
         if (code == 63) {
@@ -215,9 +247,15 @@ bool ZoomEngineClient::start(const std::string &jwt_token,
     m_reader  = std::thread([this]() { reader_loop(); });
     m_monitor = std::thread([this]() { monitor_loop(); });
     if (!public_app_key.empty()) {
+        blog(LOG_INFO,
+             "[obs-zoom-plugin] Zoom engine init auth=public_app_key public_app_key_tail=%s jwt_present=0",
+             redacted_tail(public_app_key).c_str());
         write_json(R"({"cmd":"init","public_app_key":")" +
                    json_escape(public_app_key) + "\"}");
     } else {
+        blog(LOG_INFO,
+             "[obs-zoom-plugin] Zoom engine init auth=jwt public_app_key_tail=empty jwt_present=%d",
+             jwt_token.empty() ? 0 : 1);
         write_json(R"({"cmd":"init","jwt":")" + json_escape(jwt_token) + "\"}");
     }
     return true;

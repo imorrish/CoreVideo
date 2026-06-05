@@ -242,6 +242,13 @@ ZoomPluginSettings ZoomPluginSettings::load()
     return s;
 }
 
+std::string ZoomPluginSettings::resolved_meeting_sdk_public_app_key() const
+{
+    if (meeting_sdk_auth_mode == "public_app_key" && !oauth_client_id.empty())
+        return oauth_client_id;
+    return sdk_public_app_key;
+}
+
 std::string ZoomPluginSettings::resolved_jwt_token() const
 {
     if (!jwt_token.empty() && looks_like_jwt(jwt_token)) return jwt_token;

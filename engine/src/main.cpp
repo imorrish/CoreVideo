@@ -41,6 +41,49 @@
 #include <mutex>
 #include <vector>
 
+static std::string redacted_tail(const std::string &value)
+{
+    if (value.empty()) return "empty";
+    if (value.size() <= 4) return "****";
+    return "****" + value.substr(value.size() - 4);
+}
+
+static const char *auth_result_name(ZOOMSDK::AuthResult ret)
+{
+    switch (ret) {
+    case ZOOMSDK::AUTHRET_SUCCESS:
+        return "AUTHRET_SUCCESS";
+    case ZOOMSDK::AUTHRET_KEYORSECRETEMPTY:
+        return "AUTHRET_KEYORSECRETEMPTY";
+    case ZOOMSDK::AUTHRET_KEYORSECRETWRONG:
+        return "AUTHRET_KEYORSECRETWRONG";
+    case ZOOMSDK::AUTHRET_ACCOUNTNOTSUPPORT:
+        return "AUTHRET_ACCOUNTNOTSUPPORT";
+    case ZOOMSDK::AUTHRET_ACCOUNTNOTENABLESDK:
+        return "AUTHRET_ACCOUNTNOTENABLESDK";
+    case ZOOMSDK::AUTHRET_UNKNOWN:
+        return "AUTHRET_UNKNOWN";
+    case ZOOMSDK::AUTHRET_SERVICE_BUSY:
+        return "AUTHRET_SERVICE_BUSY";
+    case ZOOMSDK::AUTHRET_NONE:
+        return "AUTHRET_NONE";
+    case ZOOMSDK::AUTHRET_OVERTIME:
+        return "AUTHRET_OVERTIME";
+    case ZOOMSDK::AUTHRET_NETWORKISSUE:
+        return "AUTHRET_NETWORKISSUE";
+    case ZOOMSDK::AUTHRET_CLIENT_INCOMPATIBLE:
+        return "AUTHRET_CLIENT_INCOMPATIBLE";
+    case ZOOMSDK::AUTHRET_JWTTOKENWRONG:
+        return "AUTHRET_JWTTOKENWRONG";
+    case ZOOMSDK::AUTHRET_LIMIT_EXCEEDED_EXCEPTION:
+        return "AUTHRET_LIMIT_EXCEEDED_EXCEPTION";
+    default:
+        return "AUTHRET_UNRECOGNIZED";
+    }
+}
+
+static std::string g_current_auth_mode = "unknown";
+
 // ── Platform setup ────────────────────────────────────────────────────────────
 #if defined(WIN32)
 #  include <windows.h>
@@ -582,7 +625,10 @@ public:
             EngineIpc::write( R"({"cmd":"auth_ok"})");
         } else
             EngineIpc::write( R"({"cmd":"auth_fail","code":)" +
-                           std::to_string(static_cast<int>(ret)) + "}");
+                           std::to_string(static_cast<int>(ret)) +
+                           R"(,"name":")" + auth_result_name(ret) +
+                           R"(","auth_mode":")" +
+                           json_escape(g_current_auth_mode) + "\"}");
     }
     void onLoginReturnWithReason(ZOOMSDK::LOGINSTATUS,
                                  ZOOMSDK::IAccountInfo *,
@@ -1091,10 +1137,12 @@ int main()
                 g_wide_public_app_key = to_zstr(public_app_key);
                 ctx.publicAppKey = g_wide_public_app_key.c_str();
                 ctx.jwt_token = nullptr;
+                g_current_auth_mode = "public_app_key";
             } else {
                 g_wide_public_app_key.clear();
                 g_wide_jwt = to_zstr(jwt); // persists for async SDKAuth call
                 ctx.jwt_token = g_wide_jwt.c_str();
+                g_current_auth_mode = "jwt";
             }
             EngineIpc::write(
                 R"({"cmd":"debug","stage":"before_sdk_auth","auth_mode":")" +
@@ -1103,6 +1151,8 @@ int main()
                 std::string(jwt.empty() ? "false" : "true") +
                 R"(,"public_app_key_present":)" +
                 std::string(public_app_key.empty() ? "false" : "true") +
+                R"(,"public_app_key_tail":")" +
+                json_escape(redacted_tail(public_app_key)) + "\"" +
                 "}");
             err = auth_svc->SDKAuth(ctx);
             EngineIpc::write(R"({"cmd":"debug","stage":"after_sdk_auth","code":)" +

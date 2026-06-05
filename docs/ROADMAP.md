@@ -6,12 +6,13 @@
 
 CoreVideo is an OBS Studio plugin that pulls per-participant raw video,
 audio, screen share, and interpretation channels out of a Zoom meeting via
-the Zoom Meeting SDK — no screen capture, no virtual camera. The companion
-**Sidecar** app is a Qt6 control surface with a broadcast M/E switcher
-(PGM / PVW, TAKE / AUTO / FTB), broadcast-ready Looks, overlays, and
-per-slot audio routing. A standalone **engine** hosts the Zoom SDK out of
-process; an OBS plugin, a **Companion** module, and an OSC server all talk
-to it over IPC.
+the Zoom Meeting SDK — no screen capture, no virtual camera. The optional
+**Sidecar** app is a Qt6 control-surface track for broadcast M/E workflows
+(PGM / PVW, TAKE / AUTO / FTB), Looks, overlays, and per-slot audio routing;
+those items should be treated as Sidecar-specific or roadmap capabilities
+unless called out in the plugin docs. A standalone **engine** hosts the Zoom
+SDK out of process; the OBS plugin talks to it over IPC, with Companion and
+OSC integrations covering the automation paths described below.
 
 The roadmap below is organized into **Now** (the next one or two releases),
 **Next** (the following quarter), and **Later** (exploratory directions).

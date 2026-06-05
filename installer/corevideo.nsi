@@ -24,6 +24,21 @@ SetCompressor /SOLID lzma
   !define FILE_LIST "corevideo-uninstall-files.nsh"
 !endif
 
+!macro RequireSourceFile RELPATH
+  !if /FileExists "${SOURCE_DIR}\${RELPATH}"
+  !else
+    !error "SOURCE_DIR is missing required CoreVideo runtime file: ${RELPATH}"
+  !endif
+!macroend
+
+!insertmacro RequireSourceFile "obs-plugins\64bit\obs-zoom-plugin.dll"
+!insertmacro RequireSourceFile "obs-plugins\64bit\CoreVideoOAuthCallback.exe"
+!insertmacro RequireSourceFile "obs-plugins\64bit\Qt6Core.dll"
+!insertmacro RequireSourceFile "obs-plugins\64bit\Qt6Network.dll"
+!insertmacro RequireSourceFile "obs-plugins\64bit\plugins\tls\qschannelbackend.dll"
+!insertmacro RequireSourceFile "obs-plugins\64bit\zoom-runtime\ZoomObsEngine.exe"
+!insertmacro RequireSourceFile "obs-plugins\64bit\zoom-runtime\sdk.dll"
+
 Name "CoreVideo for OBS"
 OutFile "${OUT_FILE}"
 InstallDir "$PROGRAMFILES64\obs-studio"
@@ -73,10 +88,27 @@ Function CheckObsClosed
   ${EndIf}
 FunctionEnd
 
+!macro VerifyInstalledFile RELPATH
+  IfFileExists "$INSTDIR\${RELPATH}" +3
+  MessageBox MB_ICONSTOP "CoreVideo installation is incomplete. Missing: ${RELPATH}"
+  Abort
+!macroend
+
+Function VerifyInstalledRuntime
+  !insertmacro VerifyInstalledFile "obs-plugins\64bit\obs-zoom-plugin.dll"
+  !insertmacro VerifyInstalledFile "obs-plugins\64bit\CoreVideoOAuthCallback.exe"
+  !insertmacro VerifyInstalledFile "obs-plugins\64bit\Qt6Core.dll"
+  !insertmacro VerifyInstalledFile "obs-plugins\64bit\Qt6Network.dll"
+  !insertmacro VerifyInstalledFile "obs-plugins\64bit\plugins\tls\qschannelbackend.dll"
+  !insertmacro VerifyInstalledFile "obs-plugins\64bit\zoom-runtime\ZoomObsEngine.exe"
+  !insertmacro VerifyInstalledFile "obs-plugins\64bit\zoom-runtime\sdk.dll"
+FunctionEnd
+
 Section "CoreVideo for OBS" SecCoreVideo
   Call CheckObsClosed
   SetOutPath "$INSTDIR"
   File /r "${SOURCE_DIR}\*.*"
+  Call VerifyInstalledRuntime
 
   WriteUninstaller "$INSTDIR\Uninstall-CoreVideo.exe"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\CoreVideo for OBS" "DisplayName" "CoreVideo for OBS"

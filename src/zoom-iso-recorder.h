@@ -28,7 +28,7 @@ public:
     bool start(const ZoomIsoRecordConfig &config, std::string *error = nullptr);
     void stop();
     bool active() const { return m_active.load(std::memory_order_acquire); }
-    QJsonArray status_json() const;
+    QJsonArray status_json();
 
     void on_output_updated(const ZoomOutputInfo &info);
     void on_output_removed(const std::string &source_uuid);
@@ -82,6 +82,11 @@ private:
         QString base_path;
         QString video_path;
         QString audio_path;
+        QString ffmpeg_error;
+        QString ffmpeg_output_tail;
+        int ffmpeg_exit_code = -1;
+        QString ffmpeg_exit_status;
+        bool ffmpeg_error_logged = false;
         std::string video_encoder;
         std::unique_ptr<QProcess> ffmpeg;
         WavFile wav;
@@ -94,6 +99,10 @@ private:
                                    uint64_t timestamp_ns);
     void close_session_locked(const std::string &source_uuid);
     void close_session(Session &session);
+    void refresh_ffmpeg_status_locked(Session &session);
+    void mark_ffmpeg_failure_locked(Session &session, const QString &message);
+    bool write_ffmpeg_locked(Session &session, const uint8_t *data,
+                             uint32_t byte_len);
     bool should_record(const ZoomOutputInfo &info,
                        uint32_t resolved_participant_id) const;
 

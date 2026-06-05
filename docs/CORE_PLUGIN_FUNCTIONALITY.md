@@ -26,7 +26,8 @@ current core plugin controls: the Zoom Control dock, regular OBS scenes/sources,
 the Active Speaker Director controls, the dockable profile-oriented Zoom Output
 Manager, and the Zoom Participant source properties. Exact styling can vary by
 OBS theme and platform, but the controls and labels should match the current
-plugin.
+plugin. This guide intentionally describes the OBS plugin path; optional
+Sidecar control-surface features are tracked separately in the roadmap.
 
 ![CoreVideo OBS workspace with Zoom Control dock](images/corevideo-obs-workspace.svg)
 
@@ -47,7 +48,10 @@ during a live session to see requested versus
 observed resolution, FPS, frame age, stale and quality retry counters, and the
 latest `ZoomObsEngine` debug events. This is the fastest way to see whether a
 source is waiting for frames, receiving a lower-than-requested feed, or being
-resubscribed by recovery logic.
+resubscribed by recovery logic. Use **Create Support Bundle** from this dock to
+write a redacted troubleshooting bundle with engine status, output health,
+recent debug events, plugin settings with tokens removed, and the latest OBS log
+when available.
 
 ![CoreVideo Zoom Participant source properties](images/corevideo-source-properties.svg)
 
@@ -172,15 +176,18 @@ dock. The panel provides:
 
 - Output folder picker.
 - FFmpeg executable field with a test button.
+- Video encoder selector for CPU x264, NVIDIA NVENC, Intel Quick Sync, or AMD
+  AMF when the selected FFmpeg build supports that encoder.
 - **Also start/stop OBS program recording** toggle.
 - **Start ISO Recording** and **Stop ISO Recording** buttons.
 - Live status showing idle/recording and active session count.
 - Active session table with source, participant, resolution, video frame count,
-  audio chunk count, and the current video/audio file paths.
+  audio chunk count, current video/audio file paths, and FFmpeg error details.
 
 The panel uses the same `ZoomIsoRecorder` backend as the TCP and OSC APIs. It
 persists the output folder, FFmpeg path, and program-recording toggle in OBS
-global settings.
+global settings. Recording start is blocked when the selected output volume has
+less than 2 GB free and warns below 10 GB free.
 
 TCP start example:
 
@@ -209,7 +216,8 @@ OSC equivalents:
 
 Output files are written as:
 
-- `*.mp4` for encoded I420 video through FFmpeg/libx264
+- `*.mp4` for encoded I420 video through FFmpeg using the selected H.264
+  encoder
 - `*.wav` for matching PCM audio
 
 When `record_program` is true, CoreVideo also starts the normal OBS program

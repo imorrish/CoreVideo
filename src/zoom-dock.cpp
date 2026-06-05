@@ -784,7 +784,8 @@ void ZoomDock::update_credentials_banner()
     if (!m_alive->load(std::memory_order_acquire))
         return;
     const ZoomPluginSettings s = ZoomPluginSettings::load();
-    const bool has_public_app_key = !s.sdk_public_app_key.empty();
+    const bool has_public_app_key =
+        !s.resolved_meeting_sdk_public_app_key().empty();
     const bool has_jwt = !s.resolved_jwt_token().empty();
     const bool has_sdk_pair = !s.sdk_key.empty() && !s.sdk_secret.empty();
     const bool missing = !has_public_app_key && !has_jwt && !has_sdk_pair;
@@ -1374,7 +1375,9 @@ void ZoomDock::on_join_clicked()
     }
 
     ZoomPluginSettings s = ZoomPluginSettings::load();
-    const bool use_public_app_key = !s.sdk_public_app_key.empty();
+    const std::string resolved_public_app_key =
+        s.resolved_meeting_sdk_public_app_key();
+    const bool use_public_app_key = !resolved_public_app_key.empty();
     std::string jwt = use_public_app_key ? std::string() : s.resolved_jwt_token();
     if (!ZoomEngineClient::instance().is_authenticated() && jwt.empty() &&
         !use_public_app_key) {
@@ -1462,7 +1465,8 @@ void ZoomDock::on_join_clicked()
         }
 
         const ZoomPluginSettings settings = ZoomPluginSettings::load();
-        std::string public_app_key = settings.sdk_public_app_key;
+        std::string public_app_key =
+            settings.resolved_meeting_sdk_public_app_key();
         if (!public_app_key.empty() && settings.use_broker_sdk_jwt()) {
             QString sdk_jwt_error;
             if (ZoomOAuthManager::instance().fetch_sdk_jwt_blocking(jwt, &sdk_jwt_error)) {

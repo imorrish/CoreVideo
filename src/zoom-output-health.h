@@ -41,8 +41,15 @@ inline void apply_output_health(std::vector<ZoomOutputInfo> &outputs,
     };
 
     for (auto &output : outputs) {
+        const bool wants_media =
+            output.assignment == AssignmentMode::Participant ||
+            output.assignment == AssignmentMode::ActiveSpeaker ||
+            output.assignment == AssignmentMode::SpotlightIndex ||
+            output.assignment == AssignmentMode::ScreenShare;
         if (!raw_media_active) {
-            output.health_reason = ZoomOutputHealthReason::RawMediaNotReady;
+            output.health_reason = wants_media
+                ? ZoomOutputHealthReason::RawMediaNotReady
+                : ZoomOutputHealthReason::Ok;
         } else if (output.duplicate_participant_assignment) {
             output.health_reason = ZoomOutputHealthReason::DuplicateAssignment;
         } else if (output.assignment == AssignmentMode::ScreenShare &&

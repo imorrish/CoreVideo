@@ -330,7 +330,8 @@ void ZoomReconnectManager::execute_retry(uint64_t generation)
 
     ZoomEngineClient::instance().stop_for_reconnect();
     const ZoomPluginSettings settings = ZoomPluginSettings::load();
-    std::string public_app_key = settings.sdk_public_app_key;
+    std::string public_app_key =
+        settings.resolved_meeting_sdk_public_app_key();
     if (!public_app_key.empty()) {
         jwt.clear();
         if (settings.use_broker_sdk_jwt()) {

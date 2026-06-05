@@ -278,17 +278,7 @@ try {
     New-Item -ItemType Directory -Force -Path $installPath | Out-Null
     cmake --install $resolvedBuildPath --config $Configuration --prefix $installPath
 
-    $required = @(
-        "obs-plugins\64bit\obs-zoom-plugin.dll",
-        "obs-plugins\64bit\zoom-runtime\ZoomObsEngine.exe",
-        "obs-plugins\64bit\zoom-runtime\sdk.dll"
-    )
-    foreach ($relative in $required) {
-        $candidate = Join-Path $installPath $relative
-        if (-not (Test-Path -LiteralPath $candidate)) {
-            throw "Release package is incomplete. Missing: $relative"
-        }
-    }
+    & (Join-Path $PSScriptRoot "Test-CoreVideoPackage.ps1") -PackageRoot $installPath -FullRuntime
 
     New-Item -ItemType Directory -Force -Path $distPath | Out-Null
     if (Test-Path -LiteralPath $zipPath) {

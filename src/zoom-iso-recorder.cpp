@@ -5,12 +5,17 @@
 #include <QJsonObject>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QStringList>
 #include <obs-frontend-api.h>
 #include <obs-module.h>
 #include <util/platform.h>
 #include <algorithm>
 #include <cstring>
+
+static constexpr qint64 kIsoMinimumFreeBytes = 2ll * 1024ll * 1024ll * 1024ll;
+static constexpr qint64 kIsoWarningFreeBytes = 10ll * 1024ll * 1024ll * 1024ll;
+static constexpr int kFfmpegOutputTailChars = 2048;
 
 static QString default_iso_dir()
 {
@@ -41,6 +46,15 @@ static const char *assignment_label(AssignmentMode mode)
     case AssignmentMode::Participant:
     default: return "participant";
     }
+}
+
+static QString bytes_text(qint64 bytes)
+{
+    const double gb = static_cast<double>(bytes) / (1024.0 * 1024.0 * 1024.0);
+    if (gb >= 1.0)
+        return QString("%1 GB").arg(gb, 0, 'f', 1);
+    const double mb = static_cast<double>(bytes) / (1024.0 * 1024.0);
+    return QString("%1 MB").arg(mb, 0, 'f', 1);
 }
 
 static std::string normalized_video_encoder(const std::string &encoder);
@@ -147,6 +161,30 @@ bool ZoomIsoRecorder::start(const ZoomIsoRecordConfig &config,
         if (error) *error = "Could not create ISO recording directory.";
         return false;
     }
+    const QStorageInfo storage(dir.absolutePath());
+    if (storage.isValid() && storage.isReady()) {
+        const qint64 available = storage.bytesAvailable();
+        if (available < kIsoMinimumFreeBytes) {
+            if (error) {
+                *error = QString("Only %1 is free in the ISO output folder. "
+                                 "Free at least %2 before starting ISO recording.")
+                             .arg(bytes_text(available),
+                                  bytes_text(kIsoMinimumFreeBytes))
+                             .toStdString();
+            }
+            return false;
+        }
+        if (available < kIsoWarningFreeBytes) {
+            blog(LOG_WARNING,
+                 "[obs-zoom-plugin] ISO recording starting with low disk space: available=%s dir=%s",
+                 bytes_text(available).toUtf8().constData(),
+                 normalized.output_dir.c_str());
+        }
+    } else {
+        blog(LOG_WARNING,
+             "[obs-zoom-plugin] ISO recording could not validate disk space for dir=%s",
+             normalized.output_dir.c_str());
+    }
 
     {
         std::lock_guard<std::mutex> lock(m_mtx);
@@ -186,12 +224,13 @@ void ZoomIsoRecorder::stop()
     blog(LOG_INFO, "[obs-zoom-plugin] ISO recording stopped");
 }
 
-QJsonArray ZoomIsoRecorder::status_json() const
+QJsonArray ZoomIsoRecorder::status_json()
 {
     QJsonArray arr;
     std::lock_guard<std::mutex> lock(m_mtx);
-    for (const auto &entry : m_sessions) {
-        const Session &s = entry.second;
+    for (auto &entry : m_sessions) {
+        Session &s = entry.second;
+        refresh_ffmpeg_status_locked(s);
         QJsonObject obj;
         obj["source_uuid"] = QString::fromStdString(s.source_uuid);
         obj["source"] = QString::fromStdString(s.source_name);
@@ -217,6 +256,10 @@ QJsonArray ZoomIsoRecorder::status_json() const
             : -1.0;
         obj["ffmpeg_running"] =
             s.ffmpeg && s.ffmpeg->state() == QProcess::Running;
+        obj["ffmpeg_error"] = s.ffmpeg_error;
+        obj["ffmpeg_exit_code"] = s.ffmpeg_exit_code;
+        obj["ffmpeg_exit_status"] = s.ffmpeg_exit_status;
+        obj["ffmpeg_output_tail"] = s.ffmpeg_output_tail;
         obj["video_encoder"] = QString::fromStdString(s.video_encoder);
         obj["video_bytes"] = QFileInfo(s.video_path).exists()
             ? static_cast<double>(QFileInfo(s.video_path).size())
@@ -326,8 +369,10 @@ ZoomIsoRecorder::ensure_session_locked(const ZoomOutputInfo &info,
     });
     session.ffmpeg->setArguments(args);
     session.ffmpeg->setProcessChannelMode(QProcess::MergedChannels);
-    session.ffmpeg->start(QIODevice::WriteOnly);
+    session.ffmpeg->start(QIODevice::ReadWrite);
     if (!session.ffmpeg->waitForStarted(2000)) {
+        session.ffmpeg_error = session.ffmpeg->errorString();
+        session.ffmpeg_error_logged = true;
         blog(LOG_WARNING,
              "[obs-zoom-plugin] ISO ffmpeg failed to start for %s: %s",
              session.source_name.c_str(),
@@ -357,14 +402,94 @@ void ZoomIsoRecorder::close_session(Session &session)
 {
     session.wav.close();
     if (session.ffmpeg) {
+        refresh_ffmpeg_status_locked(session);
         session.ffmpeg->closeWriteChannel();
         if (!session.ffmpeg->waitForFinished(5000))
             session.ffmpeg->kill();
+        refresh_ffmpeg_status_locked(session);
     }
     blog(LOG_INFO,
          "[obs-zoom-plugin] ISO session closed: source=%s participant=%u frames=%u audio_chunks=%u",
          session.source_name.c_str(), session.resolved_participant_id,
          session.video_frames, session.audio_chunks);
+}
+
+void ZoomIsoRecorder::refresh_ffmpeg_status_locked(Session &session)
+{
+    if (!session.ffmpeg)
+        return;
+
+    const QByteArray output = session.ffmpeg->readAll();
+    if (!output.isEmpty()) {
+        session.ffmpeg_output_tail += QString::fromUtf8(output).trimmed();
+        if (session.ffmpeg_output_tail.size() > kFfmpegOutputTailChars)
+            session.ffmpeg_output_tail =
+                session.ffmpeg_output_tail.right(kFfmpegOutputTailChars);
+    }
+
+    if (session.ffmpeg->state() != QProcess::NotRunning)
+        return;
+
+    session.ffmpeg_exit_code = session.ffmpeg->exitCode();
+    session.ffmpeg_exit_status =
+        session.ffmpeg->exitStatus() == QProcess::CrashExit
+            ? QStringLiteral("crashed")
+            : QStringLiteral("normal");
+
+    if (!session.ffmpeg_error.isEmpty())
+        return;
+
+    if (session.ffmpeg->exitStatus() == QProcess::CrashExit) {
+        mark_ffmpeg_failure_locked(session, QStringLiteral("FFmpeg crashed."));
+    } else if (session.ffmpeg->exitCode() != 0) {
+        mark_ffmpeg_failure_locked(
+            session,
+            QString("FFmpeg exited with code %1.")
+                .arg(session.ffmpeg->exitCode()));
+    }
+}
+
+void ZoomIsoRecorder::mark_ffmpeg_failure_locked(Session &session,
+                                                const QString &message)
+{
+    if (session.ffmpeg_error.isEmpty())
+        session.ffmpeg_error = message;
+    if (!session.ffmpeg || session.ffmpeg_error_logged)
+        return;
+
+    blog(LOG_WARNING,
+         "[obs-zoom-plugin] ISO ffmpeg failure for %s: %s%s%s",
+         session.source_name.c_str(),
+         session.ffmpeg_error.toUtf8().constData(),
+         session.ffmpeg_output_tail.isEmpty() ? "" : " output=",
+         session.ffmpeg_output_tail.toUtf8().constData());
+    session.ffmpeg_error_logged = true;
+}
+
+bool ZoomIsoRecorder::write_ffmpeg_locked(Session &session,
+                                         const uint8_t *data,
+                                         uint32_t byte_len)
+{
+    if (!session.ffmpeg || !data || byte_len == 0)
+        return false;
+
+    const char *cursor = reinterpret_cast<const char *>(data);
+    qint64 remaining = byte_len;
+    while (remaining > 0) {
+        const qint64 written = session.ffmpeg->write(cursor, remaining);
+        if (written <= 0) {
+            mark_ffmpeg_failure_locked(
+                session,
+                QString("FFmpeg pipe write failed: %1")
+                    .arg(session.ffmpeg->errorString()));
+            refresh_ffmpeg_status_locked(session);
+            return false;
+        }
+        cursor += written;
+        remaining -= written;
+    }
+
+    return true;
 }
 
 void ZoomIsoRecorder::record_video_frame(const ZoomOutputInfo &info,
@@ -383,19 +508,27 @@ void ZoomIsoRecorder::record_video_frame(const ZoomOutputInfo &info,
     if (!should_record(info, resolved_participant_id)) return;
     Session &session = ensure_session_locked(info, resolved_participant_id,
                                              width, height, timestamp_ns);
+    refresh_ffmpeg_status_locked(session);
     if (!session.ffmpeg ||
-        session.ffmpeg->state() != QProcess::Running)
+        session.ffmpeg->state() != QProcess::Running) {
+        if (session.ffmpeg_error.isEmpty())
+            mark_ffmpeg_failure_locked(
+                session, QStringLiteral("FFmpeg is not running."));
         return;
+    }
 
-    for (uint32_t row = 0; row < height; ++row)
-        session.ffmpeg->write(reinterpret_cast<const char *>(y + row * stride_y),
-                              width);
-    for (uint32_t row = 0; row < height / 2; ++row)
-        session.ffmpeg->write(reinterpret_cast<const char *>(u + row * stride_uv),
-                              width / 2);
-    for (uint32_t row = 0; row < height / 2; ++row)
-        session.ffmpeg->write(reinterpret_cast<const char *>(v + row * stride_uv),
-                              width / 2);
+    for (uint32_t row = 0; row < height; ++row) {
+        if (!write_ffmpeg_locked(session, y + row * stride_y, width))
+            return;
+    }
+    for (uint32_t row = 0; row < height / 2; ++row) {
+        if (!write_ffmpeg_locked(session, u + row * stride_uv, width / 2))
+            return;
+    }
+    for (uint32_t row = 0; row < height / 2; ++row) {
+        if (!write_ffmpeg_locked(session, v + row * stride_uv, width / 2))
+            return;
+    }
     ++session.video_frames;
     session.last_video_ns = timestamp_ns;
 }

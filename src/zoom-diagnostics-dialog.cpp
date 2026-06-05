@@ -3,8 +3,10 @@
 #include "obs-zoom-version.h"
 #include "zoom-engine-client.h"
 #include "zoom-output-manager.h"
+#include "zoom-settings.h"
 #include <QAbstractItemView>
 #include <QColor>
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDialogButtonBox>
 #include <QDir>
@@ -23,6 +25,7 @@
 #include <QTextStream>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <util/platform.h>
 #include <algorithm>
 #include <unordered_map>
 
@@ -147,12 +150,32 @@ static QTableWidgetItem *readonly_item(const QString &text)
 
 static QString diagnostics_root_dir()
 {
+    const QStringList starts = {
+        QDir::currentPath(),
+        QCoreApplication::applicationDirPath()
+    };
+    for (const QString &start : starts) {
+        QDir dir(start);
+        for (int depth = 0; depth < 6; ++depth) {
+            if (dir.exists(QStringLiteral("artifacts")))
+                return dir.absoluteFilePath(
+                    QStringLiteral("artifacts/support-bundles"));
+            if (!dir.cdUp())
+                break;
+        }
+    }
+
+    char path[512] = {};
+    if (os_get_config_path(path, sizeof(path),
+            "obs-studio/plugin_config/obs-zoom-plugin/support-bundles") >= 0) {
+        return QString::fromUtf8(path);
+    }
+
     const QString docs = QStandardPaths::writableLocation(
         QStandardPaths::DocumentsLocation);
-    const QString base = docs.isEmpty()
-        ? QDir::homePath()
-        : docs;
-    return QDir(base).absoluteFilePath("CoreVideo Diagnostics");
+    const QString base = docs.isEmpty() ? QDir::homePath() : docs;
+    return QDir(base).absoluteFilePath(
+        QStringLiteral("CoreVideo Support Bundles"));
 }
 
 static QString latest_obs_log_path()
@@ -191,6 +214,98 @@ static QString resolution_id(VideoResolution resolution)
     case VideoResolution::P720:
     default: return QStringLiteral("720p");
     }
+}
+
+static QString hw_accel_mode_id(HwAccelMode mode)
+{
+    switch (mode) {
+    case HwAccelMode::Auto: return QStringLiteral("auto");
+    case HwAccelMode::Cuda: return QStringLiteral("cuda");
+    case HwAccelMode::Vaapi: return QStringLiteral("vaapi");
+    case HwAccelMode::VideoToolbox: return QStringLiteral("videotoolbox");
+    case HwAccelMode::Qsv: return QStringLiteral("qsv");
+    case HwAccelMode::None:
+    default: return QStringLiteral("none");
+    }
+}
+
+static QString redacted_value(const std::string &value)
+{
+    if (value.empty())
+        return QStringLiteral("");
+    if (value.size() <= 4)
+        return QStringLiteral("[redacted len=%1]").arg(value.size());
+    return QStringLiteral("[redacted len=%1 tail=%2]")
+        .arg(value.size())
+        .arg(QString::fromStdString(value.substr(value.size() - 4)));
+}
+
+static QString redacted_presence(const std::string &value)
+{
+    return value.empty()
+        ? QStringLiteral("")
+        : QStringLiteral("[redacted set len=%1]").arg(value.size());
+}
+
+static QJsonObject reconnect_policy_json(const ZoomReconnectPolicy &policy)
+{
+    QJsonObject obj;
+    obj["enabled"] = policy.enabled;
+    obj["max_attempts"] = policy.max_attempts;
+    obj["base_delay_ms"] = policy.base_delay_ms;
+    obj["max_delay_ms"] = policy.max_delay_ms;
+    obj["on_engine_crash"] = policy.on_engine_crash;
+    obj["on_disconnect"] = policy.on_disconnect;
+    obj["on_auth_fail"] = policy.on_auth_fail;
+    return obj;
+}
+
+static QJsonObject settings_json(const ZoomPluginSettings &settings)
+{
+    QJsonObject obj;
+    obj["meeting_sdk_auth_mode"] =
+        QString::fromStdString(settings.meeting_sdk_auth_mode);
+    obj["sdk_key"] = redacted_value(settings.sdk_key);
+    obj["sdk_secret"] = redacted_presence(settings.sdk_secret);
+    obj["jwt_token"] = redacted_presence(settings.jwt_token);
+    obj["meeting_sdk_public_app_key"] =
+        redacted_value(settings.sdk_public_app_key);
+    obj["resolved_meeting_sdk_public_app_key"] =
+        redacted_value(settings.resolved_meeting_sdk_public_app_key());
+    obj["oauth_client_id"] = redacted_value(settings.oauth_client_id);
+    obj["oauth_authorization_url"] =
+        QString::fromStdString(settings.oauth_authorization_url);
+    obj["oauth_redirect_uri"] =
+        QString::fromStdString(settings.oauth_redirect_uri);
+    obj["oauth_scopes"] = QString::fromStdString(settings.oauth_scopes);
+    obj["oauth_access_token"] =
+        redacted_presence(settings.oauth_access_token);
+    obj["oauth_refresh_token"] =
+        redacted_presence(settings.oauth_refresh_token);
+    obj["oauth_expires_at"] = static_cast<double>(settings.oauth_expires_at);
+    obj["control_server_port"] = settings.control_server_port;
+    obj["osc_server_port"] = settings.osc_server_port;
+    obj["control_token"] = redacted_presence(settings.control_token);
+    obj["hw_accel_mode"] = hw_accel_mode_id(settings.hw_accel_mode);
+    obj["reconnect_policy"] =
+        reconnect_policy_json(settings.reconnect_policy);
+    obj["last_meeting_id"] = redacted_value(settings.last_meeting_id);
+    obj["last_display_name_set"] = !settings.last_display_name.empty();
+    obj["last_was_webinar"] = settings.last_was_webinar;
+    obj["iso_output_dir"] = QString::fromStdString(settings.iso_output_dir);
+    obj["iso_ffmpeg_path"] = QString::fromStdString(settings.iso_ffmpeg_path);
+    obj["iso_video_encoder"] =
+        QString::fromStdString(settings.iso_video_encoder);
+    obj["iso_record_program"] = settings.iso_record_program;
+    obj["speaker_sensitivity_ms"] =
+        static_cast<double>(settings.speaker_sensitivity_ms);
+    obj["speaker_hold_ms"] = static_cast<double>(settings.speaker_hold_ms);
+    obj["speaker_require_video"] = settings.speaker_require_video;
+    obj["speaker_exclude_participant_1"] =
+        static_cast<double>(settings.speaker_exclude_participant_1);
+    obj["speaker_exclude_participant_2"] =
+        static_cast<double>(settings.speaker_exclude_participant_2);
+    return obj;
 }
 
 static QJsonObject output_json(const ZoomOutputInfo &output)
@@ -284,6 +399,15 @@ static bool write_text_file(const QString &path, const QString &text)
     return true;
 }
 
+static bool write_json_file(const QString &path, const QJsonObject &obj)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return false;
+    file.write(QJsonDocument(obj).toJson(QJsonDocument::Indented));
+    return true;
+}
+
 ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
     : QWidget(parent)
 {
@@ -322,7 +446,7 @@ ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     auto *refresh_button = buttons->addButton("Refresh", QDialogButtonBox::ActionRole);
-    auto *export_button = buttons->addButton("Export Diagnostics",
+    auto *export_button = buttons->addButton("Create Support Bundle",
                                              QDialogButtonBox::ActionRole);
     connect(refresh_button, &QPushButton::clicked, this, [this]() { refresh(); });
     connect(export_button, &QPushButton::clicked, this,
@@ -430,21 +554,25 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     const auto outputs = ZoomOutputManager::instance().outputs();
     const auto roster = ZoomEngineClient::instance().roster();
     const auto events = ZoomEngineClient::instance().recent_debug_events();
+    const auto settings = ZoomPluginSettings::load();
     const QDateTime now = QDateTime::currentDateTime();
     const QString stamp = now.toString("yyyyMMdd-HHmmss");
+    QStringList warnings;
     QDir root(diagnostics_root_dir());
     if (!root.exists() && !root.mkpath(".")) {
-        QMessageBox::warning(this, "Export Diagnostics",
-            QString("Could not create diagnostics folder:\n%1")
+        QMessageBox::warning(this, "Create Support Bundle",
+            QString("Could not create support bundle folder:\n%1")
                 .arg(root.absolutePath()));
         return;
     }
 
-    const QString bundle_path = root.absoluteFilePath("CoreVideo-" + stamp);
+    const QString bundle_path = root.absoluteFilePath(
+        QStringLiteral("CoreVideo-support-%1").arg(stamp));
     QDir bundle(bundle_path);
-    if (!bundle.exists() && !root.mkpath("CoreVideo-" + stamp)) {
-        QMessageBox::warning(this, "Export Diagnostics",
-            QString("Could not create diagnostics bundle:\n%1")
+    if (!bundle.exists() &&
+        !root.mkpath(QStringLiteral("CoreVideo-support-%1").arg(stamp))) {
+        QMessageBox::warning(this, "Create Support Bundle",
+            QString("Could not create support bundle:\n%1")
                 .arg(bundle_path));
         return;
     }
@@ -466,13 +594,41 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         ? QString{}
         : QStringLiteral("obs-latest.log");
     if (!obs_log.isEmpty())
-        QFile::copy(obs_log, bundle.absoluteFilePath(copied_log_name));
+        if (!QFile::copy(obs_log, bundle.absoluteFilePath(copied_log_name)))
+            warnings << QStringLiteral("Could not copy OBS log from %1")
+                .arg(obs_log);
+
+    QJsonObject engine_status;
+    engine_status["running"] = ZoomEngineClient::instance().is_running();
+    engine_status["meeting_state"] = state_text(ZoomEngineClient::instance().state());
+    engine_status["media_active"] = ZoomEngineClient::instance().is_media_active();
+    engine_status["authenticated"] = ZoomEngineClient::instance().is_authenticated();
+    engine_status["active_speaker_id"] =
+        static_cast<double>(ZoomEngineClient::instance().active_speaker_id());
+    engine_status["raw_active_speaker_id"] =
+        static_cast<double>(ZoomEngineClient::instance().raw_active_speaker_id());
+    engine_status["last_error"] =
+        QString::fromStdString(ZoomEngineClient::instance().last_error());
+    engine_status["output_count"] = static_cast<double>(outputs.size());
+    engine_status["participant_count"] = static_cast<double>(roster.size());
+    engine_status["recent_engine_event_count"] =
+        static_cast<double>(events.size());
+    int unhealthy_outputs = 0;
+    for (const auto &output : outputs) {
+        if (output.health_reason != ZoomOutputHealthReason::Ok)
+            ++unhealthy_outputs;
+    }
+    engine_status["unhealthy_output_count"] = unhealthy_outputs;
 
     QJsonObject summary;
+    summary["bundle_type"] = QStringLiteral("corevideo_support_bundle");
     summary["created_at"] = now.toString(Qt::ISODate);
     summary["plugin_version"] = OBS_ZOOM_PLUGIN_VERSION;
+    summary["root"] = root.absolutePath();
+    summary["bundle_path"] = bundle.absolutePath();
     summary["meeting_state"] = state_text(ZoomEngineClient::instance().state());
     summary["media_active"] = ZoomEngineClient::instance().is_media_active();
+    summary["engine_running"] = ZoomEngineClient::instance().is_running();
     summary["authenticated"] = ZoomEngineClient::instance().is_authenticated();
     summary["active_speaker_id"] =
         static_cast<double>(ZoomEngineClient::instance().active_speaker_id());
@@ -482,25 +638,36 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         QString::fromStdString(ZoomEngineClient::instance().last_error());
     summary["obs_log_source"] = obs_log;
     summary["obs_log_copy"] = copied_log_name;
+    QJsonArray warning_array;
+    for (const QString &warning : warnings)
+        warning_array.append(warning);
+    summary["warnings"] = warning_array;
+    summary["engine_status"] = engine_status;
+    summary["plugin_settings_redacted"] = settings_json(settings);
     summary["outputs"] = output_array;
     summary["participants"] = roster_array;
     summary["recent_engine_events"] = event_array;
 
-    QFile json_file(bundle.absoluteFilePath("summary.json"));
-    if (!json_file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        QMessageBox::warning(this, "Export Diagnostics",
-            QString("Could not write summary.json in:\n%1")
+    if (!write_json_file(bundle.absoluteFilePath("summary.json"), summary) ||
+        !write_json_file(bundle.absoluteFilePath("engine-status.json"),
+                         engine_status) ||
+        !write_json_file(bundle.absoluteFilePath("settings-redacted.json"),
+                         settings_json(settings))) {
+        QMessageBox::warning(this, "Create Support Bundle",
+            QString("Could not write support bundle JSON files in:\n%1")
                 .arg(bundle.absolutePath()));
         return;
     }
-    json_file.write(QJsonDocument(summary).toJson(QJsonDocument::Indented));
-    json_file.close();
 
     QString text;
     QTextStream out(&text);
-    out << "CoreVideo Diagnostics\n";
+    out << "CoreVideo Support Bundle\n";
     out << "Created: " << now.toString(Qt::ISODate) << "\n";
+    out << "Bundle: " << bundle.absolutePath() << "\n";
     out << "Plugin version: " << OBS_ZOOM_PLUGIN_VERSION << "\n";
+    out << "Engine running: "
+        << (ZoomEngineClient::instance().is_running() ? "yes" : "no")
+        << "\n";
     out << "Meeting: " << state_text(ZoomEngineClient::instance().state()) << "\n";
     out << "Media: "
         << (ZoomEngineClient::instance().is_media_active() ? "active" : "inactive")
@@ -516,6 +683,29 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         << QString::fromStdString(ZoomEngineClient::instance().last_error())
         << "\n";
     out << "OBS log: " << (obs_log.isEmpty() ? QStringLiteral("not found") : obs_log)
+        << "\n\n";
+    if (!warnings.isEmpty()) {
+        out << "Warnings\n";
+        for (const QString &warning : warnings)
+            out << "- " << warning << "\n";
+        out << "\n";
+    }
+
+    out << "Settings\n";
+    out << "- Meeting SDK auth mode: "
+        << QString::fromStdString(settings.meeting_sdk_auth_mode) << "\n";
+    out << "- Public app key: "
+        << redacted_value(settings.resolved_meeting_sdk_public_app_key())
+        << "\n";
+    out << "- OAuth access token: "
+        << (settings.oauth_access_token.empty() ? "not set" : "set/redacted")
+        << "\n";
+    out << "- Control server port: " << settings.control_server_port << "\n";
+    out << "- OSC server port: " << settings.osc_server_port << "\n";
+    out << "- Hardware acceleration: " << hw_accel_mode_id(settings.hw_accel_mode)
+        << "\n";
+    out << "- Reconnect: "
+        << (settings.reconnect_policy.enabled ? "enabled" : "disabled")
         << "\n\n";
 
     out << "Outputs\n";
@@ -558,12 +748,12 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     }
 
     if (!write_text_file(bundle.absoluteFilePath("summary.txt"), text)) {
-        QMessageBox::warning(this, "Export Diagnostics",
+        QMessageBox::warning(this, "Create Support Bundle",
             QString("Could not write summary.txt in:\n%1")
                 .arg(bundle.absolutePath()));
         return;
     }
 
-    QMessageBox::information(this, "Export Diagnostics",
-        QString("Diagnostics exported to:\n%1").arg(bundle.absolutePath()));
+    QMessageBox::information(this, "Create Support Bundle",
+        QString("Support bundle created at:\n%1").arg(bundle.absolutePath()));
 }

@@ -341,7 +341,8 @@ void ZoomOscServer::dispatch(const QString &address,
             }
         }
 
-        std::string public_app_key = settings.sdk_public_app_key;
+        std::string public_app_key =
+            settings.resolved_meeting_sdk_public_app_key();
         std::string jwt = public_app_key.empty()
             ? settings.resolved_jwt_token()
             : std::string();
