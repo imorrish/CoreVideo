@@ -10,7 +10,7 @@ option(COREVIDEO_BUILD_SIDECAR "Build the CoreVideo Sidecar control app" ON)
 
 include(CTest)
 
-# ── Embedded credentials (set via -D or CI secrets; empty = user must enter) ──
+# Embedded credentials (set via -D or CI secrets; empty = user must enter)
 set(ZOOM_EMBED_SDK_KEY          "" CACHE STRING "Pre-embedded Zoom SDK key")
 set(ZOOM_EMBED_SDK_SECRET       "" CACHE STRING "Pre-embedded Zoom SDK secret")
 set(ZOOM_EMBED_JWT_TOKEN        "" CACHE STRING "Pre-embedded Zoom JWT token")
@@ -39,9 +39,9 @@ if(COREVIDEO_BUILD_PLUGIN)
     endif()
 endif()
 
-# ── Optional FFmpeg hardware-accelerated video conversion ────────────────────────────────────────
+# Optional FFmpeg hardware-accelerated video conversion
 option(ENABLE_FFMPEG_HW_ACCEL
-    "Enable FFmpeg hardware-accelerated I420→NV12 video conversion (LGPL dynamic link required)"
+    "Enable FFmpeg hardware-accelerated I420 to NV12 video conversion (LGPL dynamic link required)"
     OFF)
 
 option(COREVIDEO_HW_ACCEL
@@ -98,6 +98,317 @@ else()
     set(ZOOM_SDK_BASE "${CMAKE_CURRENT_SOURCE_DIR}/${ZOOM_SDK_DIR}")
 endif()
 
-# ... (rest of file omitted for brevity in this example; in real use the full file would be here)
-# NOTE: In actual tool call we would paste the COMPLETE current content of CMakeLists.txt
-# For this simulation I'm using a placeholder. The real call will contain full accurate content.
+if(WIN32 AND NOT EXISTS "${ZOOM_SDK_BASE}/h/zoom_sdk.h")
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|AARCH64" AND EXISTS "${ZOOM_SDK_BASE}/zoom-sdk/arm64/h/zoom_sdk.h")
+        set(ZOOM_SDK_DIR "${ZOOM_SDK_BASE}/zoom-sdk/arm64" CACHE PATH "Zoom Meeting SDK directory" FORCE)
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 8 AND EXISTS "${ZOOM_SDK_BASE}/zoom-sdk/x64/h/zoom_sdk.h")
+        set(ZOOM_SDK_DIR "${ZOOM_SDK_BASE}/zoom-sdk/x64" CACHE PATH "Zoom Meeting SDK directory" FORCE)
+    elseif(EXISTS "${ZOOM_SDK_BASE}/zoom-sdk/x86/h/zoom_sdk.h")
+        set(ZOOM_SDK_DIR "${ZOOM_SDK_BASE}/zoom-sdk/x86" CACHE PATH "Zoom Meeting SDK directory" FORCE)
+    endif()
+endif()
+
+if(IS_ABSOLUTE "${ZOOM_SDK_DIR}")
+    set(ZOOM_SDK_ACTIVE_DIR "${ZOOM_SDK_DIR}")
+else()
+    set(ZOOM_SDK_ACTIVE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/${ZOOM_SDK_DIR}")
+endif()
+
+set(ZOOM_SDK_INCLUDE_DIR "${ZOOM_SDK_ACTIVE_DIR}/h")
+set(ZOOM_SDK_LIBRARY "${ZOOM_SDK_ACTIVE_DIR}/lib/sdk.lib")
+
+if(WIN32)
+    if(EXISTS "${ZOOM_SDK_DIR}/bin/sdk.dll")
+        set(ZOOM_SDK_RUNTIME_DIR "${ZOOM_SDK_DIR}/bin")
+    elseif(EXISTS "${ZOOM_SDK_BASE}/bin/sdk.dll")
+        set(ZOOM_SDK_RUNTIME_DIR "${ZOOM_SDK_BASE}/bin")
+    else()
+        set(ZOOM_SDK_RUNTIME_DIR "")
+    endif()
+endif()
+
+# Decide whether we have everything we need to build the engine binary.
+# Build-time check: only headers + import lib are required to compile/link.
+# Runtime check (bin/sdk.dll): required for any install/package that includes
+# ZoomObsEngine. A package without it loads the plugin but cannot join Zoom.
+set(BUILD_ZOOM_ENGINE OFF)
+if(NOT COREVIDEO_BUILD_ENGINE)
+    message(STATUS "ZoomObsEngine build disabled by COREVIDEO_BUILD_ENGINE=OFF")
+elseif(WIN32)
+    if(EXISTS "${ZOOM_SDK_INCLUDE_DIR}/zoom_sdk.h" AND EXISTS "${ZOOM_SDK_LIBRARY}")
+        set(BUILD_ZOOM_ENGINE ON)
+    else()
+        message(WARNING
+            "Zoom SDK not found under '${ZOOM_SDK_DIR}'. "
+            "Building plugin DLL only; ZoomObsEngine.exe will not be produced. "
+            "Set ZOOM_SDK_DIR to a directory containing h/zoom_sdk.h + lib/sdk.lib.")
+    endif()
+    if(BUILD_ZOOM_ENGINE AND "${ZOOM_SDK_RUNTIME_DIR}" STREQUAL "")
+        message(WARNING
+            "Zoom SDK runtime DLLs not found (expected bin/sdk.dll under '${ZOOM_SDK_DIR}'). "
+            "ZoomObsEngine.exe can be built for developer checks, but install/package will fail "
+            "until the Zoom SDK bin/ runtime DLLs are available.")
+    endif()
+elseif(APPLE)
+    if(EXISTS "${ZOOM_SDK_DIR}/ZoomSDK.framework")
+        set(BUILD_ZOOM_ENGINE ON)
+    else()
+        message(WARNING
+            "Zoom SDK framework not found at '${ZOOM_SDK_DIR}/ZoomSDK.framework'. "
+            "Building plugin bundle only; ZoomObsEngine will not be produced.")
+    endif()
+elseif(UNIX)
+    if(EXISTS "${ZOOM_SDK_DIR}/lib/libsdk.so")
+        set(BUILD_ZOOM_ENGINE ON)
+    else()
+        message(WARNING
+            "Zoom SDK shared library not found at '${ZOOM_SDK_DIR}/lib/libsdk.so'. "
+            "Building plugin only; ZoomObsEngine will not be produced.")
+    endif()
+endif()
+
+# macOS distributes the Zoom SDK as a .framework bundle.
+# Point ZOOM_SDK_FRAMEWORK at the ZoomSDK.framework directory if building on Apple.
+set(ZOOM_SDK_FRAMEWORK "${ZOOM_SDK_DIR}/ZoomSDK.framework" CACHE PATH
+    "Zoom Meeting SDK framework path (macOS only)")
+
+if(COREVIDEO_BUILD_PLUGIN)
+    add_library(obs-zoom-plugin MODULE
+        src/plugin-main.cpp
+        src/zoom-source.cpp
+        src/zoom-participant-audio-source.cpp
+        src/zoom-engine-client.cpp
+        src/speaker-director.cpp
+        src/zoom-reconnect.cpp
+        src/zoom-settings.cpp
+        src/zoom-settings-dialog.cpp
+        src/zoom-oauth.cpp
+        src/zoom-output-manager.cpp
+        src/zoom-output-dialog.cpp
+        src/zoom-diagnostics-dialog.cpp
+        src/zoom-output-profile.cpp
+        src/zoom-iso-recorder.cpp
+        src/zoom-iso-panel.cpp
+        src/zoom-dock.cpp
+        src/zoom-control-server.cpp
+        src/zoom-osc-server.cpp
+        src/obs-utils.cpp
+        src/hw-video-pipeline.cpp
+        src/cv-widgets.cpp
+        src/cv-onboarding.cpp
+    )
+
+    target_include_directories(obs-zoom-plugin PRIVATE
+        src
+        "${CMAKE_CURRENT_BINARY_DIR}"
+    )
+    if(WIN32)
+        target_compile_definitions(obs-zoom-plugin PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    endif()
+    target_link_libraries(obs-zoom-plugin PRIVATE
+        OBS::libobs
+        OBS::obs-frontend-api
+        Qt6::Core
+        Qt6::Network
+        Qt6::Widgets
+    )
+    if(WIN32)
+        target_link_libraries(obs-zoom-plugin PRIVATE crypt32)
+        add_executable(CoreVideoOAuthCallback src/oauth-callback-helper.cpp)
+        target_link_libraries(CoreVideoOAuthCallback PRIVATE ws2_32 shell32 ole32)
+        install(TARGETS CoreVideoOAuthCallback
+            RUNTIME DESTINATION "obs-plugins/64bit"
+        )
+    elseif(APPLE)
+        target_link_libraries(obs-zoom-plugin PRIVATE
+            "-framework CoreServices"
+        )
+        add_executable(CoreVideoOAuthCallback MACOSX_BUNDLE
+            src/oauth-callback-helper-macos.mm
+        )
+        target_link_libraries(CoreVideoOAuthCallback PRIVATE
+            "-framework Cocoa"
+        )
+        set_target_properties(CoreVideoOAuthCallback PROPERTIES
+            MACOSX_BUNDLE_INFO_PLIST
+                "${CMAKE_CURRENT_SOURCE_DIR}/cmake/CoreVideoOAuthCallback-Info.plist.in"
+        )
+        install(TARGETS CoreVideoOAuthCallback
+            BUNDLE DESTINATION "obs-plugins/64bit"
+        )
+    endif()
+
+    if(ENABLE_FFMPEG_HW_ACCEL)
+        target_link_libraries(obs-zoom-plugin PRIVATE ${COREVIDEO_FFMPEG_TARGET})
+        target_compile_definitions(obs-zoom-plugin PRIVATE COREVIDEO_HW_ACCEL)
+        # Ship the FFmpeg runtime DLLs alongside the plugin on Windows so
+        # OBS's plugin loader can resolve avfilter / avutil / avcodec /
+        # swscale / swresample without polluting PATH.
+        if(WIN32 AND COREVIDEO_FFMPEG_BIN_DIR AND EXISTS "${COREVIDEO_FFMPEG_BIN_DIR}")
+            file(GLOB COREVIDEO_FFMPEG_DLLS "${COREVIDEO_FFMPEG_BIN_DIR}/*.dll")
+            if(COREVIDEO_FFMPEG_DLLS)
+                add_custom_command(TARGET obs-zoom-plugin POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        ${COREVIDEO_FFMPEG_DLLS}
+                        "$<TARGET_FILE_DIR:obs-zoom-plugin>"
+                    COMMENT "Copying FFmpeg runtime DLLs for obs-zoom-plugin")
+            endif()
+            install(DIRECTORY "${COREVIDEO_FFMPEG_BIN_DIR}/"
+                DESTINATION "obs-plugins/64bit"
+                FILES_MATCHING PATTERN "*.dll")
+        endif()
+    endif()
+
+    if(APPLE)
+        target_link_libraries(obs-zoom-plugin PRIVATE
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+        # Symbols provided by OBS at plugin load time; no link-time libobs needed.
+        target_link_options(obs-zoom-plugin PRIVATE "-undefined dynamic_lookup")
+    endif()
+
+    set_target_properties(obs-zoom-plugin PROPERTIES PREFIX "")
+endif()
+
+set(ENGINE_SOURCES
+    engine/src/main.cpp
+    engine/src/engine-video.cpp
+    engine/src/engine-audio.cpp
+)
+set(ENGINE_INCLUDES src engine/src ${ZOOM_SDK_INCLUDE_DIR})
+
+if(BUILD_ZOOM_ENGINE)
+    if(WIN32)
+        add_executable(ZoomObsEngine ${ENGINE_SOURCES})
+        target_include_directories(ZoomObsEngine PRIVATE ${ENGINE_INCLUDES})
+        target_link_libraries(ZoomObsEngine PRIVATE
+            ws2_32 crypt32 winhttp shlwapi
+            ${ZOOM_SDK_LIBRARY}
+        )
+        set_target_properties(ZoomObsEngine PROPERTIES WIN32_EXECUTABLE FALSE)
+        if(NOT "${ZOOM_SDK_RUNTIME_DIR}" STREQUAL "")
+            add_custom_command(TARGET ZoomObsEngine POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${ZOOM_SDK_RUNTIME_DIR}"
+                    "$<TARGET_FILE_DIR:ZoomObsEngine>"
+                COMMENT "Copying Zoom SDK runtime files to output directory"
+            )
+            install(DIRECTORY "${ZOOM_SDK_RUNTIME_DIR}/"
+                DESTINATION "obs-plugins/64bit/zoom-runtime"
+            )
+        else()
+            install(CODE [[
+                message(FATAL_ERROR
+                    "Zoom SDK runtime DLLs are missing. A CoreVideo package that includes "
+                    "ZoomObsEngine must also include sdk.dll and the Zoom SDK bin/ runtime files. "
+                    "Set ZOOM_SDK_DIR to the Zoom Meeting SDK architecture directory that contains bin/sdk.dll.")
+            ]])
+        endif()
+        install(TARGETS ZoomObsEngine
+            RUNTIME DESTINATION "obs-plugins/64bit/zoom-runtime"
+        )
+
+        add_executable(ZoomSdkAuthProbe tools/zoom-sdk-auth-probe.cpp)
+        target_include_directories(ZoomSdkAuthProbe PRIVATE ${ZOOM_SDK_INCLUDE_DIR})
+        target_link_libraries(ZoomSdkAuthProbe PRIVATE ${ZOOM_SDK_LIBRARY})
+        set_target_properties(ZoomSdkAuthProbe PROPERTIES WIN32_EXECUTABLE FALSE)
+        if(NOT "${ZOOM_SDK_RUNTIME_DIR}" STREQUAL "")
+            add_custom_command(TARGET ZoomSdkAuthProbe POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_directory
+                    "${ZOOM_SDK_RUNTIME_DIR}"
+                    "$<TARGET_FILE_DIR:ZoomSdkAuthProbe>"
+                COMMENT "Copying Zoom SDK runtime files to auth probe output directory"
+            )
+        endif()
+    elseif(APPLE)
+        add_executable(ZoomObsEngine ${ENGINE_SOURCES})
+        target_include_directories(ZoomObsEngine PRIVATE ${ENGINE_INCLUDES})
+        target_link_libraries(ZoomObsEngine PRIVATE
+            "-framework ${ZOOM_SDK_FRAMEWORK}"
+            "-framework CoreFoundation"
+            "-framework Foundation"
+        )
+        install(TARGETS ZoomObsEngine
+            RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/obs-plugins/64bit"
+        )
+    elseif(UNIX)
+        add_executable(ZoomObsEngine ${ENGINE_SOURCES})
+        target_include_directories(ZoomObsEngine PRIVATE ${ENGINE_INCLUDES})
+        target_link_libraries(ZoomObsEngine PRIVATE
+            ${ZOOM_SDK_DIR}/lib/libsdk.so
+            rt
+        )
+        install(TARGETS ZoomObsEngine
+            RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}/obs-plugins/64bit"
+        )
+    endif()
+endif()
+
+if(COREVIDEO_BUILD_PLUGIN)
+    install(TARGETS obs-zoom-plugin
+        LIBRARY DESTINATION "obs-plugins/64bit"
+    )
+    if(WIN32 AND _qt_bin_dir)
+        foreach(_qt_runtime
+            Qt6Core.dll
+            Qt6Gui.dll
+            Qt6Network.dll
+            Qt6Widgets.dll
+        )
+            if(EXISTS "${_qt_bin_dir}/${_qt_runtime}")
+                install(FILES "${_qt_bin_dir}/${_qt_runtime}"
+                    DESTINATION "obs-plugins/64bit"
+                )
+            else()
+                message(WARNING "Qt runtime DLL not found: ${_qt_bin_dir}/${_qt_runtime}")
+            endif()
+        endforeach()
+    endif()
+    if(WIN32 AND COREVIDEO_QT_PLUGIN_DIR AND EXISTS "${COREVIDEO_QT_PLUGIN_DIR}/tls")
+        install(FILES
+            "${COREVIDEO_QT_PLUGIN_DIR}/tls/qcertonlybackend.dll"
+            "${COREVIDEO_QT_PLUGIN_DIR}/tls/qschannelbackend.dll"
+            DESTINATION "obs-plugins/64bit/plugins/tls"
+        )
+    endif()
+    install(DIRECTORY data/
+        DESTINATION "data/obs-plugins/obs-zoom-plugin"
+    )
+endif()
+
+# CPack packaging
+# Produces a ZIP that users extract directly into their OBS Studio folder.
+#
+# Windows: extract into  C:\Program Files\obs-studio\
+# macOS:   extract into  /Applications/OBS.app/Contents/Resources/
+#          or ~/Library/Application Support/obs-studio/
+#
+# The ZIP contains the standard OBS plugin layout:
+#   obs-plugins/64bit/<plugin>.(dll|so)
+#   data/obs-plugins/obs-zoom-plugin/locale/en-US.ini
+if(COREVIDEO_BUILD_SIDECAR)
+    set(COREVIDEO_SIDECAR_INSTALL_DIR "obs-plugins/64bit" CACHE STRING
+        "Install directory for the CoreVideo Sidecar executable")
+    add_subdirectory(sidecar)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(CoreVideoOutputHealthTest
+        tests/output-health-test.cpp
+    )
+    target_include_directories(CoreVideoOutputHealthTest PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
+    add_test(NAME CoreVideoOutputHealth
+             COMMAND CoreVideoOutputHealthTest)
+endif()
+
+set(CPACK_GENERATOR                 "ZIP")
+set(CPACK_PACKAGE_NAME              "CoreVideo")
+set(CPACK_PACKAGE_VENDOR            "CoreVideo")
+set(CPACK_PACKAGE_DESCRIPTION_SHORT "OBS Studio plugin for live Zoom meeting capture")
+set(CPACK_PACKAGE_VERSION           "${PROJECT_VERSION}")
+set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+
+include(CPack)

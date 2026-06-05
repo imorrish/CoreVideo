@@ -21,6 +21,8 @@ param(
     [Parameter()]
     [string]$CMakePrefixPath,
     [Parameter()]
+    [string]$CMakeModulePath,
+    [Parameter()]
     [string]$LibObsDir,
     [Parameter()]
     [string]$ObsFrontendApiDir,
@@ -239,6 +241,7 @@ try {
             $configureArgs += "-DFFMPEG_ROOT=$FfmpegRoot"
         }
         if ($CMakePrefixPath) { $configureArgs += "-DCMAKE_PREFIX_PATH=$CMakePrefixPath" }
+        if ($CMakeModulePath) { $configureArgs += "-DCMAKE_MODULE_PATH=$CMakeModulePath" }
         if ($LibObsDir) { $configureArgs += "-DLibObs_DIR=$LibObsDir" }
         if ($ObsFrontendApiDir) { $configureArgs += "-Dobs-frontend-api_DIR=$ObsFrontendApiDir" }
         if ($OAuthClientId) { $configureArgs += "-DZOOM_EMBED_OAUTH_CLIENT_ID=$OAuthClientId" }
