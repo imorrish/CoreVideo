@@ -368,7 +368,11 @@ void OBSClient::handleResponse(const QJsonObject &d)
     if (!status["result"].toBool()) {
         if (type == "GetSceneItemList")
             m_pendingSceneItemLists.remove(id);
-        const QString comment = status["comment"].toString();
+        QString comment = status["comment"].toString();
+        if (type == "SetCurrentPreviewScene") {
+            comment += QStringLiteral(
+                " OBS preview scene switching requires Studio Mode. The Look scene was still rendered; enable OBS Studio Mode or use TAKE to put it on program.");
+        }
         const QString summary = QStringLiteral("%1 failed: %2").arg(type, comment);
         emit log(summary);
         emit requestFailed(summary);
