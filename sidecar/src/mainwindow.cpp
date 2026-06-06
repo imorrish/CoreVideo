@@ -83,6 +83,22 @@ bool isValidSidecarSlot(int slot)
 {
     return slot >= 0 && slot < 8;
 }
+
+QString autoLowerThirdSignature(const QVector<Overlay> &overlays)
+{
+    QStringList parts;
+    for (const Overlay &overlay : overlays) {
+        if (!LowerThirdController::isAutoLowerThird(overlay))
+            continue;
+        parts << QStringLiteral("%1|%2|%3|%4|%5|%6|%7")
+                     .arg(overlay.id, overlay.text1, overlay.text2)
+                     .arg(overlay.x, 0, 'f', 4)
+                     .arg(overlay.y, 0, 'f', 4)
+                     .arg(overlay.w, 0, 'f', 4)
+                     .arg(overlay.h, 0, 'f', 4);
+    }
+    return parts.join(QStringLiteral(";"));
+}
 }
 
 MainWindow::MainWindow(const StartupConfig &startup, QWidget *parent)
@@ -222,6 +238,12 @@ MainWindow::MainWindow(const StartupConfig &startup, QWidget *parent)
         onApplyLayout();
     });
 
+    m_lowerThirdRenderTimer = new QTimer(this);
+    m_lowerThirdRenderTimer->setSingleShot(true);
+    m_lowerThirdRenderTimer->setInterval(450);
+    connect(m_lowerThirdRenderTimer, &QTimer::timeout,
+            this, &MainWindow::scheduleProgramLowerThirdRender);
+
     // ── Connections ───────────────────────────────────────────────────────────
     connect(m_sidebar, &Sidebar::pageSelected, this, &MainWindow::onPageSelected);
     connect(m_takeBtn, &QPushButton::clicked,  this, &MainWindow::onTake);
@@ -355,10 +377,12 @@ MainWindow::MainWindow(const StartupConfig &startup, QWidget *parent)
     connect(m_zoomClient, &ZoomControlClient::participantsUpdated,
             this, [this](const QVector<ParticipantInfo> &participants) {
         reconcileParticipantSlots(participants);
-        updateParticipantSyncedLowerThirds();
+        const bool lowerThirdsChanged = updateParticipantSyncedLowerThirds();
         m_participantPanel->setParticipants(m_participants);
         if (m_sceneCanvas) m_sceneCanvas->setParticipants(participantsForLook(m_working));
         if (m_liveCanvas && m_bus) m_liveCanvas->setParticipants(participantsForLook(m_bus->program()));
+        if (lowerThirdsChanged && m_lowerThirdRenderTimer)
+            m_lowerThirdRenderTimer->start();
         syncZoomOutputAssignments();
     });
     connect(m_zoomClient, &ZoomControlClient::outputSourcesUpdated,
@@ -1312,27 +1336,59 @@ void MainWindow::reconcileParticipantSlots(const QVector<ParticipantInfo> &parti
         m_bus->stageLook(m_working);
 }
 
-void MainWindow::updateParticipantSyncedLowerThirds()
+Look MainWindow::lookWithParticipantSyncedLowerThirds(const Look &look) const
 {
-    if (!m_working.tmpl.isValid())
-        return;
+    Look updated = look;
+    if (!updated.tmpl.isValid())
+        return updated;
 
-    m_working.overlays.erase(
-        std::remove_if(m_working.overlays.begin(), m_working.overlays.end(),
+    updated.overlays.erase(
+        std::remove_if(updated.overlays.begin(), updated.overlays.end(),
                        [](const Overlay &ov) {
                            return LowerThirdController::isAutoLowerThird(ov);
                        }),
-        m_working.overlays.end());
+        updated.overlays.end());
 
     const QVector<Overlay> generated =
-        m_lowerThirds.participantSyncedOverlays(m_working, m_participants);
+        m_lowerThirds.participantSyncedOverlays(updated, m_participants);
     for (const Overlay &ov : generated)
-        m_working.overlays.append(ov);
+        updated.overlays.append(ov);
 
+    return updated;
+}
+
+bool MainWindow::updateParticipantSyncedLowerThirds()
+{
+    if (!m_working.tmpl.isValid())
+        return false;
+
+    const QString before = autoLowerThirdSignature(m_working.overlays);
+    m_working = lookWithParticipantSyncedLowerThirds(m_working);
+    const QString after = autoLowerThirdSignature(m_working.overlays);
     if (m_bus)
         m_bus->stageLook(m_working);
     if (m_overlayPanel)
         m_overlayPanel->setActiveOverlays(m_working.overlays);
+    return before != after;
+}
+
+void MainWindow::scheduleProgramLowerThirdRender()
+{
+    if (!m_bus || !m_obsClient || !m_obsClient->isConnected())
+        return;
+
+    Look program = lookWithParticipantSyncedLowerThirds(m_bus->program());
+    if (!program.isValid())
+        return;
+
+    const QString signature = autoLowerThirdSignature(program.overlays);
+    if (signature == m_lastProgramLowerThirdSignature)
+        return;
+
+    m_lastProgramLowerThirdSignature = signature;
+    m_bus->replaceProgramLook(program);
+    renderLookToOBS(program, true);
+    onObsLog(QStringLiteral("Updated OBS program lower thirds from live participant data."));
 }
 
 void MainWindow::syncZoomOutputAssignments()

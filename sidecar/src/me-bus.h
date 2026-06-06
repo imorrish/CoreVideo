@@ -43,6 +43,10 @@ public:
     // this look like on air" comparisons.
     void swap();
 
+    // Update PGM metadata/overlays without a transition. Used for live
+    // participant-synced labels where the scene stays on air but text changes.
+    void replaceProgramLook(const Look &look);
+
 signals:
     void programChanged(const Look &pgm);
     void previewChanged(const Look &pvw);

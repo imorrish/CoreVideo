@@ -34,6 +34,7 @@ class QPlainTextEdit;
 class QDockWidget;
 class QStackedWidget;
 class CommandPalette;
+class QTimer;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -106,7 +107,9 @@ private:
     void validateObsSceneGraphStatus(const QString &context, bool writeLog);
     void reconcileParticipantSlots(const QVector<ParticipantInfo> &participants);
     void syncZoomOutputAssignments();
-    void updateParticipantSyncedLowerThirds();
+    bool updateParticipantSyncedLowerThirds();
+    void scheduleProgramLowerThirdRender();
+    Look lookWithParticipantSyncedLowerThirds(const Look &look) const;
     void loadCustomLooks();
     void saveCustomLooks() const;
     QVector<Look> allLooks() const;
@@ -196,6 +199,8 @@ private:
     QVector<ParticipantInfo>   m_participants;
     QVector<Look>              m_customLooks;
     LowerThirdController       m_lowerThirds;
+    QTimer                    *m_lowerThirdRenderTimer = nullptr;
+    QString                    m_lastProgramLowerThirdSignature;
     DirectorAutomationSettings m_directorAutomation;
     DirectorAutomationState    m_directorState;
     QStringList                m_outputSources;

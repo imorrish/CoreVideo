@@ -60,6 +60,14 @@ void MEBus::swap()
     emit previewChanged(m_pvw);
 }
 
+void MEBus::replaceProgramLook(const Look &look)
+{
+    if (isTransitioning() || !look.isValid())
+        return;
+    m_pgm = look;
+    emit programChanged(m_pgm);
+}
+
 void MEBus::startTransition(TransitionKind k, int durationMs)
 {
     m_kind        = k;
