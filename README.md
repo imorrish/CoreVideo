@@ -387,6 +387,11 @@ objects (`directed_speaker`, `raw_speaker`, `candidate_speaker`,
 field. TCP subscribers receive `speaker_director_changed` events whenever the
 directed, candidate, or manual speaker changes.
 
+OSC `/zoom/speaker_director/status` keeps the legacy numeric reply and also
+emits `/zoom/speaker_director/status/detail ,iiiiiiiiiiiis` with directed, raw,
+candidate, last, manual, sensitivity, hold, require-video, candidate elapsed,
+hold remaining, exclusion 1, exclusion 2, and status text.
+
 ## Output Profiles
 
 Named profiles save the full source-to-participant mapping to JSON files under:

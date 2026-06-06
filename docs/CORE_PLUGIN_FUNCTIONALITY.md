@@ -395,6 +395,13 @@ Inspect and control the Active Speaker Director:
 /zoom/speaker_director/release
 ```
 
+The OSC status request preserves the original numeric
+`/zoom/speaker_director/status` reply and also sends
+`/zoom/speaker_director/status/detail ,iiiiiiiiiiiis`, including directed, raw,
+candidate, last, manual, sensitivity, hold, require-video, candidate elapsed,
+hold remaining, two exclusion IDs, and status text such as `holding`,
+`candidate_pending`, or `manual_supersede`.
+
 Assign a source:
 
 ```text

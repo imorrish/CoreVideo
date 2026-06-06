@@ -129,6 +129,7 @@ static std::string assignment_mode_str(AssignmentMode mode);
 static std::string participant_name(uint32_t participant_id);
 static uint32_t resolved_assignment_participant_id(const ZoomOutputInfo &output);
 static uint64_t now_ms();
+static std::string speaker_director_status_str(const SpeakerDirectorSnapshot &s);
 
 // ── ZoomOscServer ────────────────────────────────────────────────────────────
 
@@ -290,6 +291,28 @@ void ZoomOscServer::dispatch(const QString &address,
         a[7].type = OscArg::Int32; a[7].i = s.require_video ? 1 : 0;
         m_socket->writeDatagram(build_osc("/zoom/speaker_director/status",
                                           "iiiiiiii", a),
+                                sender, sender_port);
+        std::vector<OscArg> detail(13);
+        detail[0].type = OscArg::Int32; detail[0].i = static_cast<int32_t>(s.directed_speaker_id);
+        detail[1].type = OscArg::Int32; detail[1].i = static_cast<int32_t>(s.raw_speaker_id);
+        detail[2].type = OscArg::Int32; detail[2].i = static_cast<int32_t>(s.candidate_speaker_id);
+        detail[3].type = OscArg::Int32; detail[3].i = static_cast<int32_t>(s.last_speaker_id);
+        detail[4].type = OscArg::Int32; detail[4].i = static_cast<int32_t>(s.manual_speaker_id);
+        detail[5].type = OscArg::Int32; detail[5].i = static_cast<int32_t>(s.sensitivity_ms);
+        detail[6].type = OscArg::Int32; detail[6].i = static_cast<int32_t>(s.hold_ms);
+        detail[7].type = OscArg::Int32; detail[7].i = s.require_video ? 1 : 0;
+        detail[8].type = OscArg::Int32; detail[8].i = static_cast<int32_t>(s.candidate_elapsed_ms);
+        detail[9].type = OscArg::Int32; detail[9].i = static_cast<int32_t>(s.hold_remaining_ms);
+        detail[10].type = OscArg::Int32;
+        detail[10].i = s.excluded_participant_ids.size() > 0
+            ? static_cast<int32_t>(s.excluded_participant_ids[0]) : 0;
+        detail[11].type = OscArg::Int32;
+        detail[11].i = s.excluded_participant_ids.size() > 1
+            ? static_cast<int32_t>(s.excluded_participant_ids[1]) : 0;
+        detail[12].type = OscArg::String;
+        detail[12].s = speaker_director_status_str(s);
+        m_socket->writeDatagram(build_osc("/zoom/speaker_director/status/detail",
+                                          "iiiiiiiiiiiis", detail),
                                 sender, sender_port);
         return;
     }
@@ -730,6 +753,17 @@ static uint32_t resolved_assignment_participant_id(const ZoomOutputInfo &output)
 static uint64_t now_ms()
 {
     return os_gettime_ns() / 1'000'000ULL;
+}
+
+static std::string speaker_director_status_str(const SpeakerDirectorSnapshot &s)
+{
+    if (s.manual_active)
+        return "manual_supersede";
+    if (s.candidate_speaker_id != 0)
+        return "candidate_pending";
+    if (s.directed_speaker_id != 0)
+        return "holding";
+    return "waiting_for_speaker";
 }
 
 void ZoomOscServer::send_status(const QHostAddress &to, quint16 port)
