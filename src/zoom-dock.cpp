@@ -561,7 +561,7 @@ ZoomDock::ZoomDock(QWidget *parent)
     m_meeting_id->setPlaceholderText("Meeting ID or Zoom URL");
     m_meeting_id->setToolTip(
         "Enter a numeric meeting ID or paste a full Zoom URL "
-        "(e.g. https://zoom.us/j/123?pwd=abc) â€” the ID and passcode "
+        "(e.g. https://zoom.us/j/123?pwd=abc) - the ID and passcode "
         "will be extracted automatically.");
 
     m_passcode = new QLineEdit(join_group);
