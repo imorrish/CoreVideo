@@ -30,6 +30,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **Video loss mode** - hold last frame or show black when a feed drops; shows color-bar placeholder before first frame
 - **Raw audio capture** - 48 kHz PCM, mono or stereo, with per-participant audio isolation and mixer routing
 - **Auto ISO recording** - record assigned participant/active-speaker/spotlight outputs to separate FFmpeg-encoded MP4 files with matching PCM WAV audio, plus optional main OBS program recording
+- **ISO capacity guidance** - recorder panel estimates ISO/program encode paths and warns when CPU or GPU encoder pressure is likely
 - **Assignment modes** - each source independently follows: a fixed participant, the active speaker, a ZoomISO-style spotlight slot (1...N), or the active screen share
 - **Failover participant** - configure a secondary participant that activates automatically when the primary leaves
 - **Active Speaker Director** - configurable sensitivity + hold-time switching, manual take/release supersede, and a dedicated `CoreVideo Active Speaker` OBS source for clean speaker-follow output

@@ -30,6 +30,8 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <algorithm>
+
 static constexpr qint64 kIsoMinimumFreeBytes = 2ll * 1024ll * 1024ll * 1024ll;
 static constexpr qint64 kIsoWarningFreeBytes = 10ll * 1024ll * 1024ll * 1024ll;
 
@@ -127,6 +129,23 @@ static QString encoder_guidance_text(const QString &encoder)
     return QStringLiteral("Unknown encoder. Test FFmpeg before recording.");
 }
 
+static bool is_hardware_encoder(const QString &encoder)
+{
+    return encoder == QStringLiteral("h264_nvenc") ||
+        encoder == QStringLiteral("h264_qsv") ||
+        encoder == QStringLiteral("h264_amf");
+}
+
+static bool is_iso_eligible_output(const ZoomOutputInfo &output)
+{
+    if (output.assignment == AssignmentMode::ScreenShare)
+        return false;
+    if (output.assignment == AssignmentMode::ActiveSpeaker ||
+        output.assignment == AssignmentMode::SpotlightIndex)
+        return true;
+    return output.participant_id != 0;
+}
+
 ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     : QWidget(parent)
 {
@@ -190,6 +209,7 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     connect(m_video_encoder, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this]() {
                 refresh_encoder_guidance();
+                refresh_capacity_guidance();
                 persist_settings();
             });
     encoder_row->addWidget(new QLabel("Video encoder:", config_group));
@@ -199,6 +219,10 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     m_record_program = new QCheckBox("Also start/stop OBS program recording",
                                      config_group);
     m_record_program->setChecked(settings.iso_record_program);
+    connect(m_record_program, &QCheckBox::toggled, this, [this]() {
+        refresh_capacity_guidance();
+        persist_settings();
+    });
     config_layout->addWidget(m_record_program);
 
     auto *button_row = new QHBoxLayout;
@@ -223,6 +247,8 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     m_status = new QLabel("Idle", config_group);
     m_encoder_guidance = new QLabel(config_group);
     m_encoder_guidance->setWordWrap(true);
+    m_capacity_guidance = new QLabel(config_group);
+    m_capacity_guidance->setWordWrap(true);
     m_disk_status = new QLabel(config_group);
     m_error = new QLabel(config_group);
     m_error->setObjectName("errorLabel");
@@ -230,6 +256,7 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     m_error->setVisible(false);
     config_layout->addWidget(m_status);
     config_layout->addWidget(m_encoder_guidance);
+    config_layout->addWidget(m_capacity_guidance);
     config_layout->addWidget(m_disk_status);
     config_layout->addWidget(m_error);
     layout->addWidget(config_group);
@@ -268,6 +295,7 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
 
     setStyleSheet(cv_stylesheet());
     refresh_encoder_guidance();
+    refresh_capacity_guidance();
     refresh_status();
 }
 
@@ -351,6 +379,26 @@ void ZoomIsoPanel::start_recording()
         }
     }
 
+    const QString encoder = m_video_encoder->currentData().toString();
+    const auto outputs = ZoomOutputManager::instance().outputs();
+    const int eligible_outputs = static_cast<int>(std::count_if(
+        outputs.begin(), outputs.end(), is_iso_eligible_output));
+    const int encode_paths = eligible_outputs + (m_record_program->isChecked() ? 1 : 0);
+    if (is_hardware_encoder(encoder) && encode_paths > 3) {
+        const int choice = QMessageBox::warning(
+            this, "Encoder Capacity",
+            QString("This will use up to %1 hardware H.264 encode path(s): %2 ISO feed(s)%3. "
+                    "Some GPUs limit concurrent encoder sessions. Continue recording?")
+                .arg(encode_paths)
+                .arg(eligible_outputs)
+                .arg(m_record_program->isChecked()
+                    ? QStringLiteral(" plus OBS program recording")
+                    : QString()),
+            QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+        if (choice != QMessageBox::Yes)
+            return;
+    }
+
     ZoomIsoRecordConfig config;
     config.output_dir = m_output_dir->text().trimmed().toStdString();
     config.ffmpeg_path = m_ffmpeg_path->text().trimmed().toStdString();
@@ -394,6 +442,7 @@ void ZoomIsoPanel::refresh_status()
               .arg(sessions.size())
               .arg(sessions.size() == 1 ? "" : "s")
         : QStringLiteral("Idle"));
+    refresh_capacity_guidance();
 
     const QStorageInfo storage = storage_for_output_dir(m_output_dir->text());
     if (storage.isValid() && storage.isReady()) {
@@ -476,6 +525,39 @@ void ZoomIsoPanel::refresh_encoder_guidance()
         encoder == QStringLiteral("libx264")
             ? "color: #c0c0d8;"
             : "color: #f0b429; font-weight: 700;");
+}
+
+void ZoomIsoPanel::refresh_capacity_guidance()
+{
+    if (!m_capacity_guidance || !m_video_encoder || !m_record_program)
+        return;
+
+    const QString encoder = m_video_encoder->currentData().toString();
+    const auto outputs = ZoomOutputManager::instance().outputs();
+    const int eligible_outputs = static_cast<int>(std::count_if(
+        outputs.begin(), outputs.end(), is_iso_eligible_output));
+    const int encode_paths = eligible_outputs + (m_record_program->isChecked() ? 1 : 0);
+
+    QString text = QString("Estimated encode load: %1 ISO feed%2%3.")
+        .arg(eligible_outputs)
+        .arg(eligible_outputs == 1 ? "" : "s")
+        .arg(m_record_program->isChecked()
+            ? QStringLiteral(" plus OBS program recording")
+            : QString());
+
+    if (is_hardware_encoder(encoder) && encode_paths > 3) {
+        text += QStringLiteral(
+            " Hardware encoder session pressure is likely; switch one path to CPU x264 if FFmpeg or OBS reports encoder startup failures.");
+        m_capacity_guidance->setStyleSheet("color: #f0b429; font-weight: 700;");
+    } else if (encoder == QStringLiteral("libx264") && eligible_outputs >= 6) {
+        text += QStringLiteral(
+            " CPU load may be high with 6-8 ISO feeds; monitor OBS CPU and dropped frames.");
+        m_capacity_guidance->setStyleSheet("color: #f0b429; font-weight: 700;");
+    } else {
+        m_capacity_guidance->setStyleSheet("color: #c0c0d8;");
+    }
+
+    m_capacity_guidance->setText(text);
 }
 
 void ZoomIsoPanel::persist_settings() const
