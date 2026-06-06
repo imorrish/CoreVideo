@@ -178,6 +178,23 @@ function New-UninstallFileList {
     Set-Content -LiteralPath $OutputPath -Value $lines -Encoding UTF8
 }
 
+function New-Sha256File {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    $item = Get-Item -LiteralPath $Path
+    $hash = (Get-FileHash -LiteralPath $item.FullName -Algorithm SHA256).Hash
+    $hashPath = "$($item.FullName).sha256"
+    Set-Content -LiteralPath $hashPath -Encoding ASCII -Value ("{0}  {1}" -f $hash, $item.Name)
+    return @{
+        Hash = $hash
+        Path = $hashPath
+        Name = (Split-Path -Leaf $hashPath)
+    }
+}
+
 function Invoke-NativeCommand {
     param(
         [Parameter(Mandatory = $true)]
@@ -303,7 +320,7 @@ try {
         Remove-Item -LiteralPath $zipPath -Force
     }
     Compress-Archive -Path (Join-Path $installPath "*") -DestinationPath $zipPath -Force
-    $hash = (Get-FileHash $zipPath -Algorithm SHA256).Hash
+    $zipHash = New-Sha256File -Path $zipPath
     $installerHash = $null
 
     if (-not $SkipInstaller) {
@@ -323,7 +340,7 @@ try {
             if ($LASTEXITCODE -ne 0) {
                 throw "NSIS installer build failed with exit code $LASTEXITCODE"
             }
-            $installerHash = (Get-FileHash $installerPath -Algorithm SHA256).Hash
+            $installerHash = New-Sha256File -Path $installerPath
         } else {
             Write-Warning "NSIS makensis was not found. Skipping installer EXE. Install NSIS or rerun with -SkipInstaller."
         }
@@ -347,9 +364,9 @@ try {
         try {
             $release = Invoke-GitHubApi -Method Get -Uri "https://api.github.com/repos/$repoFullName/releases/tags/$Version"
         } catch {
-            $bodyText = "CoreVideo Windows x64 package. Includes OBS plugin, ZoomObsEngine runtime, and Zoom SDK runtime DLLs.`n`nZIP SHA256: $hash"
+            $bodyText = "CoreVideo Windows x64 package. Includes OBS plugin, ZoomObsEngine runtime, and Zoom SDK runtime DLLs.`n`nZIP SHA256: $($zipHash.Hash)"
             if ($installerHash) {
-                $bodyText += "`nInstaller SHA256: $installerHash"
+                $bodyText += "`nInstaller SHA256: $($installerHash.Hash)"
             }
             $body = @{
                 tag_name = $Version
@@ -364,16 +381,20 @@ try {
         }
 
         Upload-ReleaseAsset -Release $release -Path $zipPath -Name $zipFileName -ContentType "application/zip"
+        Upload-ReleaseAsset -Release $release -Path $zipHash.Path -Name $zipHash.Name -ContentType "text/plain"
         if ($installerHash) {
             Upload-ReleaseAsset -Release $release -Path $installerPath -Name $installerFileName -ContentType "application/octet-stream"
+            Upload-ReleaseAsset -Release $release -Path $installerHash.Path -Name $installerHash.Name -ContentType "text/plain"
         }
     }
 
     Write-Host "Release ZIP: $zipPath"
-    Write-Host "SHA256: $hash"
+    Write-Host "SHA256: $($zipHash.Hash)"
+    Write-Host "SHA256 file: $($zipHash.Path)"
     if ($installerHash) {
         Write-Host "Installer: $installerPath"
-        Write-Host "Installer SHA256: $installerHash"
+        Write-Host "Installer SHA256: $($installerHash.Hash)"
+        Write-Host "Installer SHA256 file: $($installerHash.Path)"
     }
 } finally {
     Pop-Location

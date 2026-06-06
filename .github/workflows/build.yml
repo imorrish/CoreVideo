@@ -202,12 +202,17 @@ jobs:
               Write-Warning "Windows artifact is validation-only; it does not include zoom-runtime\sdk.dll."
           }
           Compress-Archive -Path install\* -DestinationPath CoreVideo-Windows-x64.zip
+          $hash = (Get-FileHash -LiteralPath CoreVideo-Windows-x64.zip -Algorithm SHA256).Hash
+          Set-Content -LiteralPath CoreVideo-Windows-x64.zip.sha256 -Encoding ASCII -Value ("{0}  CoreVideo-Windows-x64.zip" -f $hash)
+          Write-Host "CoreVideo-Windows-x64.zip SHA256: $hash"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: CoreVideo-Windows
-          path: CoreVideo-Windows-x64.zip
+          path: |
+            CoreVideo-Windows-x64.zip
+            CoreVideo-Windows-x64.zip.sha256
           if-no-files-found: warn
 
       - name: Upload build logs on failure
