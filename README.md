@@ -339,6 +339,20 @@ obs-studio/plugin_config/obs-zoom-plugin/profiles/<name>.json
 
 Use the **Zoom Output Manager** dock, or **OBS -> Tools -> Zoom Output Manager** to focus it, to save, load, and delete profiles interactively. Profiles preserve assignment mode, requested resolution, channel mode, and audio role (`Mix`, `Isolated`, or `Audience`). Code can call `ZoomOutputProfile::save() / load() / list() / remove()` directly.
 
+## Repeatable Load Measurements
+
+For 8-feed stability testing, start OBS in the target production state first:
+eight participant feeds assigned, ISO recording enabled if needed, and the
+program stream/recording active. Then run:
+
+```powershell
+.\scripts\Measure-CoreVideoLoad.ps1 -DurationSeconds 300 -SampleSeconds 5
+```
+
+The script writes CSV samples and a summary under `artifacts/load-tests/` for
+`obs64`, `ZoomObsEngine`, and `ffmpeg`, making CPU and memory comparisons
+repeatable across builds.
+
 ## Architecture Overview
 
 ```
