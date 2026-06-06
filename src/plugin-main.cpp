@@ -32,6 +32,10 @@ static QPointer<ZoomDock> g_dock;
 static QPointer<ZoomIsoPanel> g_iso_panel;
 static QPointer<ZoomOutputDialog> g_output_panel;
 static QPointer<ZoomDiagnosticsDialog> g_diagnostics_panel;
+static QPointer<QDockWidget> g_zoom_dock_host;
+static QPointer<QDockWidget> g_iso_dock_host;
+static QPointer<QDockWidget> g_output_dock_host;
+static QPointer<QDockWidget> g_diagnostics_dock_host;
 static bool g_frontend_callback_registered = false;
 static bool g_shutdown_started = false;
 
@@ -101,6 +105,39 @@ static void configure_qt_plugin_paths()
 #endif
 }
 
+static QDockWidget *dock_host_for(QWidget *widget)
+{
+    QWidget *parent = widget;
+    while (parent && !qobject_cast<QDockWidget *>(parent))
+        parent = parent->parentWidget();
+    return qobject_cast<QDockWidget *>(parent);
+}
+
+static void show_registered_dock(QWidget *widget, QPointer<QDockWidget> &dock_host)
+{
+    if (!widget)
+        return;
+
+    if (!dock_host)
+        dock_host = dock_host_for(widget);
+
+    if (dock_host) {
+        if (dock_host->widget() != widget)
+            dock_host->setWidget(widget);
+        widget->show();
+        dock_host->setVisible(true);
+        dock_host->show();
+        dock_host->raise();
+        dock_host->activateWindow();
+        widget->setFocus();
+        return;
+    }
+
+    widget->show();
+    widget->raise();
+    widget->activateWindow();
+}
+
 static ZoomDock *ensure_zoom_dock()
 {
     auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
@@ -112,6 +149,7 @@ static ZoomDock *ensure_zoom_dock()
     if (!g_dock) {
         g_dock = new ZoomDock(main_win);
         obs_frontend_add_dock_by_id("ZoomControlDock", "Zoom Control", g_dock);
+        g_zoom_dock_host = dock_host_for(g_dock);
         blog(LOG_INFO, "[obs-zoom-plugin] Registered dock: ZoomControlDock");
     }
     return g_dock;
@@ -120,23 +158,7 @@ static ZoomDock *ensure_zoom_dock()
 static void show_zoom_dock()
 {
     ZoomDock *dock_widget = ensure_zoom_dock();
-    if (!dock_widget) return;
-
-    QWidget *parent = dock_widget;
-    while (parent && !qobject_cast<QDockWidget *>(parent))
-        parent = parent->parentWidget();
-
-    if (auto *dock = qobject_cast<QDockWidget *>(parent)) {
-        dock->show();
-        dock->raise();
-        dock->activateWindow();
-        dock_widget->setFocus();
-        return;
-    }
-
-    dock_widget->show();
-    dock_widget->raise();
-    dock_widget->activateWindow();
+    show_registered_dock(dock_widget, g_zoom_dock_host);
 }
 
 static ZoomIsoPanel *ensure_iso_panel()
@@ -150,6 +172,7 @@ static ZoomIsoPanel *ensure_iso_panel()
     if (!g_iso_panel) {
         g_iso_panel = new ZoomIsoPanel(main_win);
         obs_frontend_add_dock_by_id("ZoomIsoRecorderDock", "Zoom ISO Recorder", g_iso_panel);
+        g_iso_dock_host = dock_host_for(g_iso_panel);
         blog(LOG_INFO, "[obs-zoom-plugin] Registered dock: ZoomIsoRecorderDock");
     }
     return g_iso_panel;
@@ -158,46 +181,7 @@ static ZoomIsoPanel *ensure_iso_panel()
 static void show_iso_panel()
 {
     ZoomIsoPanel *panel = ensure_iso_panel();
-    if (!panel) return;
-
-    QWidget *parent = panel;
-    while (parent && !qobject_cast<QDockWidget *>(parent))
-        parent = parent->parentWidget();
-
-    if (auto *dock = qobject_cast<QDockWidget *>(parent)) {
-        dock->show();
-        dock->raise();
-        dock->activateWindow();
-        panel->setFocus();
-        return;
-    }
-
-    panel->show();
-    panel->raise();
-    panel->activateWindow();
-}
-
-template <typename Widget>
-static void show_dock_widget(Widget *widget)
-{
-    if (!widget) return;
-
-    QWidget *parent = widget;
-    while (parent && !qobject_cast<QDockWidget *>(parent))
-        parent = parent->parentWidget();
-
-    if (auto *dock = qobject_cast<QDockWidget *>(parent)) {
-        widget->show();
-        dock->show();
-        dock->raise();
-        dock->activateWindow();
-        widget->setFocus();
-        return;
-    }
-
-    widget->show();
-    widget->raise();
-    widget->activateWindow();
+    show_registered_dock(panel, g_iso_dock_host);
 }
 
 static ZoomOutputDialog *ensure_output_panel()
@@ -211,6 +195,7 @@ static ZoomOutputDialog *ensure_output_panel()
     if (!g_output_panel) {
         g_output_panel = new ZoomOutputDialog(main_win);
         obs_frontend_add_dock_by_id("ZoomOutputManagerDock", "Zoom Output Manager", g_output_panel);
+        g_output_dock_host = dock_host_for(g_output_panel);
         blog(LOG_INFO, "[obs-zoom-plugin] Registered dock: ZoomOutputManagerDock");
     }
     return g_output_panel;
@@ -221,7 +206,7 @@ static void show_output_panel()
     ZoomOutputDialog *panel = ensure_output_panel();
     if (panel)
         panel->refresh_now();
-    show_dock_widget(panel);
+    show_registered_dock(panel, g_output_dock_host);
 }
 
 void corevideo_show_output_manager_dock()
@@ -240,6 +225,7 @@ static ZoomDiagnosticsDialog *ensure_diagnostics_panel()
     if (!g_diagnostics_panel) {
         g_diagnostics_panel = new ZoomDiagnosticsDialog(main_win);
         obs_frontend_add_dock_by_id("ZoomDiagnosticsDock", "Zoom Diagnostics", g_diagnostics_panel);
+        g_diagnostics_dock_host = dock_host_for(g_diagnostics_panel);
         blog(LOG_INFO, "[obs-zoom-plugin] Registered dock: ZoomDiagnosticsDock");
     }
     return g_diagnostics_panel;
@@ -250,7 +236,7 @@ static void show_diagnostics_panel()
     ZoomDiagnosticsDialog *panel = ensure_diagnostics_panel();
     if (panel)
         panel->refresh_now();
-    show_dock_widget(panel);
+    show_registered_dock(panel, g_diagnostics_dock_host);
 }
 
 OBS_DECLARE_MODULE()
@@ -331,4 +317,8 @@ void obs_module_unload(void)
     g_iso_panel.clear();
     g_output_panel.clear();
     g_diagnostics_panel.clear();
+    g_zoom_dock_host.clear();
+    g_iso_dock_host.clear();
+    g_output_dock_host.clear();
+    g_diagnostics_dock_host.clear();
 }
