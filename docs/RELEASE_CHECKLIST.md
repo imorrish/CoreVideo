@@ -58,6 +58,15 @@ Use the smoke audit script where possible:
 .\scripts\obs-scene-smoke-test.ps1 -AuditOnly -VerifyCoreVideoPlugin -ExpectShutdown
 ```
 
+After manually opening each CoreVideo dock from OBS **Tools**, validate the OBS
+log contains both registration and show markers:
+
+```powershell
+.\scripts\obs-scene-smoke-test.ps1 -LogOnly -ExpectDockShow -ExpectShutdown `
+  -ObsLogPath "$env:APPDATA\obs-studio\logs\YYYY-MM-DD HH-MM-SS.txt" `
+  -ExpectedDockId ZoomControlDock,ZoomOutputManagerDock,ZoomDiagnosticsDock,ZoomIsoRecorderDock
+```
+
 ## Production Flow Test
 
 Before release, run at least one meeting test:

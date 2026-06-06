@@ -34,6 +34,9 @@ param(
     [switch]$ExpectShutdown,
 
     [Parameter()]
+    [switch]$ExpectDockShow,
+
+    [Parameter()]
     [switch]$LogOnly
 )
 
@@ -342,7 +345,8 @@ function Test-CoreVideoObsLog {
     param(
         [string]$Path,
         [string[]]$ExpectedDockId,
-        [bool]$ExpectShutdown
+        [bool]$ExpectShutdown,
+        [bool]$ExpectDockShow
     )
 
     if (-not $Path) {
@@ -355,6 +359,9 @@ function Test-CoreVideoObsLog {
         "[obs-zoom-plugin] Plugin loaded successfully"
     )
     $markers += @($ExpectedDockId | ForEach-Object { "[obs-zoom-plugin] Registered dock: $_" })
+    if ($ExpectDockShow) {
+        $markers += @($ExpectedDockId | ForEach-Object { "[obs-zoom-plugin] Showing dock: $_" })
+    }
     if ($ExpectShutdown) {
         $markers += "[obs-zoom-plugin] Shutting down CoreVideo runtime"
     }
@@ -371,7 +378,8 @@ if ($LogOnly) {
     Test-CoreVideoObsLog `
         -Path $ObsLogPath `
         -ExpectedDockId $ExpectedDockId `
-        -ExpectShutdown:$ExpectShutdown
+        -ExpectShutdown:$ExpectShutdown `
+        -ExpectDockShow:$ExpectDockShow
     return
 }
 
@@ -415,7 +423,8 @@ try {
         Test-CoreVideoObsLog `
             -Path $ObsLogPath `
             -ExpectedDockId $ExpectedDockId `
-            -ExpectShutdown:$ExpectShutdown
+            -ExpectShutdown:$ExpectShutdown `
+            -ExpectDockShow:$ExpectDockShow
     }
 
     $sourceScene = "CoreVideo Sources"

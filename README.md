@@ -215,12 +215,15 @@ present for every sample.
 
 To audit plugin load and dock registration markers, pass the current OBS log
 path. After manually opening docks in OBS, include their dock IDs in
-`-ExpectedDockId`:
+`-ExpectedDockId`. Add `-ExpectDockShow` after exercising **Tools > Zoom
+Control**, **Tools > Zoom Output Manager**, **Tools > Zoom Diagnostics**, and
+**Tools > Zoom ISO Recorder** to prove the reopen path logged each dock show:
 
 ```powershell
 .\scripts\obs-scene-smoke-test.ps1 -AuditOnly -VerifyCoreVideoPlugin `
   -ObsLogPath "$env:APPDATA\obs-studio\logs\latest.log" `
-  -ExpectedDockId ZoomControlDock,ZoomOutputManagerDock,ZoomDiagnosticsDock,ZoomIsoRecorderDock
+  -ExpectedDockId ZoomControlDock,ZoomOutputManagerDock,ZoomDiagnosticsDock,ZoomIsoRecorderDock `
+  -ExpectDockShow
 ```
 
 After closing OBS, run the log-only lifecycle audit against the same log to
@@ -230,7 +233,8 @@ obvious crash markers:
 ```powershell
 .\scripts\obs-scene-smoke-test.ps1 -LogOnly -ExpectShutdown `
   -ObsLogPath "$env:APPDATA\obs-studio\logs\latest.log" `
-  -ExpectedDockId ZoomControlDock,ZoomOutputManagerDock,ZoomDiagnosticsDock,ZoomIsoRecorderDock
+  -ExpectedDockId ZoomControlDock,ZoomOutputManagerDock,ZoomDiagnosticsDock,ZoomIsoRecorderDock `
+  -ExpectDockShow
 ```
 
 5. **Set up OAuth (for Marketplace / external-account joins)** - publishers configure the Cloudflare broker and bake `-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=https://corevideo.iamfatness.us/oauth/start` into the build. End users just open the Settings dialog and click **Sign in with Zoom**. See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full walkthrough.
