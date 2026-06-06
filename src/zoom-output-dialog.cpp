@@ -500,13 +500,10 @@ void ZoomOutputDialog::refresh()
     const auto outputs = ZoomOutputManager::instance().outputs();
     const std::vector<ParticipantInfo> roster = ZoomEngineClient::instance().roster();
     if (m_output_summary) {
-        bool has_warning = false;
-        for (const auto &output : outputs) {
-            if (output.health_reason != ZoomOutputHealthReason::Ok) {
-                has_warning = true;
-                break;
-            }
-        }
+        const bool has_warning = std::any_of(
+            outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
+                return output.health_reason != ZoomOutputHealthReason::Ok;
+            });
         m_output_summary->setText(output_summary_text(outputs, roster));
         m_output_summary->setStyleSheet(has_warning
             ? "color: #f0b429; font-weight: 700;"

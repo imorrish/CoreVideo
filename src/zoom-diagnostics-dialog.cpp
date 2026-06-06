@@ -738,11 +738,10 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     engine_status["participant_count"] = static_cast<double>(roster.size());
     engine_status["recent_engine_event_count"] =
         static_cast<double>(events.size());
-    int unhealthy_outputs = 0;
-    for (const auto &output : outputs) {
-        if (output.health_reason != ZoomOutputHealthReason::Ok)
-            ++unhealthy_outputs;
-    }
+    const int unhealthy_outputs = static_cast<int>(std::count_if(
+        outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
+            return output.health_reason != ZoomOutputHealthReason::Ok;
+        }));
     engine_status["unhealthy_output_count"] = unhealthy_outputs;
 
     QJsonObject summary;
