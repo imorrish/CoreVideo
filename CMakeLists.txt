@@ -364,6 +364,12 @@ if(COREVIDEO_BUILD_PLUGIN)
             DESTINATION "obs-plugins/64bit/plugins/tls"
         )
     endif()
+    if(WIN32 AND COREVIDEO_QT_PLUGIN_DIR AND EXISTS "${COREVIDEO_QT_PLUGIN_DIR}/platforms/qwindows.dll")
+        install(FILES
+            "${COREVIDEO_QT_PLUGIN_DIR}/platforms/qwindows.dll"
+            DESTINATION "obs-plugins/64bit/plugins/platforms"
+        )
+    endif()
     install(DIRECTORY data/
         DESTINATION "data/obs-plugins/obs-zoom-plugin"
     )

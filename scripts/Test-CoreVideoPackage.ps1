@@ -28,6 +28,8 @@ Test-RequiredFile "obs-plugins\64bit\Qt6Core.dll"
 Test-RequiredFile "obs-plugins\64bit\Qt6Gui.dll"
 Test-RequiredFile "obs-plugins\64bit\Qt6Network.dll"
 Test-RequiredFile "obs-plugins\64bit\Qt6Widgets.dll"
+Test-RequiredFile "obs-plugins\64bit\plugins\platforms\qwindows.dll"
+Test-RequiredFile "obs-plugins\64bit\plugins\tls\qcertonlybackend.dll"
 Test-RequiredFile "obs-plugins\64bit\plugins\tls\qschannelbackend.dll"
 
 if ($FullRuntime) {
