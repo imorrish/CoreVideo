@@ -38,6 +38,9 @@ Confirm `scripts/Test-CoreVideoPackage.ps1` validates:
 - Embedded OAuth public client ID.
 - Embedded Meeting SDK public app key.
 - FFmpeg runtime consistency when FFmpeg DLLs are present.
+- A deterministic install-layout manifest:
+  `CoreVideo-Windows-x64-<version>.manifest.json` locally or
+  `CoreVideo-Windows-x64.manifest.json` in GitHub Actions.
 
 ## OBS Smoke Tests
 
@@ -109,4 +112,5 @@ Publish:
 - Windows installer, when NSIS packaging succeeds.
 - Windows ZIP for manual/advanced installs.
 - SHA256 files for every downloadable asset.
+- Install-layout manifest JSON for comparing local and GitHub release contents.
 - Release notes with known limitations and upgrade notes.

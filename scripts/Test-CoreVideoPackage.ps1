@@ -9,7 +9,10 @@ param(
     [string]$ExpectedOAuthClientId = $env:ZOOM_EMBED_OAUTH_CLIENT_ID,
 
     [Parameter()]
-    [string]$ExpectedMeetingSdkPublicAppKey = $env:ZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY
+    [string]$ExpectedMeetingSdkPublicAppKey = $env:ZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY,
+
+    [Parameter()]
+    [string]$ManifestPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -125,6 +128,36 @@ if ($FullRuntime) {
     if ($zoomRuntimeFiles.Count -lt 50) {
         throw "Release package is incomplete. zoom-runtime contains too few runtime files ($($zoomRuntimeFiles.Count))."
     }
+}
+
+if ($ManifestPath) {
+    $manifestFullPath = [System.IO.Path]::GetFullPath($ManifestPath)
+    $manifestParent = Split-Path -Parent $manifestFullPath
+    if ($manifestParent) {
+        New-Item -ItemType Directory -Force -Path $manifestParent | Out-Null
+    }
+
+    $files = Get-ChildItem -LiteralPath $root -Recurse -File |
+        Sort-Object FullName |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($root.TrimEnd('\').Length + 1)
+            [pscustomobject]@{
+                path = $relative.Replace('\', '/')
+                size = $_.Length
+                sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            }
+        }
+
+    $manifest = [pscustomobject]@{
+        generated_at_utc = (Get-Date).ToUniversalTime().ToString("o")
+        package_root = $root
+        file_count = @($files).Count
+        files = @($files)
+    }
+    $manifest |
+        ConvertTo-Json -Depth 5 |
+        Set-Content -LiteralPath $manifestFullPath -Encoding UTF8
+    Write-Host "CoreVideo package manifest: $manifestFullPath"
 }
 
 Write-Host "CoreVideo package validation passed: $root"

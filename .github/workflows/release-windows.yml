@@ -164,12 +164,14 @@ jobs:
               -PackageRoot install `
               -FullRuntime `
               -ExpectedOAuthClientId y6sIWSwiTZe1JygMx4C9EQ `
-              -ExpectedMeetingSdkPublicAppKey y6sIWSwiTZe1JygMx4C9EQ
+              -ExpectedMeetingSdkPublicAppKey y6sIWSwiTZe1JygMx4C9EQ `
+              -ManifestPath CoreVideo-Windows-x64.manifest.json
           } else {
             .\scripts\Test-CoreVideoPackage.ps1 `
               -PackageRoot install `
               -ExpectedOAuthClientId y6sIWSwiTZe1JygMx4C9EQ `
-              -ExpectedMeetingSdkPublicAppKey y6sIWSwiTZe1JygMx4C9EQ
+              -ExpectedMeetingSdkPublicAppKey y6sIWSwiTZe1JygMx4C9EQ `
+              -ManifestPath CoreVideo-Windows-x64.manifest.json
             Write-Warning "Package does not include ZoomObsEngine or sdk.dll because ZOOM_SDK_WINDOWS_URL is not configured."
           }
           Compress-Archive -Path install\* -DestinationPath CoreVideo-Windows-x64.zip -Force
@@ -236,6 +238,7 @@ jobs:
           path: |
             CoreVideo-Windows-x64.zip
             CoreVideo-Windows-x64.zip.sha256
+            CoreVideo-Windows-x64.manifest.json
             CoreVideo-Setup-*.exe
             CoreVideo-Setup-*.exe.sha256
 
@@ -268,6 +271,7 @@ jobs:
           files: |
             CoreVideo-Windows-x64.zip
             CoreVideo-Windows-x64.zip.sha256
+            CoreVideo-Windows-x64.manifest.json
             CoreVideo-Setup-*.exe
             CoreVideo-Setup-*.exe.sha256
 

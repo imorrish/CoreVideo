@@ -257,6 +257,7 @@ $zipPath = Join-Path $distPath $zipFileName
 $installerFileName = "CoreVideo-Setup-$Version.exe"
 $installerPath = Join-Path $distPath $installerFileName
 $uninstallListPath = Join-Path $distPath "corevideo-uninstall-files.nsh"
+$manifestPath = Join-Path $distPath "CoreVideo-Windows-x64-$Version.manifest.json"
 
 Push-Location $repoRoot
 try {
@@ -328,7 +329,8 @@ try {
         -PackageRoot $installPath `
         -FullRuntime `
         -ExpectedOAuthClientId $OAuthClientId `
-        -ExpectedMeetingSdkPublicAppKey $MeetingSdkPublicAppKey
+        -ExpectedMeetingSdkPublicAppKey $MeetingSdkPublicAppKey `
+        -ManifestPath $manifestPath
 
     New-Item -ItemType Directory -Force -Path $distPath | Out-Null
     if (Test-Path -LiteralPath $zipPath) {
@@ -367,6 +369,11 @@ try {
             throw "OBS install path does not exist: $ObsInstallPath"
         }
         Copy-Item -Path (Join-Path $installPath "*") -Destination $ObsInstallPath -Recurse -Force
+        & (Join-Path $PSScriptRoot "Test-CoreVideoPackage.ps1") `
+            -PackageRoot $ObsInstallPath `
+            -FullRuntime `
+            -ExpectedOAuthClientId $OAuthClientId `
+            -ExpectedMeetingSdkPublicAppKey $MeetingSdkPublicAppKey
     }
 
     if ($Upload) {
@@ -398,6 +405,7 @@ try {
 
         Upload-ReleaseAsset -Release $release -Path $zipPath -Name $zipFileName -ContentType "application/zip"
         Upload-ReleaseAsset -Release $release -Path $zipHash.Path -Name $zipHash.Name -ContentType "text/plain"
+        Upload-ReleaseAsset -Release $release -Path $manifestPath -Name (Split-Path -Leaf $manifestPath) -ContentType "application/json"
         if ($installerHash) {
             Upload-ReleaseAsset -Release $release -Path $installerPath -Name $installerFileName -ContentType "application/octet-stream"
             Upload-ReleaseAsset -Release $release -Path $installerHash.Path -Name $installerHash.Name -ContentType "text/plain"
@@ -407,6 +415,7 @@ try {
     Write-Host "Release ZIP: $zipPath"
     Write-Host "SHA256: $($zipHash.Hash)"
     Write-Host "SHA256 file: $($zipHash.Path)"
+    Write-Host "Package manifest: $manifestPath"
     if ($installerHash) {
         Write-Host "Installer: $installerPath"
         Write-Host "Installer SHA256: $($installerHash.Hash)"
