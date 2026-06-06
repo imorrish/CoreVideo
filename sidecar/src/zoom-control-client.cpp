@@ -39,7 +39,6 @@ void ZoomControlClient::refreshParticipants()
         QVector<ParticipantInfo> participants;
         for (const auto &value : response.value("participants").toArray()) {
             const QJsonObject obj = value.toObject();
-            if (!obj.value("has_video").toBool()) continue;
             participants.append(participantFromJson(obj));
         }
         emit participantsUpdated(participants);

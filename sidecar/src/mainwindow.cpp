@@ -52,6 +52,39 @@
 #include <QTableWidget>
 #include <algorithm>
 
+namespace {
+constexpr int kSidecarPlaceholderIdBase = -1000;
+
+bool isSidecarPlaceholderId(int participantId)
+{
+    return participantId <= kSidecarPlaceholderIdBase
+        && participantId > kSidecarPlaceholderIdBase - 100;
+}
+
+ParticipantInfo sidecarPlaceholderParticipant(int slotIndex)
+{
+    static const QVector<QColor> colors = {
+        QColor(0x1e, 0x6a, 0xe0), QColor(0x20, 0xa0, 0x60),
+        QColor(0x9b, 0x40, 0xd0), QColor(0xe0, 0x60, 0x20),
+        QColor(0x29, 0x79, 0xff), QColor(0xd0, 0x40, 0x90),
+        QColor(0xb0, 0x90, 0x20), QColor(0x40, 0xa0, 0xc0),
+    };
+    ParticipantInfo p;
+    p.id = kSidecarPlaceholderIdBase - slotIndex;
+    p.name = QStringLiteral("Placeholder %1").arg(slotIndex + 1);
+    p.initials = QStringLiteral("P%1").arg(slotIndex + 1);
+    p.color = colors.value(slotIndex % colors.size(), QColor(0x60, 0x70, 0x90));
+    p.hasVideo = true;
+    p.slotAssign = slotIndex;
+    return p;
+}
+
+bool isValidSidecarSlot(int slot)
+{
+    return slot >= 0 && slot < 8;
+}
+}
+
 MainWindow::MainWindow(const StartupConfig &startup, QWidget *parent)
     : QMainWindow(parent)
 {
@@ -855,16 +888,9 @@ void MainWindow::buildLogDock()
 // ── Mock data ─────────────────────────────────────────────────────────────────
 void MainWindow::loadMockParticipants()
 {
-    m_participants = {
-        {1, "Placeholder 1", "P1", QColor(0x1e, 0x6a, 0xe0), true, false, false, 0},
-        {2, "Placeholder 2", "P2", QColor(0x20, 0xa0, 0x60), true, false, false, 1},
-        {3, "Placeholder 3", "P3", QColor(0x9b, 0x40, 0xd0), true, false, false, 2},
-        {4, "Placeholder 4", "P4", QColor(0xe0, 0x60, 0x20), true, false, false, 3},
-        {5, "Placeholder 5", "P5", QColor(0x29, 0x79, 0xff), true, false, false, 4},
-        {6, "Placeholder 6", "P6", QColor(0xd0, 0x40, 0x90), true, false, false, 5},
-        {7, "Placeholder 7", "P7", QColor(0xb0, 0x90, 0x20), true, false, false, 6},
-        {8, "Placeholder 8", "P8", QColor(0x40, 0xa0, 0xc0), true, false, false, 7},
-    };
+    m_participants.clear();
+    for (int i = 0; i < 8; ++i)
+        m_participants.append(sidecarPlaceholderParticipant(i));
     m_participantPanel->setParticipants(m_participants);
 
     // Seed the working Look's slot assignments from each participant's
@@ -1226,20 +1252,23 @@ void MainWindow::renderLookToOBS(const Look &look, bool makeProgram)
 
 void MainWindow::reconcileParticipantSlots(const QVector<ParticipantInfo> &participants)
 {
-    QVector<ParticipantInfo> merged = participants;
+    QVector<ParticipantInfo> merged;
+    merged.reserve(std::max<int>(static_cast<int>(participants.size()), 8));
     QSet<int> usedSlots;
 
-    for (auto &participant : merged) {
+    for (auto participant : participants) {
+        participant.slotAssign = -1;
         for (const auto &existing : m_participants) {
             if (existing.id != participant.id)
                 continue;
-            if (existing.slotAssign >= 0 && existing.slotAssign < 8
+            if (isValidSidecarSlot(existing.slotAssign)
                 && !usedSlots.contains(existing.slotAssign)) {
                 participant.slotAssign = existing.slotAssign;
                 usedSlots.insert(existing.slotAssign);
             }
             break;
         }
+        merged.append(participant);
     }
 
     int nextSlot = 0;
@@ -1253,6 +1282,28 @@ void MainWindow::reconcileParticipantSlots(const QVector<ParticipantInfo> &parti
         participant.slotAssign = nextSlot;
         usedSlots.insert(nextSlot);
     }
+
+    for (int slot = 0; slot < 8; ++slot) {
+        if (usedSlots.contains(slot))
+            continue;
+
+        ParticipantInfo placeholder = sidecarPlaceholderParticipant(slot);
+        usedSlots.insert(placeholder.slotAssign);
+        merged.append(placeholder);
+    }
+
+    std::sort(merged.begin(), merged.end(), [](const ParticipantInfo &a,
+                                               const ParticipantInfo &b) {
+        const bool aAssigned = isValidSidecarSlot(a.slotAssign);
+        const bool bAssigned = isValidSidecarSlot(b.slotAssign);
+        if (aAssigned != bAssigned)
+            return aAssigned;
+        if (aAssigned && a.slotAssign != b.slotAssign)
+            return a.slotAssign < b.slotAssign;
+        if (isSidecarPlaceholderId(a.id) != isSidecarPlaceholderId(b.id))
+            return !isSidecarPlaceholderId(a.id);
+        return a.name.localeAwareCompare(b.name) < 0;
+    });
 
     m_participants = merged;
     m_working = lookWithCurrentAssignments(m_working);
@@ -1291,6 +1342,8 @@ void MainWindow::syncZoomOutputAssignments()
 
     QHash<int, int> current;
     for (const auto &participant : m_participants) {
+        if (isSidecarPlaceholderId(participant.id))
+            continue;
         if (!participant.hasVideo || participant.slotAssign < 0 || participant.slotAssign >= 8)
             continue;
         current.insert(participant.slotAssign, participant.id);
@@ -1401,9 +1454,11 @@ void MainWindow::openParticipantMappingWindow()
         auto *combo = new QComboBox(dlg);
         combo->addItem("Unassigned", -1);
         for (const auto &participant : m_participants) {
-            if (!participant.hasVideo)
-                continue;
-            combo->addItem(participant.name, participant.id);
+            const QString status = participant.isSharingScreen
+                ? QStringLiteral("sharing")
+                : (participant.hasVideo ? QStringLiteral("video") : QStringLiteral("no video"));
+            combo->addItem(QStringLiteral("%1 (%2)").arg(participant.name, status),
+                           participant.id);
             if (participant.slotAssign == i)
                 combo->setCurrentIndex(combo->count() - 1);
         }
@@ -1412,7 +1467,9 @@ void MainWindow::openParticipantMappingWindow()
         auto *assignBtn = new QPushButton("Assign", dlg);
         connect(assignBtn, &QPushButton::clicked, dlg, [this, combo, i]() {
             const int participantId = combo->currentData().toInt();
-            if (participantId >= 0)
+            if (participantId == -1)
+                clearSlotAssignment(i);
+            else
                 onSlotAssigned(i, participantId);
         });
 
@@ -1471,7 +1528,9 @@ void MainWindow::openParticipantMappingWindow()
     connect(applyBtn, &QPushButton::clicked, dlg, [this, combos]() {
         for (int i = 0; i < combos.size(); ++i) {
             const int participantId = combos[i]->currentData().toInt();
-            if (participantId >= 0)
+            if (participantId == -1)
+                clearSlotAssignment(i);
+            else
                 onSlotAssigned(i, participantId);
         }
     });
@@ -2387,6 +2446,38 @@ void MainWindow::onSlotAssigned(int slotIndex, int participantId)
                      if (p.id == participantId) return p.name;
                  return QString::number(participantId);
              }()));
+}
+
+void MainWindow::clearSlotAssignment(int slotIndex)
+{
+    const QVector<int> participantSlots = participantSlotIndexesForLook(m_working);
+    if (!participantSlots.contains(slotIndex))
+        return;
+
+    for (auto &p : m_participants) {
+        if (p.slotAssign == slotIndex)
+            p.slotAssign = -1;
+    }
+
+    m_working.slotAssignments.erase(
+        std::remove_if(m_working.slotAssignments.begin(), m_working.slotAssignments.end(),
+                       [slotIndex](const SlotAssignment &s) {
+                           return s.slotIndex == slotIndex;
+                       }),
+        m_working.slotAssignments.end());
+    updateParticipantSyncedLowerThirds();
+    if (m_bus)
+        m_bus->stageLook(m_working);
+
+    m_lastSyncedSlotParticipants.remove(slotIndex);
+    syncZoomOutputAssignments();
+    if (m_obsClient && m_obsClient->isConnected())
+        renderLookToOBS(m_working, false);
+
+    if (m_participantPanel)
+        m_participantPanel->setParticipants(m_participants);
+
+    onObsLog(QStringLiteral("Slot %1 cleared.").arg(slotIndex + 1));
 }
 
 void MainWindow::onSlotClicked(int slotIndex)

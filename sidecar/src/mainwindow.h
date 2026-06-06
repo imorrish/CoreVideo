@@ -76,6 +76,7 @@ private slots:
     void onMacroTriggered(const Macro &macro);
     void onPhaseSelected(ShowPhase phase);
     void onSlotAssigned(int slotIndex, int participantId);
+    void clearSlotAssignment(int slotIndex);
     void onSlotClicked(int slotIndex);
     void onSlotRoutingCycle(int slotIndex);
     void onParticipantAssignClicked(int participantId);
