@@ -1,6 +1,7 @@
 #include "../../src/engine-ipc.h"
 #include "engine-writer.h"
 #include "engine-video.h"
+#include "engine-share.h"
 #include "engine-audio.h"
 #include <zoom_sdk.h>
 #include <auth_service_interface.h>
@@ -379,6 +380,7 @@ struct ParticipantInfo {
     bool has_video = false;
     bool is_talking = false;
     bool is_muted = false;
+    bool is_sharing_screen = false;
 };
 
 static std::string zchar_to_utf8(const zchar_t *name)
@@ -401,7 +403,8 @@ static std::string zchar_to_utf8(const zchar_t *name)
 
 class EngineParticipants : public ZOOMSDK::IMeetingParticipantsCtrlEvent,
                            public ZOOMSDK::IMeetingAudioCtrlEvent,
-                           public ZOOMSDK::IMeetingVideoCtrlEvent {
+                           public ZOOMSDK::IMeetingVideoCtrlEvent,
+                           public EngineShareRosterSink {
 public:
     explicit EngineParticipants(IpcFd e2p) : m_e2p(e2p) {}
 
@@ -416,6 +419,17 @@ public:
         m_video_ctrl = video_ctrl;
         if (m_video_ctrl) m_video_ctrl->SetEvent(this);
         rebuild_roster();
+        send_roster();
+    }
+
+    void set_active_share_user(uint32_t user_id) override
+    {
+        {
+            std::lock_guard<std::mutex> lk(m_mtx);
+            m_active_share_user.store(user_id, std::memory_order_release);
+            for (auto &p : m_roster)
+                p.is_sharing_screen = user_id != 0 && p.user_id == user_id;
+        }
         send_roster();
     }
 
@@ -437,6 +451,7 @@ public:
             std::lock_guard<std::mutex> lk(m_mtx);
             m_roster.clear();
             m_active_speaker = 0;
+            m_active_share_user.store(0, std::memory_order_release);
         }
         send_roster();
     }
@@ -531,6 +546,8 @@ private:
         info.has_video = u->IsVideoOn();
         info.is_talking = u->IsTalking();
         info.is_muted = u->IsAudioMuted();
+        info.is_sharing_screen =
+            info.user_id == m_active_share_user.load(std::memory_order_acquire);
         return info;
     }
 
@@ -577,7 +594,9 @@ private:
                 R"(,"name":")" + json_escape(p.display_name) +
                 R"(","has_video":)" + (p.has_video ? "true" : "false") +
                 R"(,"is_talking":)" + (p.is_talking ? "true" : "false") +
-                R"(,"is_muted":)" + (p.is_muted ? "true" : "false") + "}";
+                R"(,"is_muted":)" + (p.is_muted ? "true" : "false") +
+                R"(,"is_sharing_screen":)" +
+                (p.is_sharing_screen ? "true" : "false") + "}";
         }
         msg += "]}";
         EngineIpc::write( msg);
@@ -590,6 +609,7 @@ private:
     std::mutex m_mtx;
     std::vector<ParticipantInfo> m_roster;
     uint32_t m_active_speaker = 0;
+    std::atomic<uint32_t> m_active_share_user{0};
 };
 
 // ── Auth event handler ────────────────────────────────────────────────────────
@@ -659,9 +679,11 @@ class EngineMeetingEvent : public ZOOMSDK::IMeetingServiceEvent
 public:
     EngineMeetingEvent(IpcFd e2p, ZOOMSDK::IMeetingService **meeting_svc,
                        EngineParticipants *participants,
-                       EngineVideo *video_engine)
+                       EngineVideo *video_engine,
+                       EngineShare *share_engine)
         : m_e2p(e2p), m_meeting_svc(meeting_svc),
-          m_participants(participants), m_video_engine(video_engine) {}
+          m_participants(participants), m_video_engine(video_engine),
+          m_share_engine(share_engine) {}
 
     void resubscribe_raw_media(const char *reason)
     {
@@ -672,6 +694,10 @@ public:
         if (m_video_engine) {
             m_video_engine->set_raw_media_active(true);
             m_video_engine->resubscribe_all();
+        }
+        if (m_share_engine) {
+            m_share_engine->set_raw_media_active(true);
+            m_share_engine->resubscribe_all();
         }
         EngineAudio::instance().set_raw_media_active(true);
         EngineAudio::instance().retry_subscribe(reason ? reason : "raw_media_ready");
@@ -795,6 +821,8 @@ public:
             m_video_engine->set_raw_media_active(false);
             m_video_engine->unsubscribe_all();
         }
+        if (m_share_engine)
+            m_share_engine->set_raw_media_active(false);
         EngineAudio::instance().set_raw_media_active(false);
         EngineAudio::instance().reset_subscription(reason ? reason : "manual_stop");
         m_raw_media_active = false;
@@ -871,6 +899,9 @@ public:
                     (*m_meeting_svc)->GetMeetingAudioController(),
                     (*m_meeting_svc)->GetMeetingVideoController());
             }
+            if (m_share_engine && m_meeting_svc && *m_meeting_svc)
+                m_share_engine->attach(
+                    (*m_meeting_svc)->GetMeetingShareController());
             break;
         case ZOOMSDK::MEETING_STATUS_DISCONNECTING:
         case ZOOMSDK::MEETING_STATUS_ENDED:
@@ -899,6 +930,7 @@ public:
             }
 #endif
             if (m_participants) m_participants->detach();
+            if (m_share_engine) m_share_engine->detach();
             EngineIpc::write( R"({"cmd":"left"})");
             break;
         case ZOOMSDK::MEETING_STATUS_FAILED:
@@ -910,6 +942,7 @@ public:
             }
             EngineAudio::instance().reset_subscription("meeting_failed");
             if (m_participants) m_participants->detach();
+            if (m_share_engine) m_share_engine->detach();
             EngineIpc::write( R"({"cmd":"error","msg":"meeting_failed","code":)" +
                            std::to_string(iResult) + R"(,"reason":")" +
                            meeting_fail_name(iResult) + "\"}");
@@ -1035,6 +1068,7 @@ private:
     ZOOMSDK::IMeetingService **m_meeting_svc = nullptr;
     EngineParticipants *m_participants = nullptr;
     EngineVideo *m_video_engine = nullptr;
+    EngineShare *m_share_engine = nullptr;
     bool m_raw_media_requested = false;
     bool m_raw_media_active = false;
     bool m_host_start_attempted = false;
@@ -1059,7 +1093,9 @@ int main()
     EngineAuthEvent    auth_event(e2p);
     EngineParticipants participants(e2p);
     EngineVideo        video_engine;
-    EngineMeetingEvent meeting_event(e2p, &meeting_svc, &participants, &video_engine);
+    EngineShare        share_engine(&participants);
+    EngineMeetingEvent meeting_event(e2p, &meeting_svc, &participants,
+                                     &video_engine, &share_engine);
 
     // Persistent wide-string storage for async SDK calls (JoinParam / AuthContext
     // hold raw pointers — these must outlive the Join/SDKAuth call).
@@ -1254,21 +1290,28 @@ int main()
             const bool audience_audio =
                 line.find(R"("audience_audio":true)") != std::string::npos;
             if (is_valid_source_uuid(uuid)) {
-                video_engine.subscribe(pid, uuid, e2p, res);
-                EngineAudio::instance().init(e2p, uuid, pid,
-                                             isolate_audio, audience_audio);
+                const std::string mode = json_str(line, "mode");
+                if (mode == "screenshare") {
+                    share_engine.subscribe(uuid, e2p);
+                } else {
+                    video_engine.subscribe(pid, uuid, e2p, res);
+                    EngineAudio::instance().init(e2p, uuid, pid,
+                                                 isolate_audio, audience_audio);
+                }
             }
 
         } else if (line.find(IPC_CMD_UNSUBSCRIBE) != std::string::npos) {
             std::string uuid = json_str(line, "source_uuid");
             if (is_valid_source_uuid(uuid)) {
                 video_engine.unsubscribe(uuid);
+                share_engine.unsubscribe(uuid);
                 EngineAudio::instance().remove(uuid);
             }
         }
     }
 
     if (meeting_svc) meeting_svc->Leave(ZOOMSDK::LEAVE_MEETING);
+    share_engine.detach();
     EngineAudio::instance().shutdown();
     ZOOMSDK::CleanUPSDK();
     ipc_teardown(p2e, e2p);
