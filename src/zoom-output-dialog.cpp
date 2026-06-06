@@ -698,6 +698,14 @@ void ZoomOutputDialog::save_profile()
         "Profile name:", QLineEdit::Normal,
         m_profile_combo->currentText(), &ok);
     if (!ok || name.trimmed().isEmpty()) return;
+    if (!ZoomOutputProfile::is_valid_name(name.trimmed().toStdString())) {
+        QMessageBox::warning(
+            this, "Save Profile",
+            "Use a simple profile name up to 80 characters. Do not use path "
+            "separators, reserved Windows device names, or characters like "
+            "< > : \" / \\ | ? *.");
+        return;
+    }
 
     // Collect current table state as ZoomOutputInfo list
     std::vector<ZoomOutputInfo> outputs;

@@ -7,6 +7,7 @@
 // Profiles are persisted as individual JSON files under the OBS plugin config dir.
 namespace ZoomOutputProfile {
 
+bool                        is_valid_name(const std::string &name);
 std::vector<std::string>    list();
 bool                        save(const std::string &name,
                                  const std::vector<ZoomOutputInfo> &outputs);

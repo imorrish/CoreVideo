@@ -6,6 +6,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QRegularExpression>
+#include <QStringList>
 #include <obs-module.h>
 #include <cmath>
 #include <cstdint>
@@ -25,6 +27,7 @@ static QString profile_path(const std::string &name)
 {
     const QString dir = profiles_dir();
     if (dir.isEmpty()) return {};
+    if (!ZoomOutputProfile::is_valid_name(name)) return {};
     return dir + "/" + QString::fromStdString(name) + ".json";
 }
 
@@ -68,6 +71,32 @@ static AssignmentMode assignment_mode_from_string(const QString &value,
 }
 
 namespace ZoomOutputProfile {
+
+bool is_valid_name(const std::string &name)
+{
+    const QString trimmed = QString::fromStdString(name).trimmed();
+    if (trimmed.isEmpty() || trimmed == "." || trimmed == "..")
+        return false;
+    if (trimmed.endsWith('.'))
+        return false;
+    if (trimmed.size() > 80)
+        return false;
+    static const QRegularExpression invalid_chars(QStringLiteral(R"([<>:"/\\|?*\x00-\x1F])"));
+    if (trimmed.contains(invalid_chars))
+        return false;
+    const QString upper = trimmed.section('.', 0, 0).toUpper();
+    static const QStringList reserved = {
+        QStringLiteral("CON"), QStringLiteral("PRN"), QStringLiteral("AUX"),
+        QStringLiteral("NUL"), QStringLiteral("COM1"), QStringLiteral("COM2"),
+        QStringLiteral("COM3"), QStringLiteral("COM4"), QStringLiteral("COM5"),
+        QStringLiteral("COM6"), QStringLiteral("COM7"), QStringLiteral("COM8"),
+        QStringLiteral("COM9"), QStringLiteral("LPT1"), QStringLiteral("LPT2"),
+        QStringLiteral("LPT3"), QStringLiteral("LPT4"), QStringLiteral("LPT5"),
+        QStringLiteral("LPT6"), QStringLiteral("LPT7"), QStringLiteral("LPT8"),
+        QStringLiteral("LPT9")
+    };
+    return !reserved.contains(upper);
+}
 
 std::vector<std::string> list()
 {
