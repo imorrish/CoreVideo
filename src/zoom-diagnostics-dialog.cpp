@@ -465,6 +465,71 @@ static QString runtime_manifest_text(const QJsonArray &manifest)
     return text;
 }
 
+static QStringList failure_classifications(const ZoomPluginSettings &settings,
+                                           const QJsonArray &runtime_manifest,
+                                           const std::vector<ZoomOutputInfo> &outputs)
+{
+    QStringList classes;
+    const QString last_error =
+        QString::fromStdString(ZoomEngineClient::instance().last_error());
+    const MeetingState state = ZoomEngineClient::instance().state();
+
+    const bool missing_runtime = std::any_of(
+        runtime_manifest.begin(), runtime_manifest.end(),
+        [](const QJsonValue &value) {
+            return !value.toObject().value("exists").toBool();
+        });
+    if (missing_runtime)
+        classes << QStringLiteral("missing_runtime");
+
+    if (!ZoomEngineClient::instance().is_authenticated() &&
+        (settings.oauth_access_token.empty() ||
+         settings.resolved_meeting_sdk_public_app_key().empty())) {
+        classes << QStringLiteral("auth_not_ready");
+    }
+
+    if (state == MeetingState::Failed ||
+        last_error.contains(QStringLiteral("auth"), Qt::CaseInsensitive) ||
+        last_error.contains(QStringLiteral("join"), Qt::CaseInsensitive) ||
+        last_error.contains(QStringLiteral("sdk"), Qt::CaseInsensitive)) {
+        classes << QStringLiteral("join_or_sdk_error");
+    }
+
+    const bool has_outputs = !outputs.empty();
+    const bool all_outputs_missing = has_outputs && std::all_of(
+        outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
+            return output.observed_width == 0 || output.observed_height == 0;
+        });
+    if (ZoomEngineClient::instance().is_media_active() && all_outputs_missing)
+        classes << QStringLiteral("no_video_frames");
+
+    if (std::any_of(outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
+            return output.video_stale ||
+                output.health_reason == ZoomOutputHealthReason::StaleFrame;
+        })) {
+        classes << QStringLiteral("stale_feed");
+    }
+
+    if (std::any_of(outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
+            return output.subscription_downgraded ||
+                output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution;
+        })) {
+        classes << QStringLiteral("low_quality_feed");
+    }
+
+    if (std::any_of(outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
+            return output.duplicate_participant_assignment ||
+                output.health_reason == ZoomOutputHealthReason::DuplicateAssignment;
+        })) {
+        classes << QStringLiteral("duplicate_assignment");
+    }
+
+    classes.removeDuplicates();
+    if (classes.isEmpty())
+        classes << QStringLiteral("none_detected");
+    return classes;
+}
+
 static QString create_support_bundle_zip(const QString &bundle_path,
                                          QStringList &warnings)
 {
@@ -723,6 +788,12 @@ void ZoomDiagnosticsDialog::export_diagnostics()
             warnings << QStringLiteral("Could not copy OBS log from %1")
                 .arg(obs_log);
 
+    const QStringList classifications =
+        failure_classifications(settings, runtime_manifest, outputs);
+    QJsonArray classification_array;
+    for (const QString &classification : classifications)
+        classification_array.append(classification);
+
     QJsonObject engine_status;
     engine_status["running"] = ZoomEngineClient::instance().is_running();
     engine_status["meeting_state"] = state_text(ZoomEngineClient::instance().state());
@@ -766,6 +837,7 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     for (const QString &warning : warnings)
         warning_array.append(warning);
     summary["warnings"] = warning_array;
+    summary["failure_classifications"] = classification_array;
     summary["runtime_manifest"] = runtime_manifest;
     summary["engine_status"] = engine_status;
     summary["plugin_settings_redacted"] = settings_json(settings);
@@ -811,6 +883,10 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         << "\n";
     out << "OBS log: " << (obs_log.isEmpty() ? QStringLiteral("not found") : obs_log)
         << "\n\n";
+    out << "Failure classifications\n";
+    for (const QString &classification : classifications)
+        out << "- " << classification << "\n";
+    out << "\n";
     if (!warnings.isEmpty()) {
         out << "Warnings\n";
         for (const QString &warning : warnings)
