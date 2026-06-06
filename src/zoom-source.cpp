@@ -1688,7 +1688,7 @@ static obs_properties_t *zoom_source_get_properties(void *data)
         });
 
     obs_property_t *spotlight_slot = obs_properties_add_int(props, PROP_SPOTLIGHT_SLOT,
-        obs_module_text("ZoomSource.SpotlightSlot"), 1, 9, 1);
+        obs_module_text("ZoomSource.SpotlightSlot"), 1, 8, 1);
 
     obs_property_t *failover = obs_properties_add_list(props, PROP_FAILOVER_PARTICIPANT,
         obs_module_text("ZoomSource.Failover"),
