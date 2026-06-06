@@ -494,6 +494,7 @@ CoreVideo/
 |   |-- index.html
 |   |-- OPERATOR_QUICKSTART.md                # End-user production workflow
 |   |-- RELEASE_CHECKLIST.md                  # Publisher release validation steps
+|   |-- GPU_TEXTURE_SHARING_RESEARCH.md       # Spout/Syphon future transport notes
 |   |-- ZOOM_MARKETPLACE_OAUTH.md             # OAuth setup guide
 |   `-- policies/                             # Security & privacy policy documents
 |-- engine/src/                               # ZoomObsEngine (owns ALL SDK access)

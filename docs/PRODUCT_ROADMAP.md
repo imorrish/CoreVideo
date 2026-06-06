@@ -110,6 +110,7 @@ releases.
 | P3 | [#102 Build repeatable load tests for 8 feeds, ISO recording, and stream output](https://github.com/iamfatness/CoreVideo/issues/102) | Objective CPU/GPU/memory/dropped-frame/storage data for production scenarios. |
 | P3 | [#103 Automate OBS scene/source smoke tests](https://github.com/iamfatness/CoreVideo/issues/103) | Local and CI tests catch plugin, dock, source, scene, and package regressions. |
 | P3 | [#88 Code quality findings from Cppcheck](https://github.com/iamfatness/CoreVideo/issues/88) | Static-analysis findings are triaged and fixed continuously. |
+| P3 | [#87 Explore Spout/Syphon GPU texture sharing for high-density video feeds](https://github.com/iamfatness/CoreVideo/issues/87) | Optional future transport is researched without disturbing the current shared-memory path. |
 
 Exit criteria:
 
@@ -119,6 +120,8 @@ Exit criteria:
   publishing assets.
 - Code quality findings are tracked as normal backlog work, not release-week
   surprises.
+- GPU texture sharing remains an optional research track until measurements show
+  it is more stable than the current shared-memory pipeline.
 
 ## Phase 4 - Commercial Release Readiness
 
