@@ -378,15 +378,17 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     m_output_summary->setWordWrap(true);
 
     m_participant_table = new QTableWidget(this);
-    m_participant_table->setColumnCount(5);
+    m_participant_table->setColumnCount(7);
     m_participant_table->setHorizontalHeaderLabels({
-        "Participant", "ID", "Video", "Audio", "Talking"
+        "Participant", "ID", "Video", "Audio", "Talking", "Share", "Spotlight"
     });
     m_participant_table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
     m_participant_table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     m_participant_table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     m_participant_table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
     m_participant_table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    m_participant_table->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    m_participant_table->horizontalHeader()->setSectionResizeMode(6, QHeaderView::ResizeToContents);
     m_participant_table->verticalHeader()->setVisible(false);
     m_participant_table->setSelectionMode(QAbstractItemView::SingleSelection);
     m_participant_table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -663,6 +665,20 @@ void ZoomOutputDialog::refresh_participants()
         talking_item->setForeground(QColor("#22cc44"));
         talking_item->setTextAlignment(Qt::AlignCenter);
         m_participant_table->setItem(row, 4, talking_item);
+
+        auto *share_item = new QTableWidgetItem(
+            p.is_sharing_screen ? QStringLiteral("Sharing") : QStringLiteral("-"));
+        share_item->setForeground(p.is_sharing_screen ? QColor("#22cc44") : QColor("#666666"));
+        share_item->setTextAlignment(Qt::AlignCenter);
+        m_participant_table->setItem(row, 5, share_item);
+
+        auto *spotlight_item = new QTableWidgetItem(
+            p.spotlight_index > 0
+            ? QString::number(p.spotlight_index)
+            : QStringLiteral("-"));
+        spotlight_item->setForeground(p.spotlight_index > 0 ? QColor("#f0b429") : QColor("#666666"));
+        spotlight_item->setTextAlignment(Qt::AlignCenter);
+        m_participant_table->setItem(row, 6, spotlight_item);
         ++row;
     }
 }

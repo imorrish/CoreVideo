@@ -46,7 +46,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **TCP control API** - JSON server on `127.0.0.1:19870` for scripts and dashboards; includes `oauth_callback` command for custom URL scheme forwarding
 - **OSC control API** - UDP OSC server on `127.0.0.1:19871` for lighting consoles and broadcast hardware
 - **Output profiles** - save and load named participant-to-source mappings as JSON files
-- **Output manager dock** - dockable OBS panel and API for viewing and reconfiguring all sources at runtime
+- **Output manager dock** - dockable OBS panel and API for viewing and reconfiguring all sources at runtime, including visible screen-share and spotlight roster markers
 - **Public Client Meeting SDK authentication** - published builds pass the Marketplace Public Client ID as `AuthContext.publicAppKey`; no Meeting SDK secret is shipped in the desktop app
 - **Zoom OAuth PKCE** - user-level OAuth 2.0 with PKCE (public client, no desktop secret) for attributed joins and Marketplace compliance; the broker start URL is baked in at build time; `corevideo://` custom URL scheme with platform callback helpers (`CoreVideoOAuthCallback.exe` / `.app`); DPAPI token protection on Windows
 - **Visible Zoom Meeting SDK window** - the helper process uses Zoom's default Meeting SDK UI so operators can admit waiting-room participants, start self video/audio, and use normal in-meeting controls while OBS receives raw feeds
