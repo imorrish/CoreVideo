@@ -124,6 +124,12 @@ share is active, the menu label includes the sharing participant name. The TCP
 }
 ```
 
+OSC parity is available for hardware panels and show-control systems:
+`/zoom/status` replies with `/zoom/status/screen_share ,is`, subscribers receive
+`/zoom/event/screen_share ,is` when the active sharer changes, and
+`/zoom/list_participants` emits `/zoom/participant/detail` packets with the
+`is_sharing_screen` flag plus host, co-host, raised-hand, and spotlight state.
+
 For a single directed speaker-follow output, add the dedicated **CoreVideo Active
 Speaker** OBS source. It follows the central Active Speaker Director and uses a
 two-slot handoff internally: the current participant remains visible while the

@@ -710,6 +710,16 @@ static std::string participant_name(uint32_t participant_id)
     return it == roster.end() ? std::string{} : it->display_name;
 }
 
+static ParticipantInfo active_share_participant()
+{
+    const auto roster = ZoomEngineClient::instance().roster();
+    const auto it = std::find_if(roster.begin(), roster.end(),
+        [](const ParticipantInfo &p) {
+            return p.is_sharing_screen;
+        });
+    return it == roster.end() ? ParticipantInfo{} : *it;
+}
+
 static uint32_t resolved_assignment_participant_id(const ZoomOutputInfo &output)
 {
     if (output.assignment == AssignmentMode::ActiveSpeaker)
@@ -740,6 +750,16 @@ void ZoomOscServer::send_status(const QHostAddress &to, quint16 port)
         std::vector<OscArg> a(1);
         a[0].type = OscArg::Int32; a[0].i = static_cast<int32_t>(spk);
         m_socket->writeDatagram(build_osc("/zoom/status/active_speaker", "i", a), to, port);
+    }
+    // /zoom/status/screen_share ,is <sharing_user_id> <sharing_user_name>
+    {
+        const ParticipantInfo share = active_share_participant();
+        std::vector<OscArg> a(2);
+        a[0].type = OscArg::Int32;
+        a[0].i = static_cast<int32_t>(share.user_id);
+        a[1].type = OscArg::String;
+        a[1].s = share.display_name;
+        m_socket->writeDatagram(build_osc("/zoom/status/screen_share", "is", a), to, port);
     }
 }
 
@@ -832,6 +852,23 @@ void ZoomOscServer::send_participants(const QHostAddress &to, quint16 port)
         a[3].type = OscArg::Int32;  a[3].i = p.is_talking ? 1 : 0;
         a[4].type = OscArg::Int32;  a[4].i = p.is_muted   ? 1 : 0;
         m_socket->writeDatagram(build_osc("/zoom/participant", "isiii", a), to, port);
+
+        // /zoom/participant/detail ,isiiiiiiii
+        // id, name, has_video, is_talking, is_muted, is_host, is_co_host,
+        // raised_hand, spotlight_index, is_sharing_screen
+        std::vector<OscArg> d(10);
+        d[0].type = OscArg::Int32;  d[0].i = static_cast<int32_t>(p.user_id);
+        d[1].type = OscArg::String; d[1].s = p.display_name;
+        d[2].type = OscArg::Int32;  d[2].i = p.has_video ? 1 : 0;
+        d[3].type = OscArg::Int32;  d[3].i = p.is_talking ? 1 : 0;
+        d[4].type = OscArg::Int32;  d[4].i = p.is_muted ? 1 : 0;
+        d[5].type = OscArg::Int32;  d[5].i = p.is_host ? 1 : 0;
+        d[6].type = OscArg::Int32;  d[6].i = p.is_co_host ? 1 : 0;
+        d[7].type = OscArg::Int32;  d[7].i = p.raised_hand ? 1 : 0;
+        d[8].type = OscArg::Int32;  d[8].i = static_cast<int32_t>(p.spotlight_index);
+        d[9].type = OscArg::Int32;  d[9].i = p.is_sharing_screen ? 1 : 0;
+        m_socket->writeDatagram(build_osc("/zoom/participant/detail",
+                                          "isiiiiiiii", d), to, port);
     }
 }
 
@@ -902,6 +939,17 @@ void ZoomOscServer::poll_and_push()
         a[0].type = OscArg::Int32;  a[0].i = static_cast<int32_t>(spk);
         a[1].type = OscArg::String; a[1].s = name;
         push_to_all("/zoom/event/active_speaker", "is", a);
+    }
+
+    const ParticipantInfo share = active_share_participant();
+    if (share.user_id != m_last_share_participant) {
+        m_last_share_participant = share.user_id;
+        std::vector<OscArg> a(2);
+        a[0].type = OscArg::Int32;
+        a[0].i = static_cast<int32_t>(share.user_id);
+        a[1].type = OscArg::String;
+        a[1].s = share.display_name;
+        push_to_all("/zoom/event/screen_share", "is", a);
     }
 
     // Prune expired subscribers (push_to_all prunes on send; this covers the

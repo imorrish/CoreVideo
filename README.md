@@ -313,7 +313,7 @@ Each active source segment writes one `*.mp4` video file and one matching `*.wav
 | Address | Type tags | Action |
 |---|---|---|
 | `/zoom/status` | - | Reply: meeting state + active speaker |
-| `/zoom/list_participants` | - | Reply: one `/zoom/participant` per user |
+| `/zoom/list_participants` | - | Reply: one legacy `/zoom/participant` plus one `/zoom/participant/detail` per user; detail includes host/co-host, raised hand, spotlight, and screen-share flags |
 | `/zoom/list_outputs` | - | Reply: one `/zoom/output` per source |
 | `/zoom/recover_stale_outputs` | `[,i]` | Retry stale video outputs; optional `1` forces cooldown bypass |
 | `/zoom/upgrade_low_quality_outputs` | `[,i]` | Retry outputs below requested resolution; automatic retries continue with capped backoff and skip feeds already at the requested size |
@@ -328,6 +328,11 @@ Each active source segment writes one `*.mp4` video file and one matching `*.wav
 | `/zoom/isolate_audio` | `,si` | source, 0\|1 |
 | `/zoom/iso/start` | `[,s]` | optional output directory |
 | `/zoom/iso/stop` | - | Stop ISO recording |
+
+`/zoom/status` also replies with `/zoom/status/screen_share ,is` containing
+the active sharing participant ID and display name, or `0` and an empty name
+when nobody is sharing. Subscribers also receive `/zoom/event/screen_share ,is`
+when the active sharer changes.
 
 ## Active Speaker Mode
 
