@@ -388,6 +388,9 @@ CoreVideoOAuthCallback  (thin helper binary - ships beside the plugin)
 
 See the **[full documentation](https://corevideo.iamfatness.us/documentation/)** for all architecture diagrams including the ZoomEngineClient deep-dive, OAuth PKCE flow, assignment mode flows, auto-reconnect, hardware video acceleration, TCP + OSC API references, output profile format, and full IPC protocol reference.
 
+See the **[product roadmap](docs/PRODUCT_ROADMAP.md)** for the phased plan that
+tracks the highest-impact missing features, bugs, and production-readiness work.
+
 ## Project Structure
 
 ```
