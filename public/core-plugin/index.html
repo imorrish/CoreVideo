@@ -24,8 +24,8 @@
 <figure class="doc-image"><img src="images/corevideo-obs-workspace.svg" alt="CoreVideo OBS workspace with Zoom Control dock"></figure>
 <p>The Zoom Control dock joins and leaves meetings, starts and stops raw media, shows meeting state, lists participants, exposes Active Speaker Director controls, and opens the Output Manager for source assignment without leaving OBS.</p>
 <figure class="doc-image"><img src="images/corevideo-output-manager.svg" alt="CoreVideo Output Manager"></figure>
-<p>The dedicated Zoom Output Manager is the primary assignment surface. It supports profile save/load workflows and exposes requested resolution, observed signal, frame rate, assignment mode, and audio routing information for each output. In <code>v0.1.18</code> it is a persistent OBS dock, so operators can keep assignments, live previews, and feed health visible while working in normal OBS scenes.</p>
-<p>Open the <strong>Zoom Diagnostics</strong> dock, or use <strong>Tools &gt; Zoom Diagnostics</strong> to focus it, during a live session to see requested versus observed resolution, FPS, frame age, stale and quality retry counters, and the latest <code>ZoomObsEngine</code> debug events. This is the fastest way to see whether a source is waiting for frames, receiving a lower-than-requested feed, or being resubscribed by recovery logic. Use <strong>Create Support Bundle</strong> from this dock to write a redacted troubleshooting bundle with engine status, output health, recent debug events, plugin settings with tokens removed, and the latest OBS log when available.</p>
+<p>The dedicated Zoom Output Manager is the primary assignment surface. It supports profile save/load workflows and exposes requested resolution, observed signal, frame rate, assignment mode, screen-share/spotlight roster markers, and audio routing information for each output. In <code>v0.1.18</code> it is a persistent OBS dock, so operators can keep assignments, live previews, and feed health visible while working in normal OBS scenes.</p>
+<p>Open the <strong>Zoom Diagnostics</strong> dock, or use <strong>Tools &gt; Zoom Diagnostics</strong> to focus it, during a live session to see requested versus observed resolution, FPS, frame age, stale and quality retry counters, and the latest <code>ZoomObsEngine</code> debug events. This is the fastest way to see whether a source is waiting for frames, receiving a lower-than-requested feed, or being resubscribed by recovery logic. Use <strong>Create Support Bundle</strong> from this dock to write a redacted troubleshooting bundle with engine status, output health, recent debug events, plugin settings with tokens removed, runtime/package validation, and the latest OBS log when available. On Windows, CoreVideo also creates a <code>.zip</code> next to the support bundle folder when PowerShell is available.</p>
 <figure class="doc-image"><img src="images/corevideo-source-properties.svg" alt="CoreVideo Zoom Participant source properties"></figure>
 <p>Each Zoom Participant source can be configured independently for fixed participants, active speaker, spotlight slot, screen share, isolated audio, audience audio, resolution, video-loss behavior, and hardware conversion.</p>
 <h2>Joining Meetings</h2>
@@ -58,7 +58,7 @@
 <ul><li><code>ffmpeg</code> must be available on <code>PATH</code>, or pass an explicit <code>ffmpeg_path</code>.</li><li>Raw media must be active.</li><li>Sources must be assigned to participant, active speaker, or spotlight modes.</li></ul>
 <h3>OBS ISO Recorder Panel</h3>
 <p>Open <strong>Tools &gt; Zoom ISO Recorder</strong> to manage ISO recording from a separate OBS dock. The panel provides:</p>
-<ul><li>Output folder picker.</li><li>FFmpeg executable field with a test button.</li><li>Video encoder selector for CPU x264, NVIDIA NVENC, Intel Quick Sync, or AMD AMF when the selected FFmpeg build supports that encoder.</li><li><strong>Also start/stop OBS program recording</strong> toggle.</li><li><strong>Start ISO Recording</strong> and <strong>Stop ISO Recording</strong> buttons.</li><li>Live status showing idle/recording and active session count.</li><li>Active session table with source, participant, resolution, video frame count, audio chunk count, current video/audio file paths, and FFmpeg error details.</li></ul>
+<ul><li>Output folder picker.</li><li>FFmpeg executable field with a test button.</li><li>Video encoder selector for CPU x264, NVIDIA NVENC, Intel Quick Sync, or AMD AMF when the selected FFmpeg build supports that encoder.</li><li>Encoder guidance explaining CPU load, GPU encoder-session limits, and when to fall back to CPU x264 for 8 ISO feeds plus a program stream.</li><li><strong>Also start/stop OBS program recording</strong> toggle.</li><li><strong>Start ISO Recording</strong> and <strong>Stop ISO Recording</strong> buttons.</li><li>Live status showing idle/recording and active session count.</li><li>Active session table with source, participant, resolution, video frame count, audio chunk count, current video/audio file paths, and FFmpeg error details.</li></ul>
 <p>The panel uses the same <code>ZoomIsoRecorder</code> backend as the TCP and OSC APIs. It persists the output folder, FFmpeg path, and program-recording toggle in OBS global settings. Recording start is blocked when the selected output volume has less than 2 GB free and warns below 10 GB free.</p>
 <p>TCP start example:</p>
 <pre><code class="language-json">{&quot;cmd&quot;:&quot;iso_recording_start&quot;,&quot;output_dir&quot;:&quot;C:/Recordings/CoreVideo&quot;,&quot;ffmpeg_path&quot;:&quot;ffmpeg&quot;,&quot;record_program&quot;:true}</code></pre>
@@ -106,6 +106,11 @@
 <pre><code class="language-text">/zoom/recover_stale_outputs 1</code></pre>
 <p>Retry low-quality video outputs:</p>
 <pre><code class="language-text">/zoom/upgrade_low_quality_outputs 1</code></pre>
+<p>Inspect and control the Active Speaker Director:</p>
+<pre><code class="language-text">/zoom/speaker_director/status
+/zoom/speaker_director/configure 650 2500 1 123456 789012
+/zoom/speaker_director/take 123456
+/zoom/speaker_director/release</code></pre>
 <p>Assign a source:</p>
 <pre><code class="language-text">/zoom/output/assign_ex &quot;Zoom Participant 1&quot; &quot;participant&quot; 123456 1</code></pre>
 <p>Assign active speaker:</p>

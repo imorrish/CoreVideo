@@ -1309,7 +1309,7 @@ sequenceDiagram
       the dedicated <strong>Zoom Output Manager</strong> dock, which is
       the primary assignment surface for saving, loading, deleting profiles, and
       reviewing requested resolution, observed signal, frame rate, audio mode,
-      and isolated-audio state.
+      audio role, screen-share state, and spotlight state.
     </p>
   </section>
 
@@ -1421,6 +1421,10 @@ sequenceDiagram
       <tr><td><code>/zoom/leave</code></td><td>—</td><td>—</td><td>Leave meeting</td></tr>
       <tr><td><code>/zoom/assign_output</code></td><td><code>,si[i]</code></td><td>source, participant_id, [active_speaker 0/1]</td><td>Assign source to participant</td></tr>
       <tr><td><code>/zoom/assign_output/active_speaker</code></td><td><code>,s</code></td><td>source</td><td>Switch source to active-speaker mode</td></tr>
+      <tr><td><code>/zoom/speaker_director/status</code></td><td>-</td><td>-</td><td>Reply with directed/raw/candidate/manual speaker and timing state</td></tr>
+      <tr><td><code>/zoom/speaker_director/configure</code></td><td><code>[,iiiii]</code></td><td>sensitivity_ms, hold_ms, [require_video], [exclude1], [exclude2]</td><td>Configure Active Speaker Director timing and exclusions</td></tr>
+      <tr><td><code>/zoom/speaker_director/take</code></td><td><code>,i</code></td><td>participant_id</td><td>Manually hold a participant as the directed speaker</td></tr>
+      <tr><td><code>/zoom/speaker_director/release</code></td><td>-</td><td>-</td><td>Return to automatic speaker switching</td></tr>
       <tr><td><code>/zoom/isolate_audio</code></td><td><code>,si</code></td><td>source, 0|1</td><td>Toggle audio isolation for a source</td></tr>
     </table>
 
@@ -1430,6 +1434,10 @@ sequenceDiagram
       <tr><td><code>/zoom/status/meeting_state</code></td><td><code>,s</code></td><td>state string</td></tr>
       <tr><td><code>/zoom/status/active_speaker</code></td><td><code>,i</code></td><td>user_id</td></tr>
       <tr><td><code>/zoom/output</code></td><td><code>,sisii</code></td><td>source_name, participant_id, display_name, active_speaker, isolate_audio</td></tr>
+      <tr><td><code>/zoom/speaker_director/status</code></td><td><code>,iiiiiiii</code></td><td>directed, raw, candidate, last, manual, sensitivity_ms, hold_ms, require_video</td></tr>
+      <tr><td><code>/zoom/speaker_director/configured</code></td><td><code>,iii</code></td><td>sensitivity_ms, hold_ms, require_video</td></tr>
+      <tr><td><code>/zoom/speaker_director/take/result</code></td><td><code>,i</code></td><td>1 if manual take succeeded, otherwise 0</td></tr>
+      <tr><td><code>/zoom/speaker_director/release/result</code></td><td><code>,i</code></td><td>1 if manual mode changed, otherwise 0</td></tr>
       <tr><td><code>/zoom/participant</code></td><td><code>,isiii</code></td><td>user_id, display_name, has_video, is_talking, is_muted</td></tr>
     </table>
   </section>
