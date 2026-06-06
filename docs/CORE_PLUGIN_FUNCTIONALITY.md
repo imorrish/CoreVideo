@@ -40,7 +40,9 @@ controls, and opens the Output Manager for source assignment without leaving OBS
 The dedicated Zoom Output Manager is the primary assignment surface. It supports
 profile save/load workflows and exposes requested resolution, observed signal,
 frame rate, assignment mode, screen-share/spotlight roster markers, and audio
-routing information for each output.
+routing information for each output. The assignment menu exposes fixed
+participants, active speaker, screen share, and Spotlight 1-8 so an eight-feed
+show can be routed without opening individual source properties.
 In `v0.1.18` it is a persistent OBS dock, so operators can keep assignments,
 live previews, and feed health visible while working in normal OBS scenes.
 

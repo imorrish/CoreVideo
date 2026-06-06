@@ -558,6 +558,10 @@ void ZoomOutputDialog::refresh()
         assignment->addItem("Active speaker", "active");
         assignment->addItem(screen_share_assignment_label(roster), "screenshare");
         assignment->addItem("None", "user:0");
+        for (int slot = 1; slot <= 8; ++slot) {
+            assignment->addItem(QString("Spotlight %1").arg(slot),
+                                QString("spotlight:%1").arg(slot));
+        }
         for (const auto &p : roster)
             assignment->addItem(participant_label(p), QString("user:%1").arg(p.user_id));
         const QString current_assignment = assignment_data_for_output(output);

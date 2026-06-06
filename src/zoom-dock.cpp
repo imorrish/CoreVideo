@@ -1107,8 +1107,8 @@ void ZoomDock::refresh_outputs()
         auto *assignment = new QComboBox(m_output_table);
         assignment->addItem("Active speaker", "active");
         assignment->addItem("None", "user:0");
-        // Spotlight slots (ZoomISO-style)
-        for (int slot = 1; slot <= 4; ++slot)
+        // Spotlight slots (ZoomISO-style). CoreVideo targets up to 8 live feeds.
+        for (int slot = 1; slot <= 8; ++slot)
             assignment->addItem(QString("Spotlight %1").arg(slot),
                                 QString("spotlight:%1").arg(slot));
         assignment->addItem(screen_share_assignment_label(roster), "screenshare");
