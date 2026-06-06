@@ -197,8 +197,16 @@ jobs:
         run: |
           cmake --install build --config Release --prefix install
           if ($env:COREVIDEO_HAS_ZOOM_RUNTIME -eq "true") {
-              .\scripts\Test-CoreVideoPackage.ps1 -PackageRoot install -FullRuntime
+              .\scripts\Test-CoreVideoPackage.ps1 `
+                -PackageRoot install `
+                -FullRuntime `
+                -ExpectedOAuthClientId y6sIWSwiTZe1JygMx4C9EQ `
+                -ExpectedMeetingSdkPublicAppKey y6sIWSwiTZe1JygMx4C9EQ
           } else {
+              .\scripts\Test-CoreVideoPackage.ps1 `
+                -PackageRoot install `
+                -ExpectedOAuthClientId y6sIWSwiTZe1JygMx4C9EQ `
+                -ExpectedMeetingSdkPublicAppKey y6sIWSwiTZe1JygMx4C9EQ
               Write-Warning "Windows artifact is validation-only; it does not include zoom-runtime\sdk.dll."
           }
           Compress-Archive -Path install\* -DestinationPath CoreVideo-Windows-x64.zip
