@@ -286,6 +286,11 @@ state, last frame age, subscribed age for outputs still waiting on their first
 frame, recovery attempts, automatic quality-upgrade attempts, and remaining
 retry cooldowns.
 
+The **Cancel Recovery** button, TCP `recovery_cancel`, and OSC
+`/zoom/recovery/cancel` all use the same stop path: CoreVideo cancels pending
+reconnect timers, stops the engine process, and clears the stored join session
+so a canceled retry loop cannot restart itself.
+
 Force a retry for stale outputs:
 
 ```json

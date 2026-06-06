@@ -1281,8 +1281,11 @@ sequenceDiagram
     <p>
       A monotonically increasing generation counter ensures stale timer wakeups
       never fire a retry that was already cancelled or superseded. Calling
-      <code>cancel()</code> (via the dock or API) bumps the generation; the timer
-      thread sees the mismatch and discards the pending retry.
+      <code>cancel()</code> bumps the generation; the timer thread sees the
+      mismatch and discards the pending retry. The dock, TCP
+      <code>recovery_cancel</code>, and OSC <code>/zoom/recovery/cancel</code>
+      entry points also stop the engine and clear the stored join session so a
+      canceled retry loop cannot resurrect itself.
     </p>
     <p>
       Explicit <code>leave()</code> calls set the <code>m_user_leaving</code> flag
@@ -1339,7 +1342,7 @@ sequenceDiagram
     <ul>
       <li>Recovery status message with attempt count</li>
       <li>Live countdown timer to next retry (refreshes every second)</li>
-      <li><strong>Cancel Recovery</strong> button — calls <code>ZoomReconnectManager::cancel()</code></li>
+      <li><strong>Cancel Recovery</strong> button — stops the engine, clears the stored join session, and cancels pending reconnect timers</li>
     </ul>
 
     <h3>Routing Section</h3>

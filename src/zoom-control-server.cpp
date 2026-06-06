@@ -822,8 +822,15 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
     }
 
     if (cmd == "recovery_cancel") {
-        ZoomReconnectManager::instance().cancel();
-        write_response(socket, {{"ok", true}});
+        ZoomEngineClient::instance().stop();
+        write_response(socket, {
+            {"ok", true},
+            {"meeting_state", meeting_state_to_string(ZoomEngineClient::instance().state())},
+            {"recovery", QJsonObject{
+                {"active", ZoomReconnectManager::instance().is_recovering()},
+                {"next_retry_ms", ZoomReconnectManager::instance().next_retry_ms()}
+            }}
+        });
         return;
     }
 

@@ -625,7 +625,7 @@ void ZoomOscServer::dispatch(const QString &address,
 
     // /zoom/recovery/cancel
     if (address == "/zoom/recovery/cancel") {
-        ZoomReconnectManager::instance().cancel();
+        ZoomEngineClient::instance().stop();
         return;
     }
 
