@@ -33,6 +33,7 @@ static QPointer<ZoomIsoPanel> g_iso_panel;
 static QPointer<ZoomOutputDialog> g_output_panel;
 static QPointer<ZoomDiagnosticsDialog> g_diagnostics_panel;
 static bool g_frontend_callback_registered = false;
+static bool g_shutdown_started = false;
 
 static ZoomDock *ensure_zoom_dock();
 static ZoomIsoPanel *ensure_iso_panel();
@@ -41,6 +42,10 @@ static ZoomDiagnosticsDialog *ensure_diagnostics_panel();
 
 static void shutdown_corevideo()
 {
+    if (g_shutdown_started)
+        return;
+    g_shutdown_started = true;
+    blog(LOG_INFO, "[obs-zoom-plugin] Shutting down CoreVideo runtime");
     if (g_dock)
         g_dock->prepare_shutdown();
     if (g_iso_panel)
