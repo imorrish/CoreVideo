@@ -1,4 +1,4 @@
-﻿#include "zoom-dock.h"
+#include "zoom-dock.h"
 #include "cv-style.h"
 #include "cv-widgets.h"
 #include "obs-utils.h"
@@ -55,7 +55,7 @@
 #include <windows.h>
 #endif
 
-// â”€â”€ Column layout for the output table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Column layout for the output table ---------------------------------------
 enum DockOutputColumns {
     DColPreview    = 0,
     DColName       = 1,
@@ -109,7 +109,7 @@ static std::string redacted_tail(const std::string &value)
     return "****" + value.substr(value.size() - 4);
 }
 
-// Fast I420 â†’ RGB888 for dock thumbnails (shared with output dialog logic)
+// Fast I420 -> RGB888 for dock thumbnails (shared with output dialog logic)
 static QImage i420_to_qimage_dock(uint32_t w, uint32_t h,
     const uint8_t *y, const uint8_t *u, const uint8_t *v,
     uint32_t sy, uint32_t suv)
@@ -132,7 +132,7 @@ static QImage i420_to_qimage_dock(uint32_t w, uint32_t h,
     return img;
 }
 
-// â”€â”€ Draggable participant list â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Draggable participant list ------------------------------------------------
 // Each item carries participant user_id as Qt::UserRole.
 // Dragging emits MIME type "application/x-cv-participant" with the user_id.
 class CvParticipantList : public QListWidget {
@@ -160,7 +160,7 @@ protected:
     }
 };
 
-// â”€â”€ Drop-enabled output table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Drop-enabled output table -------------------------------------------------
 // Accepts drops from CvParticipantList; sets the assignment combo on the
 // row that was hovered when the participant was dropped.
 class CvDropOutputTable : public QTableWidget {
@@ -337,7 +337,7 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
     return text;
 }
 
-// â”€â”€ Constructor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Constructor ---------------------------------------------------------------
 ZoomDock::ZoomDock(QWidget *parent)
     : QWidget(parent)
 {
@@ -348,7 +348,7 @@ ZoomDock::ZoomDock(QWidget *parent)
     vLayout->setContentsMargins(8, 8, 8, 8);
     vLayout->setSpacing(6);
 
-    // â”€â”€ Status row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- Status row ------------------------------------------------------------
     m_state_dot   = new CvStatusDot(this);
     m_state_label = new QLabel("Not connected", this);
 
@@ -364,7 +364,7 @@ ZoomDock::ZoomDock(QWidget *parent)
     m_error_label->setVisible(false);
     vLayout->addWidget(m_error_label);
 
-    // â”€â”€ Active speaker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- Active speaker --------------------------------------------------------
     m_speaker_label = new QLabel(QStringLiteral("-"), this);
     m_speaker_label->setObjectName("speakerValue");
 
@@ -552,7 +552,7 @@ ZoomDock::ZoomDock(QWidget *parent)
     });
     vLayout->addWidget(m_credentials_banner);
 
-    // â”€â”€ Join controls â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- Join controls ---------------------------------------------------------
     auto *join_group  = new QGroupBox("Join Meeting", this);
     auto *join_layout = new QVBoxLayout(join_group);
     join_layout->setSpacing(6);
@@ -601,7 +601,7 @@ ZoomDock::ZoomDock(QWidget *parent)
     m_leave_btn = new QPushButton("Leave", join_group);
     m_leave_btn->setEnabled(false);
 
-    // Role-based styling â€” evaluated when stylesheet is applied below
+    // Role-based styling - evaluated when stylesheet is applied below
     m_join_btn->setProperty("role", "primary");
     m_leave_btn->setProperty("role", "danger");
 
@@ -681,7 +681,7 @@ ZoomDock::ZoomDock(QWidget *parent)
         on_join_clicked();
     });
 
-    // â”€â”€ Recovery panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- Recovery panel --------------------------------------------------------
     m_recovery_frame = new QFrame(this);
     m_recovery_frame->setObjectName("recoveryPanel");
 
@@ -729,7 +729,7 @@ ZoomDock::ZoomDock(QWidget *parent)
 
     m_recovery_frame->setVisible(false);
 
-    // â”€â”€ Subscribe to roster / state changes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // -- Subscribe to roster / state changes -----------------------------------
     auto self  = this;
     auto alive = m_alive;
 
@@ -750,7 +750,7 @@ ZoomDock::ZoomDock(QWidget *parent)
         }, Qt::QueuedConnection);
     });
 
-    // â”€â”€ Apply stylesheet last so all properties are set before evaluation â”€â”€â”€â”€â”€
+    // -- Apply stylesheet last so all properties are set before evaluation -----
     setStyleSheet(cv_stylesheet());
 
     update_credentials_banner();
@@ -789,7 +789,7 @@ void ZoomDock::prepare_shutdown()
         m_health_retry_timer->stop();
 }
 
-// â”€â”€ Internal helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// -- Internal helpers ----------------------------------------------------------
 void ZoomDock::update_credentials_banner()
 {
     if (!m_alive->load(std::memory_order_acquire))
@@ -1013,7 +1013,7 @@ void ZoomDock::refresh_outputs()
 {
     if (!m_output_table)
         return;
-    // If a dropdown popup is open, the user is mid-selection â€” rebuilding the
+    // If a dropdown popup is open, the user is mid-selection - rebuilding the
     // widgets right now would close the popup and lose the pick. Defer; the
     // next roster update (or any later refresh) will rebuild instead.
     for (int row = 0; row < m_output_table->rowCount(); ++row) {
