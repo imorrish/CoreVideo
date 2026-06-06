@@ -427,6 +427,7 @@ void ZoomIsoPanel::stop_recording()
 void ZoomIsoPanel::refresh_status()
 {
     const bool active = ZoomIsoRecorder::instance().active();
+    const QJsonObject recorder = ZoomIsoRecorder::instance().status_overview();
     const QJsonArray sessions = ZoomIsoRecorder::instance().status_json();
 
     m_start_btn->setEnabled(!active);
@@ -437,11 +438,15 @@ void ZoomIsoPanel::refresh_status()
     m_test_btn->setEnabled(!active);
     m_record_program->setEnabled(!active);
 
-    m_status->setText(active
+    QString status_text = active
         ? QString("Recording - %1 active session%2")
               .arg(sessions.size())
               .arg(sessions.size() == 1 ? "" : "s")
-        : QStringLiteral("Idle"));
+        : QStringLiteral("Idle");
+    const QString recorder_warning = recorder.value("warning").toString();
+    if (!recorder_warning.isEmpty())
+        status_text += QString(" - %1").arg(recorder_warning);
+    m_status->setText(status_text);
     refresh_capacity_guidance();
 
     const QStorageInfo storage = storage_for_output_dir(m_output_dir->text());
@@ -498,7 +503,12 @@ void ZoomIsoPanel::refresh_status()
         if (!ffmpeg_running || video_frames == 0)
             status_item->setForeground(QColor("#f0b429"));
         m_sessions->setItem(row, 2, status_item);
-        m_sessions->setItem(row, 3, item(s.value("video_encoder").toString()));
+        QString encoder_text = s.value("video_encoder").toString();
+        if (s.value("encoder_fallback").toBool()) {
+            encoder_text = QString("%1 (fallback from %2)")
+                .arg(encoder_text, s.value("requested_video_encoder").toString());
+        }
+        m_sessions->setItem(row, 3, item(encoder_text));
         m_sessions->setItem(row, 4, item(duration));
         m_sessions->setItem(row, 5, item(resolution));
         m_sessions->setItem(row, 6, item(QString::number(video_frames)));

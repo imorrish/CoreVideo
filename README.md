@@ -270,6 +270,9 @@ selection, a program-recording toggle, Start/Stop buttons, disk-space warnings,
 encoder capacity guidance, and a live table of active ISO sessions and file
 paths. GPU encoders lower CPU use but consume one encoder session per ISO feed;
 8 ISO feeds plus an OBS program stream may require using CPU x264 for one path.
+If a selected hardware encoder is missing from the FFmpeg build, CoreVideo falls
+back to `libx264` when available and shows the requested vs actual encoder in
+the ISO panel and TCP status.
 The recorder blocks starts below 2 GB free, warns below 10 GB free, and surfaces
 FFmpeg process errors in the session table and TCP/OSC status JSON.
 

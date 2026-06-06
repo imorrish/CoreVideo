@@ -216,6 +216,9 @@ dock. The panel provides:
   AMF when the selected FFmpeg build supports that encoder.
 - Encoder guidance explaining CPU load, GPU encoder-session limits, and when to
   fall back to CPU x264 for 8 ISO feeds plus a program stream.
+- Safe hardware fallback: if the selected hardware encoder is missing from the
+  FFmpeg build, CoreVideo falls back to `libx264` when available and reports the
+  requested encoder, actual encoder, and fallback state.
 - **Also start/stop OBS program recording** toggle.
 - **Start ISO Recording** and **Stop ISO Recording** buttons.
 - Live status showing idle/recording and active session count.

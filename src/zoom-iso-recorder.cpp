@@ -58,6 +58,7 @@ static QString bytes_text(qint64 bytes)
 }
 
 static std::string normalized_video_encoder(const std::string &encoder);
+static bool is_hardware_encoder(const std::string &encoder);
 static bool ffmpeg_encoder_available(const QString &ffmpeg_path,
                                      const std::string &encoder,
                                      std::string *error);
@@ -140,8 +141,10 @@ bool ZoomIsoRecorder::start(const ZoomIsoRecordConfig &config,
         normalized.output_dir = default_iso_dir().toStdString();
     if (normalized.ffmpeg_path.empty())
         normalized.ffmpeg_path = "ffmpeg";
-    normalized.video_encoder =
+    const std::string requested_encoder =
         normalized_video_encoder(normalized.video_encoder);
+    normalized.video_encoder =
+        requested_encoder;
     const QString ffmpegProgram = QString::fromStdString(normalized.ffmpeg_path);
     const QFileInfo ffmpegInfo(ffmpegProgram);
     if ((ffmpegInfo.isRelative() &&
@@ -153,8 +156,25 @@ bool ZoomIsoRecorder::start(const ZoomIsoRecordConfig &config,
         }
         return false;
     }
-    if (!ffmpeg_encoder_available(ffmpegProgram, normalized.video_encoder, error))
-        return false;
+    std::string encoder_error;
+    QString status_warning;
+    if (!ffmpeg_encoder_available(ffmpegProgram, normalized.video_encoder,
+                                  &encoder_error)) {
+        if (is_hardware_encoder(normalized.video_encoder) &&
+            ffmpeg_encoder_available(ffmpegProgram, "libx264", nullptr)) {
+            status_warning = QString("Requested hardware encoder '%1' was not "
+                                     "available in FFmpeg; falling back to CPU "
+                                     "libx264 for this ISO run.")
+                                 .arg(QString::fromStdString(normalized.video_encoder));
+            blog(LOG_WARNING, "[obs-zoom-plugin] %s",
+                 status_warning.toUtf8().constData());
+            normalized.video_encoder = "libx264";
+        } else {
+            if (error)
+                *error = encoder_error;
+            return false;
+        }
+    }
 
     QDir dir(QString::fromStdString(normalized.output_dir));
     if (!dir.exists() && !dir.mkpath(".")) {
@@ -192,6 +212,8 @@ bool ZoomIsoRecorder::start(const ZoomIsoRecordConfig &config,
             close_session(entry.second);
         m_sessions.clear();
         m_config = normalized;
+        m_requested_video_encoder = requested_encoder;
+        m_status_warning = status_warning;
         m_started_program_recording = false;
         m_active.store(true, std::memory_order_release);
     }
@@ -260,7 +282,10 @@ QJsonArray ZoomIsoRecorder::status_json()
         obj["ffmpeg_exit_code"] = s.ffmpeg_exit_code;
         obj["ffmpeg_exit_status"] = s.ffmpeg_exit_status;
         obj["ffmpeg_output_tail"] = s.ffmpeg_output_tail;
+        obj["requested_video_encoder"] =
+            QString::fromStdString(s.requested_video_encoder);
         obj["video_encoder"] = QString::fromStdString(s.video_encoder);
+        obj["encoder_fallback"] = s.encoder_fallback;
         obj["video_bytes"] = QFileInfo(s.video_path).exists()
             ? static_cast<double>(QFileInfo(s.video_path).size())
             : 0.0;
@@ -272,6 +297,39 @@ QJsonArray ZoomIsoRecorder::status_json()
         arr.append(obj);
     }
     return arr;
+}
+
+QJsonObject ZoomIsoRecorder::status_overview()
+{
+    QJsonObject obj;
+    std::lock_guard<std::mutex> lock(m_mtx);
+    obj["active"] = m_active.load(std::memory_order_acquire);
+    obj["output_dir"] = QString::fromStdString(m_config.output_dir);
+    obj["ffmpeg_path"] = QString::fromStdString(m_config.ffmpeg_path);
+    obj["requested_video_encoder"] =
+        QString::fromStdString(m_requested_video_encoder.empty()
+            ? m_config.video_encoder
+            : m_requested_video_encoder);
+    obj["video_encoder"] = QString::fromStdString(m_config.video_encoder);
+    obj["encoder_fallback"] =
+        !m_requested_video_encoder.empty() &&
+        m_requested_video_encoder != m_config.video_encoder;
+    obj["hardware_encoder"] = is_hardware_encoder(m_config.video_encoder);
+    obj["record_program"] = m_config.record_program;
+    obj["program_recording_started_by_corevideo"] = m_started_program_recording;
+    obj["session_count"] = static_cast<int>(m_sessions.size());
+    obj["warning"] = m_status_warning;
+
+    const QDir dir(QString::fromStdString(m_config.output_dir));
+    const QStorageInfo storage(dir.absolutePath());
+    if (storage.isValid() && storage.isReady()) {
+        obj["disk_available_bytes"] = static_cast<double>(storage.bytesAvailable());
+        obj["disk_warning"] = storage.bytesAvailable() < kIsoWarningFreeBytes;
+    } else {
+        obj["disk_available_bytes"] = -1.0;
+        obj["disk_warning"] = true;
+    }
+    return obj;
 }
 
 void ZoomIsoRecorder::on_output_updated(const ZoomOutputInfo &info)
@@ -349,7 +407,12 @@ ZoomIsoRecorder::ensure_session_locked(const ZoomOutputInfo &info,
     session.base_path = root.absoluteFilePath(base);
     session.video_path = session.base_path + ".mp4";
     session.audio_path = session.base_path + ".wav";
+    session.requested_video_encoder = m_requested_video_encoder.empty()
+        ? normalized_video_encoder(m_config.video_encoder)
+        : m_requested_video_encoder;
     session.video_encoder = normalized_video_encoder(m_config.video_encoder);
+    session.encoder_fallback =
+        session.requested_video_encoder != session.video_encoder;
 
     session.ffmpeg = std::make_unique<QProcess>();
     session.ffmpeg->setProgram(QString::fromStdString(m_config.ffmpeg_path));
@@ -406,6 +469,8 @@ void ZoomIsoRecorder::close_session(Session &session)
         session.ffmpeg->closeWriteChannel();
         if (!session.ffmpeg->waitForFinished(5000))
             session.ffmpeg->kill();
+        if (session.ffmpeg->state() != QProcess::NotRunning)
+            session.ffmpeg->waitForFinished(2000);
         refresh_ffmpeg_status_locked(session);
     }
     blog(LOG_INFO,
@@ -572,6 +637,12 @@ static std::string normalized_video_encoder(const std::string &encoder)
         return encoder;
     }
     return "libx264";
+}
+
+static bool is_hardware_encoder(const std::string &encoder)
+{
+    return encoder == "h264_nvenc" || encoder == "h264_qsv" ||
+        encoder == "h264_amf";
 }
 
 static bool ffmpeg_encoder_available(const QString &ffmpeg_path,

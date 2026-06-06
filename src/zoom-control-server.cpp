@@ -616,7 +616,9 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
         for (const auto &o : ZoomOutputManager::instance().outputs())
             ZoomIsoRecorder::instance().on_output_updated(o);
         write_response(socket, ok
-            ? QJsonObject{{"ok", true}, {"sessions", ZoomIsoRecorder::instance().status_json()}}
+            ? QJsonObject{{"ok", true},
+                          {"recorder", ZoomIsoRecorder::instance().status_overview()},
+                          {"sessions", ZoomIsoRecorder::instance().status_json()}}
             : QJsonObject{{"ok", false}, {"error", QString::fromStdString(error)}});
         return;
     }
@@ -631,6 +633,7 @@ void ZoomControlServer::handle_line(QTcpSocket *socket, const QByteArray &line)
         write_response(socket, {
             {"ok", true},
             {"active", ZoomIsoRecorder::instance().active()},
+            {"recorder", ZoomIsoRecorder::instance().status_overview()},
             {"sessions", ZoomIsoRecorder::instance().status_json()},
         });
         return;

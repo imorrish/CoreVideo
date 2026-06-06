@@ -1770,7 +1770,10 @@ sequenceDiagram
     <p>
       The panel uses the same <code>ZoomIsoRecorder</code> backend as the TCP and
       OSC APIs and persists its folder, FFmpeg path, and program-recording toggle
-      in OBS global settings.
+      in OBS global settings. If a selected hardware encoder is unavailable in
+      the FFmpeg build, CoreVideo falls back to <code>libx264</code> when
+      available and reports the requested encoder, actual encoder, and fallback
+      state in the panel and TCP status payload.
     </p>
 
     <div class="diagram-wrap">

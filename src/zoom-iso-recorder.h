@@ -3,6 +3,7 @@
 #include "zoom-output-manager.h"
 #include "zoom-types.h"
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QProcess>
 #include <QString>
 #include <atomic>
@@ -28,6 +29,7 @@ public:
     bool start(const ZoomIsoRecordConfig &config, std::string *error = nullptr);
     void stop();
     bool active() const { return m_active.load(std::memory_order_acquire); }
+    QJsonObject status_overview();
     QJsonArray status_json();
 
     void on_output_updated(const ZoomOutputInfo &info);
@@ -87,7 +89,9 @@ private:
         int ffmpeg_exit_code = -1;
         QString ffmpeg_exit_status;
         bool ffmpeg_error_logged = false;
+        std::string requested_video_encoder;
         std::string video_encoder;
+        bool encoder_fallback = false;
         std::unique_ptr<QProcess> ffmpeg;
         WavFile wav;
     };
@@ -110,6 +114,8 @@ private:
     std::atomic<bool> m_active{false};
     bool m_started_program_recording = false;
     ZoomIsoRecordConfig m_config;
+    std::string m_requested_video_encoder;
+    QString m_status_warning;
     std::unordered_map<std::string, ZoomOutputInfo> m_outputs;
     std::unordered_map<std::string, Session> m_sessions;
 };
