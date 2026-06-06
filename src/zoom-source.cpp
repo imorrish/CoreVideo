@@ -157,15 +157,8 @@ static bool observed_satisfies_resolution(uint32_t observed_w,
                                           uint32_t observed_h,
                                           VideoResolution requested)
 {
-    if (observed_w == 0 || observed_h == 0)
-        return false;
-    return observed_w + 8 >= width_for_resolution(requested) &&
-           observed_h + 8 >= height_for_resolution(requested);
-}
-
-static bool observed_is_1080p(uint32_t observed_h)
-{
-    return observed_h + 8 >= height_for_resolution(VideoResolution::P1080);
+    return observed_signal_satisfies_requested(observed_w, observed_h,
+                                               requested);
 }
 
 static uint8_t clamp_u8(int value)
@@ -857,15 +850,11 @@ bool ZoomSource::upgrade_low_quality_video(uint64_t now_ns, bool force)
     const uint32_t observed_w = m_width.load(std::memory_order_relaxed);
     const uint32_t observed_h = m_height.load(std::memory_order_relaxed);
     if (observed_w == 0 || observed_h == 0 ||
-        observed_is_1080p(observed_h) ||
         observed_satisfies_resolution(observed_w, observed_h, resolution))
         return false;
 
     const uint32_t requested_w = width_for_resolution(resolution);
     const uint32_t requested_h = height_for_resolution(resolution);
-    if (requested_h <= observed_h + 8 || requested_w <= observed_w + 8)
-        return false;
-
     const uint64_t last_frame_ns =
         m_last_frame_ns.load(std::memory_order_acquire);
     if (last_frame_ns == 0 || now_ns <= last_frame_ns ||

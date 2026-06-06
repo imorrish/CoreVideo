@@ -106,16 +106,40 @@ inline uint32_t video_resolution_height(VideoResolution resolution)
     }
 }
 
+inline bool observed_signal_has_1080_lines(uint32_t observed_height)
+{
+    return observed_height + 8 >= video_resolution_height(VideoResolution::P1080);
+}
+
+inline bool observed_signal_satisfies_requested(uint32_t observed_width,
+                                                uint32_t observed_height,
+                                                VideoResolution requested)
+{
+    if (observed_width == 0 || observed_height == 0)
+        return false;
+    if (requested == VideoResolution::P1080 &&
+        observed_signal_has_1080_lines(observed_height)) {
+        return true;
+    }
+    return observed_width + 8 >= video_resolution_width(requested) &&
+           observed_height + 8 >= video_resolution_height(requested);
+}
+
+inline bool observed_signal_below_requested(uint32_t observed_width,
+                                            uint32_t observed_height,
+                                            VideoResolution requested)
+{
+    if (observed_width == 0 || observed_height == 0)
+        return false;
+    return !observed_signal_satisfies_requested(
+        observed_width, observed_height, requested);
+}
+
 inline bool output_signal_below_requested(const ZoomOutputInfo &output)
 {
-    if (output.observed_width == 0 || output.observed_height == 0)
-        return false;
-    if (output.video_resolution == VideoResolution::P1080 &&
-        output.observed_height + 8 >= video_resolution_height(VideoResolution::P1080)) {
-        return false;
-    }
-    return output.observed_width + 8 < video_resolution_width(output.video_resolution) ||
-           output.observed_height + 8 < video_resolution_height(output.video_resolution);
+    return observed_signal_below_requested(output.observed_width,
+                                           output.observed_height,
+                                           output.video_resolution);
 }
 
 inline bool output_signal_missing_or_stale(const ZoomOutputInfo &output)

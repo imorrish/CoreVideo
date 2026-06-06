@@ -111,6 +111,14 @@ int main()
                        {participant(1)}, true, ZoomOutputHealthReason::Ok))
         return 1;
 
+    if (observed_signal_below_requested(1440, 1080, VideoResolution::P1080)) {
+        return fail("1080-line feeds should not trigger quality retry");
+    }
+
+    if (!observed_signal_below_requested(1920, 720, VideoResolution::P1080)) {
+        return fail("wide 720-line feeds should still trigger quality retry");
+    }
+
     ZoomOutputInfo below_1080 = output();
     below_1080.video_resolution = VideoResolution::P1080;
     below_1080.observed_width = 1280;
