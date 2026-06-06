@@ -47,16 +47,18 @@ QVector<Overlay> LowerThirdController::participantSyncedOverlays(
 
         const LowerThirdOverride override =
             m_overrides.value(participantId, {});
-        if (override.enabled && override.name.trimmed().isEmpty())
+        const QString overrideName = override.name.trimmed();
+        const QString overrideSubtitle = override.subtitle.trimmed();
+        if (override.enabled && overrideName.isEmpty())
             continue;
 
         Overlay ov;
         ov.id = QStringLiteral("cv-auto-lt-%1-%2")
             .arg(slot.index).arg(participantId);
         ov.type = Overlay::LowerThird;
-        ov.text1 = override.enabled ? override.name : it->name;
+        ov.text1 = override.enabled ? overrideName : it->name.trimmed();
         ov.text2 = override.enabled
-            ? override.subtitle
+            ? overrideSubtitle
             : (m_template.subtitle.isEmpty()
                 ? participantInitialSubtitle(*it)
                 : m_template.subtitle);

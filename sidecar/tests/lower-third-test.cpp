@@ -2,6 +2,12 @@
 #include <QCoreApplication>
 #include <iostream>
 
+static int fail(const char *message)
+{
+    std::cerr << message << "\n";
+    return 1;
+}
+
 int main(int argc, char **argv)
 {
     QCoreApplication app(argc, argv);
@@ -36,5 +42,38 @@ int main(int argc, char **argv)
         std::cerr << "Expected participant name in lower third\n";
         return 1;
     }
+    if (!overlays[0].text2.isEmpty())
+        return fail("Expected no generated subtitle for idle participant");
+
+    p.isTalking = true;
+    const QVector<Overlay> speaking = ctl.participantSyncedOverlays(look, {p});
+    if (speaking.size() != 1 || speaking[0].text2 != "Speaking")
+        return fail("Expected speaking subtitle for talking participant");
+
+    LowerThirdOverride override;
+    override.enabled = true;
+    override.name = "  Producer Name  ";
+    override.subtitle = "  Executive Producer  ";
+    ctl.setOverride(101, override);
+    const QVector<Overlay> overridden = ctl.participantSyncedOverlays(look, {p});
+    if (overridden.size() != 1 ||
+        overridden[0].text1 != "Producer Name" ||
+        overridden[0].text2 != "Executive Producer") {
+        return fail("Expected trimmed manual lower-third override");
+    }
+
+    override.name = "   ";
+    ctl.setOverride(101, override);
+    if (!ctl.participantSyncedOverlays(look, {p}).isEmpty())
+        return fail("Blank enabled override should suppress generated lower third");
+
+    ctl.clearOverride(101);
+    if (ctl.participantSyncedOverlays(look, {p}).size() != 1)
+        return fail("Clearing override should restore generated lower third");
+
+    look.tileStyle.showNameTag = false;
+    if (!ctl.participantSyncedOverlays(look, {p}).isEmpty())
+        return fail("showNameTag=false should disable generated lower thirds");
+
     return 0;
 }
