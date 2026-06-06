@@ -397,10 +397,10 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     m_table = new QTableWidget(this);
     m_table->setColumnCount(ColumnCount);
     m_table->setHorizontalHeaderLabels({
-        "Preview", "Output", "Assignment", "Requested", "Delivered",
-        "SDK", "Channels", "Audio role"
+        "Preview", "Output", "Assignment", "Request", "Signal",
+        "SDK Status", "Audio", "Audio Role"
     });
-    m_table->horizontalHeader()->setMinimumSectionSize(90);
+    m_table->horizontalHeader()->setMinimumSectionSize(104);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnPreview,    QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnName,       QHeaderView::Stretch);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnAssignment, QHeaderView::Interactive);
@@ -412,15 +412,16 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     m_table->setColumnWidth(ColumnPreview, 162);
     m_table->setColumnWidth(ColumnName, 240);
     m_table->setColumnWidth(ColumnAssignment, 300);
-    m_table->setColumnWidth(ColumnResolution, 116);
-    m_table->setColumnWidth(ColumnDelivered, 148);
-    m_table->setColumnWidth(ColumnSdk, 180);
-    m_table->setColumnWidth(ColumnAudio, 130);
-    m_table->setColumnWidth(ColumnAudioRole, 148);
+    m_table->setColumnWidth(ColumnResolution, 124);
+    m_table->setColumnWidth(ColumnDelivered, 168);
+    m_table->setColumnWidth(ColumnSdk, 208);
+    m_table->setColumnWidth(ColumnAudio, 148);
+    m_table->setColumnWidth(ColumnAudioRole, 168);
     m_table->verticalHeader()->setVisible(false);
     m_table->verticalHeader()->setDefaultSectionSize(112);
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
     m_table->setMinimumHeight(460);
+    m_table->setMinimumWidth(1440);
 
     auto *buttons = new QDialogButtonBox(QDialogButtonBox::Apply |
                                          QDialogButtonBox::Close, this);
