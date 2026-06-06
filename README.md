@@ -40,7 +40,7 @@ Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-
 - **Webinar support** - join Zoom Webinars using the dedicated SDK entry point (Webinar checkbox in control dock)
 - **Participant roster** - live list with video, mute, talking, host, co-host, raised hand, spotlight slot, and screen-sharing state
 - **Control dock** - dockable Qt panel with animated status dot, join/leave, token-type selector, recovery countdown, Active Speaker Director controls, and a routing section that opens the dedicated Output Manager; persists last meeting ID and display name across sessions
-- **Diagnostics dock** - dockable OBS panel showing requested vs observed resolution, FPS, frame age, retry counts, recent engine debug events, and a redacted support-bundle export for live troubleshooting
+- **Diagnostics dock** - dockable OBS panel showing requested vs observed resolution, FPS, frame age, retry counts, recent engine debug events, and a redacted support-bundle zip/folder export for live troubleshooting
 - **Auto-reconnect** - exponential back-off recovery after engine crash, network drop, or unexpected disconnect
 - **OBS hotkeys** - per-source hotkeys to enable/disable active speaker mode
 - **TCP control API** - JSON server on `127.0.0.1:19870` for scripts and dashboards; includes `oauth_callback` command for custom URL scheme forwarding

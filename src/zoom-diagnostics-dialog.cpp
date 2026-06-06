@@ -18,6 +18,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMessageBox>
+#include <QProcess>
 #include <QPushButton>
 #include <QStandardPaths>
 #include <QStringList>
@@ -464,6 +465,53 @@ static QString runtime_manifest_text(const QJsonArray &manifest)
     return text;
 }
 
+static QString create_support_bundle_zip(const QString &bundle_path,
+                                         QStringList &warnings)
+{
+#if defined(_WIN32)
+    const QString zip_path = bundle_path + QStringLiteral(".zip");
+    QString program = QStandardPaths::findExecutable("powershell.exe");
+    if (program.isEmpty())
+        program = QStandardPaths::findExecutable("pwsh.exe");
+    if (program.isEmpty()) {
+        warnings << QStringLiteral("Could not create zip: PowerShell was not found.");
+        return {};
+    }
+
+    QProcess zip;
+    zip.setProgram(program);
+    zip.setArguments({
+        "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-Command",
+        "Compress-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
+        bundle_path,
+        zip_path,
+    });
+    zip.setProcessChannelMode(QProcess::MergedChannels);
+    zip.start(QIODevice::ReadOnly);
+    if (!zip.waitForStarted(5000)) {
+        warnings << QString("Could not create zip: %1").arg(zip.errorString());
+        return {};
+    }
+    if (!zip.waitForFinished(30000)) {
+        zip.kill();
+        warnings << QStringLiteral("Could not create zip: timed out after 30 seconds.");
+        return {};
+    }
+    if (zip.exitStatus() != QProcess::NormalExit || zip.exitCode() != 0) {
+        warnings << QString("Could not create zip: %1")
+            .arg(QString::fromUtf8(zip.readAll()).trimmed());
+        return {};
+    }
+    return QFileInfo::exists(zip_path) ? zip_path : QString{};
+#else
+    (void)bundle_path;
+    warnings << QStringLiteral("Zip creation is currently only automatic on Windows.");
+    return {};
+#endif
+}
+
 ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
     : QWidget(parent)
 {
@@ -830,6 +878,20 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         return;
     }
 
+    const QString zip_path = create_support_bundle_zip(bundle.absolutePath(),
+                                                       warnings);
+    if (!zip_path.isEmpty()) {
+        summary["zip_path"] = zip_path;
+        warning_array = QJsonArray();
+        for (const QString &warning : warnings)
+            warning_array.append(warning);
+        summary["warnings"] = warning_array;
+        write_json_file(bundle.absoluteFilePath("summary.json"), summary);
+    }
+
     QMessageBox::information(this, "Create Support Bundle",
-        QString("Support bundle created at:\n%1").arg(bundle.absolutePath()));
+        zip_path.isEmpty()
+            ? QString("Support bundle created at:\n%1").arg(bundle.absolutePath())
+            : QString("Support bundle created at:\n%1\n\nFolder:\n%2")
+                  .arg(zip_path, bundle.absolutePath()));
 }
