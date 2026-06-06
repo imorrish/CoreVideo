@@ -71,8 +71,11 @@ void OBSLookRenderer::provisionPlaceholders(int slotCount) const
 {
     if (!m_client || !m_client->isConnected())
         return;
+    QStringList sources = sourceNamesForSlots(slotCount);
+    if (!sources.contains(QStringLiteral("Zoom Screen Share")))
+        sources << QStringLiteral("Zoom Screen Share");
     m_client->ensureCoreVideoSources(QStringLiteral("CoreVideo Sources"),
-                                     sourceNamesForSlots(slotCount));
+                                     sources);
 }
 
 void OBSLookRenderer::provisionLooks(const QVector<Look> &looks) const

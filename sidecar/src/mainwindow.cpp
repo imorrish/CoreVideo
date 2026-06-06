@@ -1481,6 +1481,27 @@ void MainWindow::openParticipantMappingWindow()
     }
     root->addLayout(grid);
 
+    auto *shareFrame = new QFrame(dlg);
+    shareFrame->setObjectName("shareMappingFrame");
+    shareFrame->setStyleSheet(
+        "#shareMappingFrame { background: #14141f; border: 1px solid #24243a; border-radius: 6px; }");
+    auto *shareRow = new QHBoxLayout(shareFrame);
+    shareRow->setContentsMargins(12, 10, 12, 10);
+    shareRow->setSpacing(10);
+    auto *shareTitle = new QLabel("Screen Share", shareFrame);
+    shareTitle->setStyleSheet("color: #e0e0f0; font-weight: 700; background: transparent;");
+    auto *shareSource = new QLabel("Zoom Screen Share", shareFrame);
+    shareSource->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    shareSource->setStyleSheet("color: #9aa0c0; background: transparent;");
+    auto *shareHint = new QLabel("Follows Zoom's active share feed", shareFrame);
+    shareHint->setStyleSheet("color: #687090; background: transparent;");
+    auto *assignShareBtn = new QPushButton("Assign Share Source", shareFrame);
+    shareRow->addWidget(shareTitle);
+    shareRow->addWidget(shareSource);
+    shareRow->addWidget(shareHint, 1);
+    shareRow->addWidget(assignShareBtn);
+    root->addWidget(shareFrame);
+
     auto *footer = new QHBoxLayout;
     auto *applyBtn = new QPushButton("Apply Mapping", dlg);
     auto *closeBtn = new QPushButton("Close", dlg);
@@ -1524,6 +1545,12 @@ void MainWindow::openParticipantMappingWindow()
             if (m_obsClient && m_obsClient->isConnected())
                 m_obsClient->setCurrentScene(QStringLiteral("CoreVideo Sources"));
         });
+    });
+    connect(assignShareBtn, &QPushButton::clicked, dlg, [this, refreshStatus]() {
+        provisionPlaceholderSources();
+        if (m_zoomClient)
+            m_zoomClient->assignScreenShare(QStringLiteral("Zoom Screen Share"));
+        refreshStatus();
     });
     connect(applyBtn, &QPushButton::clicked, dlg, [this, combos]() {
         for (int i = 0; i < combos.size(); ++i) {

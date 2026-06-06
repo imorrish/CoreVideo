@@ -23,6 +23,7 @@ public:
                       int participantId,
                       AudioRouting routing = AudioRouting::Mixed,
                       const QString &audioChannels = QStringLiteral("mono"));
+    void assignScreenShare(const QString &sourceName);
 
 signals:
     void participantsUpdated(const QVector<ParticipantInfo> &participants);

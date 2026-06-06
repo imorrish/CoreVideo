@@ -88,6 +88,25 @@ void ZoomControlClient::assignOutput(const QString &sourceName,
     });
 }
 
+void ZoomControlClient::assignScreenShare(const QString &sourceName)
+{
+    sendRequest(QJsonObject{
+                    {"cmd", "assign_output_ex"},
+                    {"source", sourceName},
+                    {"mode", "screen_share"},
+                },
+                [this, sourceName](const QJsonObject &response) {
+        if (response.value("ok").toBool()) {
+            emit log(QStringLiteral("Assigned output '%1' to active screen share.")
+                         .arg(sourceName));
+        } else {
+            emit log(QStringLiteral("Assign screen share '%1' failed: %2")
+                         .arg(sourceName,
+                              response.value("error").toString("unknown_error")));
+        }
+    });
+}
+
 void ZoomControlClient::sendRequest(
     const QJsonObject &request,
     std::function<void(const QJsonObject &)> handler)
