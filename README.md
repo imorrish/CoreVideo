@@ -192,6 +192,18 @@ To verify an already-created scene graph without creating or modifying sources:
 .\scripts\obs-scene-smoke-test.ps1 -AuditOnly -VerifyCoreVideoPlugin -SceneName "CoreVideo Smoke Test"
 ```
 
+### Load measurement
+
+Use the load measurement script during 8-feed testing after OBS is in the
+target state. It samples `obs64`, `ZoomObsEngine`, and `ffmpeg`, then writes raw
+samples, CSV summary, JSON summary, and warnings when required processes are
+missing or the expected ISO recorder count is not present.
+
+```powershell
+.\scripts\Measure-CoreVideoLoad.ps1 -DurationSeconds 1800 -SampleSeconds 5 `
+  -ExpectedFeeds 8 -ExpectedIsoRecorders 8 -RequireObs
+```
+
 To audit plugin load and dock registration markers, pass the current OBS log
 path. After manually opening docks in OBS, include their dock IDs in
 `-ExpectedDockId`:

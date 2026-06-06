@@ -6,7 +6,16 @@ param(
     [int]$SampleSeconds = 5,
 
     [Parameter()]
-    [string]$OutputPath = ""
+    [string]$OutputPath = "",
+
+    [Parameter()]
+    [int]$ExpectedFeeds = 8,
+
+    [Parameter()]
+    [int]$ExpectedIsoRecorders = 0,
+
+    [Parameter()]
+    [switch]$RequireObs
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,6 +25,12 @@ if ($DurationSeconds -le 0) {
 }
 if ($SampleSeconds -le 0) {
     throw "SampleSeconds must be greater than zero."
+}
+if ($ExpectedFeeds -lt 0) {
+    throw "ExpectedFeeds must be zero or greater."
+}
+if ($ExpectedIsoRecorders -lt 0) {
+    throw "ExpectedIsoRecorders must be zero or greater."
 }
 
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {
@@ -64,9 +79,11 @@ $processNames = @("obs64", "ZoomObsEngine", "ffmpeg")
 $start = Get-Date
 $deadline = $start.AddSeconds($DurationSeconds)
 $samples = New-Object System.Collections.Generic.List[object]
+$logicalProcessors = [Math]::Max(1, [Environment]::ProcessorCount)
 
 Write-Host "Sampling CoreVideo load for $DurationSeconds seconds every $SampleSeconds seconds."
 Write-Host "Keep OBS in the target production state: 8 feeds, ISO recording, and program stream active."
+Write-Host "Expected feeds: $ExpectedFeeds; expected ISO ffmpeg processes: $ExpectedIsoRecorders."
 
 while ((Get-Date) -lt $deadline) {
     $now = Get-Date
@@ -93,19 +110,80 @@ $summary = $samples |
     Group-Object ProcessName |
     ForEach-Object {
         $rows = $_.Group | Where-Object { $_.Count -gt 0 }
+        $first = if ($rows) { $rows | Select-Object -First 1 } else { $null }
+        $last = if ($rows) { $rows | Select-Object -Last 1 } else { $null }
+        $cpuDelta = if ($first -and $last) {
+            [math]::Max(0.0, [double]$last.CpuSeconds - [double]$first.CpuSeconds)
+        } else {
+            0.0
+        }
+        $avgCpuPercent = if ($DurationSeconds -gt 0) {
+            [math]::Round(($cpuDelta / $DurationSeconds) * 100.0 / $logicalProcessors, 1)
+        } else {
+            0.0
+        }
         [pscustomobject]@{
             ProcessName = $_.Name
             Samples = $_.Group.Count
             MaxCount = ($_.Group | Measure-Object Count -Maximum).Maximum
+            FinalCount = if ($last) { $last.Count } else { 0 }
             MaxWorkingSetMB = if ($rows) { ($rows | Measure-Object WorkingSetMB -Maximum).Maximum } else { 0 }
             MaxPrivateMemoryMB = if ($rows) { ($rows | Measure-Object PrivateMemoryMB -Maximum).Maximum } else { 0 }
             FinalCpuSeconds = if ($rows) { ($rows | Select-Object -Last 1).CpuSeconds } else { 0 }
+            CpuDeltaSeconds = [math]::Round($cpuDelta, 3)
+            AvgCpuPercentOfSystem = $avgCpuPercent
+            MaxHandles = if ($rows) { ($rows | Measure-Object Handles -Maximum).Maximum } else { 0 }
+            MaxThreads = if ($rows) { ($rows | Measure-Object Threads -Maximum).Maximum } else { 0 }
         }
     }
 
 $summaryPath = [System.IO.Path]::ChangeExtension($OutputPath, ".summary.csv")
 $summary | Export-Csv -NoTypeInformation -Path $summaryPath
+
+$warnings = New-Object System.Collections.Generic.List[string]
+$obsSummary = $summary | Where-Object { $_.ProcessName -eq "obs64" } | Select-Object -First 1
+$engineSummary = $summary | Where-Object { $_.ProcessName -eq "ZoomObsEngine" } | Select-Object -First 1
+$ffmpegSummary = $summary | Where-Object { $_.ProcessName -eq "ffmpeg" } | Select-Object -First 1
+if ($RequireObs -and (-not $obsSummary -or $obsSummary.MaxCount -lt 1)) {
+    $warnings.Add("OBS was required but obs64.exe was not observed.")
+}
+if (-not $engineSummary -or $engineSummary.MaxCount -lt 1) {
+    $warnings.Add("ZoomObsEngine was not observed. The meeting engine may not have been running during the load test.")
+}
+if ($ExpectedIsoRecorders -gt 0 -and
+    (-not $ffmpegSummary -or $ffmpegSummary.MaxCount -lt $ExpectedIsoRecorders)) {
+    $observed = if ($ffmpegSummary) { $ffmpegSummary.MaxCount } else { 0 }
+    $warnings.Add("Expected at least $ExpectedIsoRecorders ffmpeg ISO recorder process(es), observed $observed.")
+}
+if ($ExpectedFeeds -ge 8 -and $engineSummary -and $engineSummary.AvgCpuPercentOfSystem -gt 35.0) {
+    $warnings.Add("ZoomObsEngine average CPU exceeded 35% of total system CPU during an 8-feed target test.")
+}
+
+$jsonPath = [System.IO.Path]::ChangeExtension($OutputPath, ".summary.json")
+$report = [pscustomobject]@{
+    StartedAt = $start.ToString("o")
+    FinishedAt = (Get-Date).ToString("o")
+    DurationSeconds = $DurationSeconds
+    SampleSeconds = $SampleSeconds
+    LogicalProcessors = $logicalProcessors
+    ExpectedFeeds = $ExpectedFeeds
+    ExpectedIsoRecorders = $ExpectedIsoRecorders
+    RequireObs = [bool]$RequireObs
+    SamplesPath = (Resolve-Path $OutputPath).Path
+    SummaryCsvPath = (Resolve-Path $summaryPath).Path
+    Warnings = @($warnings)
+    Processes = @($summary)
+}
+$report | ConvertTo-Json -Depth 5 | Set-Content -Path $jsonPath
+
 $summary | Format-Table -AutoSize
+if ($warnings.Count -gt 0) {
+    Write-Warning "Load test completed with warnings:"
+    foreach ($warning in $warnings) {
+        Write-Warning " - $warning"
+    }
+}
 
 Write-Host "Wrote samples: $OutputPath"
 Write-Host "Wrote summary: $summaryPath"
+Write-Host "Wrote JSON summary: $jsonPath"
