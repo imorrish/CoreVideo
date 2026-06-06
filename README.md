@@ -270,6 +270,10 @@ Each active source segment writes one `*.mp4` video file and one matching `*.wav
 | `/zoom/list_outputs` | - | Reply: one `/zoom/output` per source |
 | `/zoom/recover_stale_outputs` | `[,i]` | Retry stale video outputs; optional `1` forces cooldown bypass |
 | `/zoom/upgrade_low_quality_outputs` | `[,i]` | Retry outputs below requested resolution; skips feeds already at 1080p |
+| `/zoom/speaker_director/status` | - | Reply with directed/raw/candidate/manual speaker and timing state |
+| `/zoom/speaker_director/configure` | `[,iiiii]` | Set sensitivity ms, hold ms, optional require-video flag, and up to two excluded participant IDs |
+| `/zoom/speaker_director/take` | `[,i]` | Manually hold a participant as the directed speaker |
+| `/zoom/speaker_director/release` | - | Return the director to automatic switching |
 | `/zoom/join` | `,sss` | meeting_id, passcode, display_name |
 | `/zoom/leave` | - | Leave meeting |
 | `/zoom/assign_output` | `,si[i]` | source, participant_id, [active_speaker] |

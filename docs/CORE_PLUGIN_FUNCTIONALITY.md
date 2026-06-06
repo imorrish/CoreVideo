@@ -332,6 +332,15 @@ Retry low-quality video outputs:
 /zoom/upgrade_low_quality_outputs 1
 ```
 
+Inspect and control the Active Speaker Director:
+
+```text
+/zoom/speaker_director/status
+/zoom/speaker_director/configure 650 2500 1 123456 789012
+/zoom/speaker_director/take 123456
+/zoom/speaker_director/release
+```
+
 Assign a source:
 
 ```text

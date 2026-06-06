@@ -400,6 +400,16 @@ if(BUILD_TESTING)
     )
     add_test(NAME CoreVideoOutputHealth
              COMMAND CoreVideoOutputHealthTest)
+
+    add_executable(CoreVideoSpeakerDirectorTest
+        tests/speaker-director-test.cpp
+        src/speaker-director.cpp
+    )
+    target_include_directories(CoreVideoSpeakerDirectorTest PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
+    add_test(NAME CoreVideoSpeakerDirector
+             COMMAND CoreVideoSpeakerDirectorTest)
 endif()
 
 set(CPACK_GENERATOR                 "ZIP")

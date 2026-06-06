@@ -6,10 +6,12 @@
 #include "zoom-reconnect.h"
 #include "zoom-settings.h"
 #include "zoom-oauth.h"
+#include "speaker-director.h"
 #include <QHostAddress>
 #include <QMetaObject>
 #include <QUdpSocket>
 #include <obs-module.h>
+#include <util/platform.h>
 #include <algorithm>
 #include <cstring>
 
@@ -126,6 +128,7 @@ static bool find_output_by_source(const std::string &source, ZoomOutputInfo &out
 static std::string assignment_mode_str(AssignmentMode mode);
 static std::string participant_name(uint32_t participant_id);
 static uint32_t resolved_assignment_participant_id(const ZoomOutputInfo &output);
+static uint64_t now_ms();
 
 // ── ZoomOscServer ────────────────────────────────────────────────────────────
 
@@ -270,6 +273,91 @@ void ZoomOscServer::dispatch(const QString &address,
     // /zoom/list_participants  →  reply with current roster
     if (address == "/zoom/list_participants") {
         send_participants(sender, sender_port);
+        return;
+    }
+
+    if (address == "/zoom/speaker_director/status") {
+        const SpeakerDirectorSnapshot s =
+            SpeakerDirector::instance().snapshot(now_ms());
+        std::vector<OscArg> a(8);
+        a[0].type = OscArg::Int32; a[0].i = static_cast<int32_t>(s.directed_speaker_id);
+        a[1].type = OscArg::Int32; a[1].i = static_cast<int32_t>(s.raw_speaker_id);
+        a[2].type = OscArg::Int32; a[2].i = static_cast<int32_t>(s.candidate_speaker_id);
+        a[3].type = OscArg::Int32; a[3].i = static_cast<int32_t>(s.last_speaker_id);
+        a[4].type = OscArg::Int32; a[4].i = static_cast<int32_t>(s.manual_speaker_id);
+        a[5].type = OscArg::Int32; a[5].i = static_cast<int32_t>(s.sensitivity_ms);
+        a[6].type = OscArg::Int32; a[6].i = static_cast<int32_t>(s.hold_ms);
+        a[7].type = OscArg::Int32; a[7].i = s.require_video ? 1 : 0;
+        m_socket->writeDatagram(build_osc("/zoom/speaker_director/status",
+                                          "iiiiiiii", a),
+                                sender, sender_port);
+        return;
+    }
+
+    // /zoom/speaker_director/configure [,iiiii] sensitivity_ms hold_ms
+    // [require_video] [exclude_id_1] [exclude_id_2]
+    if (address == "/zoom/speaker_director/configure") {
+        if (args.size() < 2 ||
+            args[0].type != OscArg::Int32 ||
+            args[1].type != OscArg::Int32) {
+            blog(LOG_WARNING,
+                 "[obs-zoom-plugin] OSC /zoom/speaker_director/configure: "
+                 "expected ,ii[iii] sensitivity_ms hold_ms [require_video] [exclude1] [exclude2]");
+            return;
+        }
+        const uint32_t sensitivity_ms =
+            static_cast<uint32_t>(std::max<int32_t>(0, args[0].i));
+        const uint32_t hold_ms =
+            static_cast<uint32_t>(std::max<int32_t>(0, args[1].i));
+        const bool require_video =
+            args.size() >= 3 && args[2].type == OscArg::Int32
+            ? args[2].i != 0
+            : ZoomPluginSettings::load().speaker_require_video;
+        std::vector<uint32_t> excluded;
+        if (args.size() >= 4 && args[3].type == OscArg::Int32 && args[3].i > 0)
+            excluded.push_back(static_cast<uint32_t>(args[3].i));
+        if (args.size() >= 5 && args[4].type == OscArg::Int32 && args[4].i > 0)
+            excluded.push_back(static_cast<uint32_t>(args[4].i));
+
+        SpeakerDirector::instance().configure(sensitivity_ms, hold_ms,
+                                              require_video, excluded);
+        const SpeakerDirectorSnapshot s =
+            SpeakerDirector::instance().snapshot(now_ms());
+        std::vector<OscArg> reply(3);
+        reply[0].type = OscArg::Int32; reply[0].i = static_cast<int32_t>(s.sensitivity_ms);
+        reply[1].type = OscArg::Int32; reply[1].i = static_cast<int32_t>(s.hold_ms);
+        reply[2].type = OscArg::Int32; reply[2].i = s.require_video ? 1 : 0;
+        m_socket->writeDatagram(build_osc("/zoom/speaker_director/configured",
+                                          "iii", reply),
+                                sender, sender_port);
+        return;
+    }
+
+    // /zoom/speaker_director/take [,i] participant_id
+    if (address == "/zoom/speaker_director/take") {
+        if (args.empty() || args[0].type != OscArg::Int32) {
+            blog(LOG_WARNING,
+                 "[obs-zoom-plugin] OSC /zoom/speaker_director/take: expected ,i participant_id");
+            return;
+        }
+        const bool ok = SpeakerDirector::instance().set_manual_speaker(
+            static_cast<uint32_t>(args[0].i), now_ms());
+        std::vector<OscArg> reply(1);
+        reply[0].type = OscArg::Int32; reply[0].i = ok ? 1 : 0;
+        m_socket->writeDatagram(build_osc("/zoom/speaker_director/take/result",
+                                          "i", reply),
+                                sender, sender_port);
+        return;
+    }
+
+    if (address == "/zoom/speaker_director/release") {
+        const bool changed =
+            SpeakerDirector::instance().clear_manual_speaker(now_ms());
+        std::vector<OscArg> reply(1);
+        reply[0].type = OscArg::Int32; reply[0].i = changed ? 1 : 0;
+        m_socket->writeDatagram(build_osc("/zoom/speaker_director/release/result",
+                                          "i", reply),
+                                sender, sender_port);
         return;
     }
 
@@ -627,6 +715,11 @@ static uint32_t resolved_assignment_participant_id(const ZoomOutputInfo &output)
     if (output.assignment == AssignmentMode::ActiveSpeaker)
         return ZoomEngineClient::instance().active_speaker_id();
     return output.participant_id;
+}
+
+static uint64_t now_ms()
+{
+    return os_gettime_ns() / 1'000'000ULL;
 }
 
 void ZoomOscServer::send_status(const QHostAddress &to, quint16 port)
