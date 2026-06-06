@@ -313,14 +313,6 @@ if(BUILD_ZOOM_ENGINE)
         target_include_directories(ZoomSdkAuthProbe PRIVATE ${ZOOM_SDK_INCLUDE_DIR})
         target_link_libraries(ZoomSdkAuthProbe PRIVATE ${ZOOM_SDK_LIBRARY})
         set_target_properties(ZoomSdkAuthProbe PROPERTIES WIN32_EXECUTABLE FALSE)
-        if(NOT "${ZOOM_SDK_RUNTIME_DIR}" STREQUAL "")
-            add_custom_command(TARGET ZoomSdkAuthProbe POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy_directory
-                    "${ZOOM_SDK_RUNTIME_DIR}"
-                    "$<TARGET_FILE_DIR:ZoomSdkAuthProbe>"
-                COMMENT "Copying Zoom SDK runtime files to auth probe output directory"
-            )
-        endif()
     elseif(APPLE)
         add_executable(ZoomObsEngine ${ENGINE_SOURCES})
         target_include_directories(ZoomObsEngine PRIVATE ${ENGINE_INCLUDES})

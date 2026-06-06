@@ -178,6 +178,21 @@ function New-UninstallFileList {
     Set-Content -LiteralPath $OutputPath -Value $lines -Encoding UTF8
 }
 
+function Invoke-NativeCommand {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$Arguments
+    )
+
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$FilePath failed with exit code $LASTEXITCODE"
+    }
+}
+
 function Upload-ReleaseAsset {
     param(
         [object]$Release,
@@ -254,7 +269,7 @@ try {
                 $configureArgs += "-DCMAKE_PREFIX_PATH=$QtRootDir"
             }
         }
-        cmake @configureArgs
+        Invoke-NativeCommand cmake @configureArgs
     } elseif (-not (Test-Path -LiteralPath $resolvedBuildPath)) {
         throw "Build directory does not exist: $resolvedBuildPath. Rerun with -Configure and the required CMake paths, or provide -BuildPath."
     } else {
@@ -269,17 +284,17 @@ try {
         if ($OAuthAuthorizationUrl) { $reconfigureArgs += "-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=$OAuthAuthorizationUrl" }
         if ($MeetingSdkPublicAppKey) { $reconfigureArgs += "-DZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY=$MeetingSdkPublicAppKey" }
         if ($reconfigureArgs.Count -gt 2) {
-            cmake @reconfigureArgs
+            Invoke-NativeCommand cmake @reconfigureArgs
         }
     }
 
     if (-not $SkipBuild) {
-        cmake --build $resolvedBuildPath --config $Configuration --parallel
+        Invoke-NativeCommand cmake --build $resolvedBuildPath --config $Configuration --parallel
     }
 
     Remove-RepoDirectory -Path $installPath -RepoRoot $repoRoot
     New-Item -ItemType Directory -Force -Path $installPath | Out-Null
-    cmake --install $resolvedBuildPath --config $Configuration --prefix $installPath
+    Invoke-NativeCommand cmake --install $resolvedBuildPath --config $Configuration --prefix $installPath
 
     & (Join-Path $PSScriptRoot "Test-CoreVideoPackage.ps1") -PackageRoot $installPath -FullRuntime
 
