@@ -54,10 +54,11 @@ static constexpr uint64_t kNoSignalRecoverNs = 5'000'000'000ULL;
 static constexpr uint64_t kStaleRecoverCooldownNs = 10'000'000'000ULL;
 static constexpr uint64_t kQualityUpgradeStableNs = 20'000'000'000ULL;
 static constexpr uint64_t kQualityUpgradeBaseCooldownNs = 60'000'000'000ULL;
-static constexpr uint32_t kMaxAutomaticQualityUpgradeAttempts = 4;
 
 static uint64_t quality_upgrade_cooldown_ns(uint32_t completed_attempts)
 {
+    // Keep trying during long meetings, but cap automatic retry pressure at
+    // eight minutes. A feed that reaches the requested resolution resets this.
     const uint32_t shift = std::min<uint32_t>(completed_attempts, 3);
     return kQualityUpgradeBaseCooldownNs << shift;
 }
@@ -875,8 +876,6 @@ bool ZoomSource::upgrade_low_quality_video(uint64_t now_ns, bool force)
         m_last_quality_upgrade_ns.load(std::memory_order_acquire);
     const uint32_t completed_attempts =
         m_quality_upgrade_attempts.load(std::memory_order_acquire);
-    if (!force && completed_attempts >= kMaxAutomaticQualityUpgradeAttempts)
-        return false;
     if (!force && last_upgrade_ns != 0 &&
         now_ns - last_upgrade_ns < quality_upgrade_cooldown_ns(completed_attempts))
         return false;
