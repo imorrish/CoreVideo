@@ -204,7 +204,8 @@ To verify an already-created scene graph without creating or modifying sources:
 Use the load measurement script during 8-feed testing after OBS is in the
 target state. It samples `obs64`, `ZoomObsEngine`, and `ffmpeg`, then writes raw
 samples, CSV summary, JSON summary, and warnings when required processes are
-missing or the expected ISO recorder count is not present.
+missing, disappear during the run, or the expected ISO recorder count is not
+present for every sample.
 
 ```powershell
 .\scripts\Measure-CoreVideoLoad.ps1 -DurationSeconds 1800 -SampleSeconds 5 `
@@ -415,7 +416,9 @@ program stream/recording active. Then run:
 
 The script writes CSV samples and a summary under `artifacts/load-tests/` for
 `obs64`, `ZoomObsEngine`, and `ffmpeg`, making CPU and memory comparisons
-repeatable across builds.
+repeatable across builds. The summary includes minimum, maximum, and final
+process counts plus zero-count sample totals so engine restarts, OBS exits, and
+ISO encoder drops are visible instead of being hidden by a healthy final sample.
 
 ## Architecture Overview
 
