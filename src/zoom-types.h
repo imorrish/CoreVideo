@@ -31,7 +31,7 @@ struct ZoomJoinAuthTokens {
 // How a ZoomSource selects which participant's feed to render.
 //   Participant   - fixed participant ID
 //   ActiveSpeaker - whoever is currently speaking (legacy "active speaker" mode)
-//   SpotlightIndex- spotlight slot N (1-based: ZoomISO-style "Spotlight 1/2/3")
+//   SpotlightIndex- spotlight slot 1-8 (ZoomISO-style "Spotlight 1/2/3")
 //   ScreenShare   - the active screen-share feed
 enum class AssignmentMode {
     Participant    = 0,
@@ -49,7 +49,7 @@ struct ParticipantInfo {
     bool        is_host = false;
     bool        is_co_host = false;
     bool        raised_hand = false;
-    // 0 = not spotlighted; 1..N = 1-based spotlight slot index.
+    // 0 = not spotlighted; 1-8 = 1-based spotlight slot index.
     uint32_t    spotlight_index = 0;
     // True if this participant is currently sharing their screen.
     bool        is_sharing_screen = false;

@@ -91,7 +91,7 @@ different assignment mode:
 |---|---|---|
 | Participant | Fixed Zoom participant ID | Dedicated guest ISO |
 | Active Speaker | Follows the current active speaker | Host/speaker-follow shot |
-| Spotlight Slot | Follows Zoom spotlight position 1..N | ZoomISO-style production |
+| Spotlight Slot | Follows Zoom spotlight position 1-8 | ZoomISO-style production |
 | Screen Share | Follows active screen share | Slides/demo capture |
 
 Each output reports observed resolution and frame rate through the output
