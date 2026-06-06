@@ -314,7 +314,7 @@ CoreVideo has two active-speaker workflows:
 - Set a normal **Zoom Participant** source to **Active Speaker** assignment mode when that source should follow the directed speaker.
 - Add the dedicated **CoreVideo Active Speaker** source when you want a single speaker-follow OBS source. It uses a two-slot handoff internally: the current participant stays visible while the next participant warms on a hidden slot, then the source cuts only after a valid frame is available.
 
-The **Active Speaker Director** in the Zoom Control dock decides which participant is directed. It tracks the raw Zoom speaker, candidate speaker, directed speaker, last directed speaker, and any manual supersede.
+The **Active Speaker Director** in the Zoom Control dock decides which participant is directed. It tracks the raw Zoom speaker, candidate speaker, directed speaker, last directed speaker, and any manual supersede. The dock also shows a plain-language status line so the operator can see whether CoreVideo is waiting, holding the current speaker, evaluating a candidate, or locked by manual supersede.
 
 ### Debounce
 
@@ -353,6 +353,12 @@ echo '{"cmd":"speaker_director_take","participant_id":123456}' | nc 127.0.0.1 19
 # Return to automatic speaker direction.
 echo '{"cmd":"speaker_director_release"}' | nc 127.0.0.1 19870
 ```
+
+`speaker_director_status` returns both numeric IDs and resolved participant
+objects (`directed_speaker`, `raw_speaker`, `candidate_speaker`,
+`last_speaker`, `manual_speaker`, and `excluded_participants`) plus a `status`
+field. TCP subscribers receive `speaker_director_changed` events whenever the
+directed, candidate, or manual speaker changes.
 
 ## Output Profiles
 

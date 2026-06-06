@@ -1074,6 +1074,8 @@ flowchart LR
       in the Zoom Control dock and a dedicated <strong>CoreVideo Active Speaker</strong>
       OBS source. The director tracks the raw Zoom speaker, candidate speaker,
       directed speaker, last directed speaker, and manual take/release state.
+      The dock also shows a plain-language status line for waiting, holding,
+      candidate evaluation, and manual supersede states.
       The dedicated source follows the directed speaker and uses a two-slot handoff:
       the current participant stays visible while the next participant warms on a
       hidden slot, then the source cuts only after a valid frame is available.
@@ -1227,6 +1229,17 @@ sequenceDiagram
       <tr><td><code>speaker_director_take</code></td><td><code>{"cmd":"speaker_director_take","participant_id":123}</code></td><td>Manually holds a participant as the directed speaker</td></tr>
       <tr><td><code>speaker_director_release</code></td><td><code>{"cmd":"speaker_director_release"}</code></td><td>Returns to automatic speaker direction</td></tr>
     </table>
+    <p>
+      The status payload includes numeric IDs and resolved participant objects
+      for <code>directed_speaker</code>, <code>raw_speaker</code>,
+      <code>candidate_speaker</code>, <code>last_speaker</code>,
+      <code>manual_speaker</code>, and <code>excluded_participants</code>, plus a
+      <code>status</code> value such as <code>holding</code>,
+      <code>candidate_pending</code>, <code>manual_supersede</code>, or
+      <code>waiting_for_speaker</code>. TCP subscribers receive
+      <code>speaker_director_changed</code> when the directed, candidate, or
+      manual speaker changes.
+    </p>
   </section>
 
   <!-- ══ AUTO-RECONNECT ═══════════════════════════════════════ -->

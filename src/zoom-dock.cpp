@@ -385,6 +385,8 @@ ZoomDock::ZoomDock(QWidget *parent)
     m_raw_speaker_label = new QLabel(QStringLiteral("-"), speaker_group);
     m_candidate_speaker_label = new QLabel(QStringLiteral("-"), speaker_group);
     m_last_speaker_label = new QLabel(QStringLiteral("-"), speaker_group);
+    m_speaker_status_label = new QLabel(QStringLiteral("Automatic"), speaker_group);
+    m_speaker_status_label->setWordWrap(true);
     speaker_grid->addWidget(new QLabel("Directed:", speaker_group), 0, 0);
     speaker_grid->addWidget(m_director_speaker_label, 0, 1);
     speaker_grid->addWidget(new QLabel("Raw:", speaker_group), 0, 2);
@@ -394,6 +396,7 @@ ZoomDock::ZoomDock(QWidget *parent)
     speaker_grid->addWidget(new QLabel("Last:", speaker_group), 1, 2);
     speaker_grid->addWidget(m_last_speaker_label, 1, 3);
     speaker_layout->addLayout(speaker_grid);
+    speaker_layout->addWidget(m_speaker_status_label);
 
     auto *speaker_controls = new QHBoxLayout;
     speaker_controls->setSpacing(8);
@@ -997,9 +1000,32 @@ void ZoomDock::update_state_indicator()
         m_candidate_speaker_label->setToolTip(
             QString("Candidate age: %1 ms").arg(
                 static_cast<qulonglong>(director.candidate_elapsed_ms)));
-        m_speaker_label->setToolTip(
-            QString("Hold remaining: %1 ms").arg(
-                static_cast<qulonglong>(director.hold_remaining_ms)));
+        QString status;
+        if (director.manual_active) {
+            status = QString("Manual supersede locked to %1.").arg(directed_name);
+        } else if (director.candidate_speaker_id != 0) {
+            status = QString("Candidate %1 has held for %2 ms; current speaker can switch in %3 ms.")
+                .arg(participant_name(director.candidate_speaker_id))
+                .arg(static_cast<qulonglong>(director.candidate_elapsed_ms))
+                .arg(static_cast<qulonglong>(director.hold_remaining_ms));
+        } else if (director.directed_speaker_id != 0) {
+            status = QString("Automatic. Holding %1; switch hold remaining %2 ms.")
+                .arg(directed_name)
+                .arg(static_cast<qulonglong>(director.hold_remaining_ms));
+        } else {
+            status = director.require_video
+                ? QStringLiteral("Waiting for an unmuted participant with video.")
+                : QStringLiteral("Waiting for an unmuted participant.");
+        }
+        if (!director.excluded_participant_ids.empty()) {
+            QStringList excluded_names;
+            for (const uint32_t id : director.excluded_participant_ids)
+                excluded_names << participant_name(id);
+            status += QString(" Excluding: %1.").arg(excluded_names.join(", "));
+        }
+        if (m_speaker_status_label)
+            m_speaker_status_label->setText(status);
+        m_speaker_label->setToolTip(status);
         m_director_speaker_label->setToolTip(m_speaker_label->toolTip());
     }
 }

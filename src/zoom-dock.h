@@ -56,6 +56,7 @@ private:
     QLabel      *m_raw_speaker_label = nullptr;
     QLabel      *m_candidate_speaker_label = nullptr;
     QLabel      *m_last_speaker_label = nullptr;
+    QLabel      *m_speaker_status_label = nullptr;
     QSpinBox    *m_speaker_sensitivity_spin = nullptr;
     QSpinBox    *m_speaker_hold_spin = nullptr;
     QComboBox   *m_speaker_preset_combo = nullptr;

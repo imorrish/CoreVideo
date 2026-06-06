@@ -139,6 +139,8 @@ The dock shows:
 - Raw speaker: the latest speaker reported by Zoom.
 - Candidate speaker: the participant waiting out the sensitivity timer.
 - Last speaker: the previously directed participant.
+- Status line: whether the director is waiting, holding, evaluating a
+  candidate, or locked by manual supersede.
 - Manual take/release: an operator supersede that holds a participant on air
   until released.
 
@@ -154,6 +156,13 @@ TCP examples:
 ```json
 {"cmd":"speaker_director_status"}
 ```
+
+The response includes the legacy numeric IDs plus resolved participant objects
+for `directed_speaker`, `raw_speaker`, `candidate_speaker`, `last_speaker`,
+`manual_speaker`, `excluded_participants`, and a `status` value such as
+`holding`, `candidate_pending`, `manual_supersede`, or `waiting_for_speaker`.
+Subscribed TCP clients also receive `speaker_director_changed` events when the
+directed, candidate, or manual speaker changes.
 
 ```json
 {"cmd":"speaker_director_configure","sensitivity_ms":650,"hold_ms":2500}

@@ -38,5 +38,8 @@ private:
     QTimer             *m_poll_timer  = nullptr;
     MeetingState        m_last_state  = MeetingState::Idle;
     uint32_t            m_last_speaker = 0;
+    uint32_t            m_last_directed_speaker = 0;
+    uint32_t            m_last_candidate_speaker = 0;
+    uint32_t            m_last_manual_speaker = 0;
     bool                m_running     = false;
 };

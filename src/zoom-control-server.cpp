@@ -181,6 +181,20 @@ void ZoomControlServer::poll_and_push()
             {"speaker_director", speaker_director_to_json()},
         });
     }
+
+    const SpeakerDirectorSnapshot director =
+        SpeakerDirector::instance().snapshot(os_gettime_ns() / 1000000ULL);
+    if (director.directed_speaker_id != m_last_directed_speaker ||
+        director.candidate_speaker_id != m_last_candidate_speaker ||
+        director.manual_speaker_id != m_last_manual_speaker) {
+        m_last_directed_speaker = director.directed_speaker_id;
+        m_last_candidate_speaker = director.candidate_speaker_id;
+        m_last_manual_speaker = director.manual_speaker_id;
+        push_event({
+            {"event", "speaker_director_changed"},
+            {"speaker_director", speaker_director_to_json()},
+        });
+    }
 }
 
 void ZoomControlServer::on_new_connection()
@@ -323,10 +337,39 @@ static QJsonObject participant_to_json(const ParticipantInfo &p)
     return obj;
 }
 
+static QJsonObject director_participant_to_json(
+    const std::vector<ParticipantInfo> &roster, uint32_t participant_id)
+{
+    QJsonObject obj;
+    obj["id"] = static_cast<double>(participant_id);
+    obj["present"] = false;
+    obj["name"] = QString();
+    obj["has_video"] = false;
+    obj["is_talking"] = false;
+    obj["is_muted"] = false;
+    if (participant_id == 0)
+        return obj;
+
+    const auto it = std::find_if(roster.begin(), roster.end(),
+        [participant_id](const ParticipantInfo &p) {
+            return p.user_id == participant_id;
+        });
+    if (it == roster.end())
+        return obj;
+
+    obj["present"] = true;
+    obj["name"] = QString::fromStdString(it->display_name);
+    obj["has_video"] = it->has_video;
+    obj["is_talking"] = it->is_talking;
+    obj["is_muted"] = it->is_muted;
+    return obj;
+}
+
 static QJsonObject speaker_director_to_json()
 {
     const SpeakerDirectorSnapshot s =
         SpeakerDirector::instance().snapshot(os_gettime_ns() / 1000000ULL);
+    const auto roster = ZoomEngineClient::instance().roster();
     QJsonObject obj;
     obj["directed_speaker_id"] = static_cast<double>(s.directed_speaker_id);
     obj["raw_speaker_id"] = static_cast<double>(s.raw_speaker_id);
@@ -340,9 +383,26 @@ static QJsonObject speaker_director_to_json()
     obj["hold_ms"] = static_cast<double>(s.hold_ms);
     obj["require_video"] = s.require_video;
     QJsonArray excluded;
-    for (const uint32_t id : s.excluded_participant_ids)
+    QJsonArray excluded_participants;
+    for (const uint32_t id : s.excluded_participant_ids) {
         excluded.append(static_cast<double>(id));
+        excluded_participants.append(director_participant_to_json(roster, id));
+    }
     obj["excluded_participant_ids"] = excluded;
+    obj["excluded_participants"] = excluded_participants;
+    obj["directed_speaker"] = director_participant_to_json(roster, s.directed_speaker_id);
+    obj["raw_speaker"] = director_participant_to_json(roster, s.raw_speaker_id);
+    obj["candidate_speaker"] = director_participant_to_json(roster, s.candidate_speaker_id);
+    obj["last_speaker"] = director_participant_to_json(roster, s.last_speaker_id);
+    obj["manual_speaker"] = director_participant_to_json(roster, s.manual_speaker_id);
+    if (s.manual_active)
+        obj["status"] = "manual_supersede";
+    else if (s.candidate_speaker_id != 0)
+        obj["status"] = "candidate_pending";
+    else if (s.directed_speaker_id != 0)
+        obj["status"] = "holding";
+    else
+        obj["status"] = "waiting_for_speaker";
     return obj;
 }
 
