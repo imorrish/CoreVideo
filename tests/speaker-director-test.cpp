@@ -145,6 +145,21 @@ int main()
     director.update_roster(roster({p(701, true, true), p(702, true, true)}), 701, t);
     if (!check_directed(702)) fail("excluded participant 701 was still chosen");
 
+    // Adding the currently directed speaker to the exclusion list should move
+    // the director away as soon as the roster is re-evaluated.
+    director.reset();
+    director.configure(100, 1000, true, {});
+    t = 52500;
+    const auto excluded_update_roster = roster({
+        p(711, true, true),
+        p(712, true, true)
+    });
+    director.update_roster(excluded_update_roster, 711, t);
+    if (!check_directed(711)) fail("initial 711 before dynamic exclusion");
+    director.configure(100, 1000, true, {711});
+    director.update_roster(excluded_update_roster, 711, t + 10);
+    if (!check_directed(712)) fail("dynamic exclusion did not move away from directed speaker");
+
     // --- Current directed speaker becomes invalid -> fallback ---
     director.reset();
     director.configure(100, 1000, true, {});

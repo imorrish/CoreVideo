@@ -40,6 +40,7 @@ private:
     void on_launch_sidecar_clicked();
     void on_cancel_recovery_clicked();
     void update_state_indicator();
+    void apply_speaker_director_settings();
     void update_recovery_panel();
     void update_credentials_banner();
     void start_pending_oauth_join();

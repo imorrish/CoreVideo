@@ -460,6 +460,7 @@ ZoomDock::ZoomDock(QWidget *parent)
                 if (m_speaker_hold_spin)
                     s.speaker_hold_ms = static_cast<uint32_t>(m_speaker_hold_spin->value());
                 s.save();
+                apply_speaker_director_settings();
                 update_state_indicator();
             });
     connect(m_speaker_hold_spin, qOverload<int>(&QSpinBox::valueChanged),
@@ -472,6 +473,7 @@ ZoomDock::ZoomDock(QWidget *parent)
                         m_speaker_sensitivity_spin->value());
                 s.speaker_hold_ms = static_cast<uint32_t>(value);
                 s.save();
+                apply_speaker_director_settings();
                 update_state_indicator();
             });
 
@@ -502,7 +504,13 @@ ZoomDock::ZoomDock(QWidget *parent)
         if (s.speaker_exclude_participant_1 == s.speaker_exclude_participant_2)
             s.speaker_exclude_participant_2 = 0;
         s.save();
-        ZoomOutputManager::instance().resubscribe_all();
+        apply_speaker_director_settings();
+        const bool changed = SpeakerDirector::instance().update_roster(
+                ZoomEngineClient::instance().roster(),
+                ZoomEngineClient::instance().active_speaker_id(),
+                os_gettime_ns() / 1000000ULL);
+        if (changed)
+            ZoomOutputManager::instance().resubscribe_all();
         update_state_indicator();
     };
     connect(m_speaker_exclude_combo_1, qOverload<int>(&QComboBox::currentIndexChanged),
@@ -792,6 +800,28 @@ void ZoomDock::prepare_shutdown()
         m_health_retry_timer->stop();
 }
 
+void ZoomDock::apply_speaker_director_settings()
+{
+    const auto settings = ZoomPluginSettings::load();
+    std::vector<uint32_t> excluded;
+    if (settings.speaker_exclude_participant_1 != 0)
+        excluded.push_back(settings.speaker_exclude_participant_1);
+    if (settings.speaker_exclude_participant_2 != 0 &&
+        settings.speaker_exclude_participant_2 !=
+            settings.speaker_exclude_participant_1)
+        excluded.push_back(settings.speaker_exclude_participant_2);
+
+    const uint32_t sensitivity_ms = m_speaker_sensitivity_spin
+        ? static_cast<uint32_t>(m_speaker_sensitivity_spin->value())
+        : settings.speaker_sensitivity_ms;
+    const uint32_t hold_ms = m_speaker_hold_spin
+        ? static_cast<uint32_t>(m_speaker_hold_spin->value())
+        : settings.speaker_hold_ms;
+
+    SpeakerDirector::instance().configure(
+        sensitivity_ms, hold_ms, settings.speaker_require_video, excluded);
+}
+
 // -- Internal helpers ----------------------------------------------------------
 void ZoomDock::update_credentials_banner()
 {
@@ -915,20 +945,7 @@ void ZoomDock::update_state_indicator()
     }
 
     const auto settings = ZoomPluginSettings::load();
-    if (m_speaker_sensitivity_spin && m_speaker_hold_spin) {
-        std::vector<uint32_t> excluded;
-        if (settings.speaker_exclude_participant_1 != 0)
-            excluded.push_back(settings.speaker_exclude_participant_1);
-        if (settings.speaker_exclude_participant_2 != 0 &&
-            settings.speaker_exclude_participant_2 !=
-                settings.speaker_exclude_participant_1)
-            excluded.push_back(settings.speaker_exclude_participant_2);
-        SpeakerDirector::instance().configure(
-            static_cast<uint32_t>(m_speaker_sensitivity_spin->value()),
-            static_cast<uint32_t>(m_speaker_hold_spin->value()),
-            settings.speaker_require_video,
-            excluded);
-    }
+    apply_speaker_director_settings();
     if (m_director_speaker_label && m_raw_speaker_label &&
         m_candidate_speaker_label && m_last_speaker_label) {
         const auto roster = ZoomEngineClient::instance().roster();
