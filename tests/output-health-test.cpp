@@ -87,6 +87,31 @@ int main()
                        ZoomOutputHealthReason::ZoomDeliveredLowerResolution))
         return 1;
 
+    ZoomOutputInfo exact_1080 = output();
+    exact_1080.video_resolution = VideoResolution::P1080;
+    exact_1080.observed_width = 1920;
+    exact_1080.observed_height = 1080;
+    if (!expect_reason("exact 1080p is healthy", exact_1080,
+                       {participant(1)}, true, ZoomOutputHealthReason::Ok))
+        return 1;
+
+    ZoomOutputInfo near_1080 = output();
+    near_1080.video_resolution = VideoResolution::P1080;
+    near_1080.observed_width = 1914;
+    near_1080.observed_height = 1074;
+    if (!expect_reason("near 1080p tolerance is healthy", near_1080,
+                       {participant(1)}, true, ZoomOutputHealthReason::Ok))
+        return 1;
+
+    ZoomOutputInfo below_1080 = output();
+    below_1080.video_resolution = VideoResolution::P1080;
+    below_1080.observed_width = 1280;
+    below_1080.observed_height = 720;
+    if (!expect_reason("720p against 1080p request is lower resolution",
+                       below_1080, {participant(1)}, true,
+                       ZoomOutputHealthReason::ZoomDeliveredLowerResolution))
+        return 1;
+
     if (!expect_reason("ok", output(), {participant(1)}, true,
                        ZoomOutputHealthReason::Ok))
         return 1;

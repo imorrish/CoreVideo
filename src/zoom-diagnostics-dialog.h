@@ -9,6 +9,7 @@ class QTimer;
 class ZoomDiagnosticsDialog : public QWidget {
 public:
     explicit ZoomDiagnosticsDialog(QWidget *parent = nullptr);
+    void refresh_now();
 
 private:
     void refresh();

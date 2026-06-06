@@ -712,11 +712,20 @@ ZoomDock::ZoomDock(QWidget *parent)
     connect(m_refresh_timer, &QTimer::timeout, this, [this]() {
         if (SpeakerDirector::instance().tick(os_gettime_ns() / 1000000ULL))
             ZoomOutputManager::instance().resubscribe_all();
-        ZoomOutputManager::instance().recover_stale_sources();
-        ZoomOutputManager::instance().upgrade_low_quality_sources();
         update_state_indicator();
     });
     m_refresh_timer->start();
+
+    // Feed recovery checks can touch every CoreVideo source. Keep them off the
+    // high-frequency UI timer so an 8-feed show does not spend unnecessary time
+    // scanning outputs while still recovering stale/low-quality feeds promptly.
+    m_health_retry_timer = new QTimer(this);
+    m_health_retry_timer->setInterval(1000);
+    connect(m_health_retry_timer, &QTimer::timeout, this, []() {
+        ZoomOutputManager::instance().recover_stale_sources();
+        ZoomOutputManager::instance().upgrade_low_quality_sources();
+    });
+    m_health_retry_timer->start();
 
     m_recovery_frame->setVisible(false);
 
@@ -776,6 +785,8 @@ void ZoomDock::prepare_shutdown()
         m_countdown_timer->stop();
     if (m_refresh_timer)
         m_refresh_timer->stop();
+    if (m_health_retry_timer)
+        m_health_retry_timer->stop();
 }
 
 // â”€â”€ Internal helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

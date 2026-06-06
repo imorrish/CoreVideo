@@ -206,7 +206,10 @@ static ZoomOutputDialog *ensure_output_panel()
 
 static void show_output_panel()
 {
-    show_dock_widget(ensure_output_panel());
+    ZoomOutputDialog *panel = ensure_output_panel();
+    if (panel)
+        panel->refresh_now();
+    show_dock_widget(panel);
 }
 
 void corevideo_show_output_manager_dock()
@@ -231,7 +234,10 @@ static ZoomDiagnosticsDialog *ensure_diagnostics_panel()
 
 static void show_diagnostics_panel()
 {
-    show_dock_widget(ensure_diagnostics_panel());
+    ZoomDiagnosticsDialog *panel = ensure_diagnostics_panel();
+    if (panel)
+        panel->refresh_now();
+    show_dock_widget(panel);
 }
 
 OBS_DECLARE_MODULE()

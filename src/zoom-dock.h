@@ -98,6 +98,7 @@ private:
     std::atomic<uint64_t> m_join_generation{0};
     QTimer      *m_pending_oauth_join_timer = nullptr;
     bool         m_last_media_active = false;
+    QTimer      *m_health_retry_timer = nullptr;
 
     // Legacy output helpers are kept inert; routing now lives in Output Manager.
     QTableWidget *m_output_table = nullptr;

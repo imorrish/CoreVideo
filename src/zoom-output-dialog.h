@@ -12,6 +12,7 @@ class ZoomOutputDialog : public QWidget {
 public:
     explicit ZoomOutputDialog(QWidget *parent = nullptr);
     ~ZoomOutputDialog() override;
+    void refresh_now();
 
 private:
     void refresh();

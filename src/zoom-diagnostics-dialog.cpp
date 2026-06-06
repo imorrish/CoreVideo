@@ -412,6 +412,7 @@ ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
     : QWidget(parent)
 {
     setWindowTitle("Zoom Diagnostics");
+    setAttribute(Qt::WA_DeleteOnClose, false);
     setMinimumSize(1160, 760);
     resize(1280, 820);
 
@@ -467,6 +468,11 @@ ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
     m_timer->start();
 
     setStyleSheet(cv_stylesheet());
+    refresh();
+}
+
+void ZoomDiagnosticsDialog::refresh_now()
+{
     refresh();
 }
 

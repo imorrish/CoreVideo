@@ -22,6 +22,7 @@
 #include <QStringList>
 #include <QTableWidget>
 #include <QVBoxLayout>
+#include <QWidget>
 #include <algorithm>
 #include <atomic>
 #include <memory>
@@ -283,6 +284,7 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     : QWidget(parent)
 {
     setWindowTitle("Zoom Output Manager");
+    setAttribute(Qt::WA_DeleteOnClose, false);
     setMinimumSize(1500, 840);
     resize(1600, 920);
 
@@ -409,6 +411,11 @@ ZoomOutputDialog::~ZoomOutputDialog()
     m_alive->store(false, std::memory_order_release);
     ZoomEngineClient::instance().remove_roster_callback(this);
     ZoomOutputManager::instance().clear_all_preview_cbs();
+}
+
+void ZoomOutputDialog::refresh_now()
+{
+    refresh();
 }
 
 void ZoomOutputDialog::refresh()
