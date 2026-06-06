@@ -9,6 +9,7 @@
 #include <QRegularExpression>
 #include <QStringList>
 #include <obs-module.h>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -169,8 +170,8 @@ std::vector<ZoomOutputInfo> load(const std::string &name)
             obj.value("active_speaker").toBool(false));
         json_to_uint32(obj, "spotlight_slot", o.spotlight_slot);
         json_to_uint32(obj, "failover_participant_id", o.failover_participant_id);
-        if (o.spotlight_slot == 0)
-            o.spotlight_slot = 1;
+        o.spotlight_slot = std::clamp<uint32_t>(
+            o.spotlight_slot == 0 ? 1 : o.spotlight_slot, 1, 8);
         o.active_speaker = o.assignment == AssignmentMode::ActiveSpeaker;
         o.isolate_audio  = obj.value("isolate_audio").toBool(false);
         o.audience_audio = !o.isolate_audio &&

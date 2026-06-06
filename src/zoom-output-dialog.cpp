@@ -314,7 +314,7 @@ static AssignmentMode assignment_mode_from_data(const QString &data,
         return AssignmentMode::ScreenShare;
     if (data.startsWith(QStringLiteral("spotlight:"))) {
         const uint slot = data.mid(10).toUInt();
-        spotlight_slot = slot > 0 ? slot : 1;
+        spotlight_slot = std::clamp<uint>(slot > 0 ? slot : 1, 1, 8);
         return AssignmentMode::SpotlightIndex;
     }
     if (data.startsWith(QStringLiteral("user:")))
