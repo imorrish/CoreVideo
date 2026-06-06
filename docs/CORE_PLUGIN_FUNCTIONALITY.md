@@ -53,10 +53,11 @@ latest `ZoomObsEngine` debug events. This is the fastest way to see whether a
 source is waiting for frames, receiving a lower-than-requested feed, or being
 resubscribed by recovery logic. Use **Create Support Bundle** from this dock to
 write a redacted troubleshooting bundle with engine status, output health,
-recent debug events, plugin settings with tokens removed, runtime/package
-validation, and the latest OBS log when available. On Windows, CoreVideo also
-creates a `.zip` next to the support bundle folder when PowerShell is available.
-OBS log data is written as a recent redacted excerpt; OAuth codes, access
+recent debug events, plugin settings with tokens removed, ISO recorder and
+FFmpeg encoder/session status, runtime/package validation, and the latest OBS
+log when available. On Windows, CoreVideo also creates a `.zip` next to the
+support bundle folder when PowerShell is available. OBS log data is written as a
+recent redacted excerpt; OAuth codes, access
 tokens, refresh tokens, ZAK/JWT values, passcodes, client secrets, and
 authorization headers are removed before the bundle is written.
 

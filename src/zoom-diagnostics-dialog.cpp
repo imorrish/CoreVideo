@@ -2,6 +2,7 @@
 #include "cv-style.h"
 #include "obs-zoom-version.h"
 #include "zoom-engine-client.h"
+#include "zoom-iso-recorder.h"
 #include "zoom-output-manager.h"
 #include "zoom-settings.h"
 #include <QAbstractItemView>
@@ -508,7 +509,9 @@ static QString runtime_manifest_text(const QJsonArray &manifest)
 
 static QStringList failure_classifications(const ZoomPluginSettings &settings,
                                            const QJsonArray &runtime_manifest,
-                                           const std::vector<ZoomOutputInfo> &outputs)
+                                           const std::vector<ZoomOutputInfo> &outputs,
+                                           const QJsonObject &iso_recorder,
+                                           const QJsonArray &iso_sessions)
 {
     QStringList classes;
     const QString last_error =
@@ -564,6 +567,17 @@ static QStringList failure_classifications(const ZoomPluginSettings &settings,
         })) {
         classes << QStringLiteral("duplicate_assignment");
     }
+
+    const bool iso_active = iso_recorder.value("active").toBool();
+    if (iso_active && iso_sessions.isEmpty())
+        classes << QStringLiteral("iso_no_sessions");
+
+    const bool iso_encoder_error = std::any_of(
+        iso_sessions.begin(), iso_sessions.end(), [](const QJsonValue &value) {
+            return !value.toObject().value("ffmpeg_error").toString().trimmed().isEmpty();
+        });
+    if (iso_encoder_error)
+        classes << QStringLiteral("iso_encoder_error");
 
     classes.removeDuplicates();
     if (classes.isEmpty())
@@ -777,6 +791,10 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     const auto roster = ZoomEngineClient::instance().roster();
     const auto events = ZoomEngineClient::instance().recent_debug_events();
     const auto settings = ZoomPluginSettings::load();
+    const QJsonObject iso_recorder =
+        ZoomIsoRecorder::instance().status_overview();
+    const QJsonArray iso_sessions =
+        ZoomIsoRecorder::instance().status_json();
     const QDateTime now = QDateTime::currentDateTime();
     const QString stamp = now.toString("yyyyMMdd-HHmmss");
     QStringList warnings;
@@ -834,7 +852,8 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     }
 
     const QStringList classifications =
-        failure_classifications(settings, runtime_manifest, outputs);
+        failure_classifications(settings, runtime_manifest, outputs,
+                                iso_recorder, iso_sessions);
     QJsonArray classification_array;
     for (const QString &classification : classifications)
         classification_array.append(classification);
@@ -854,6 +873,11 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     engine_status["participant_count"] = static_cast<double>(roster.size());
     engine_status["recent_engine_event_count"] =
         static_cast<double>(events.size());
+    engine_status["iso_recorder"] = iso_recorder;
+    engine_status["iso_session_count"] =
+        iso_recorder.value("session_count").toInt();
+    engine_status["iso_completed_session_count"] =
+        iso_recorder.value("completed_session_count").toInt();
     const int unhealthy_outputs = static_cast<int>(std::count_if(
         outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
             return output.health_reason != ZoomOutputHealthReason::Ok;
@@ -889,6 +913,8 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     summary["outputs"] = output_array;
     summary["participants"] = roster_array;
     summary["recent_engine_events"] = event_array;
+    summary["iso_recorder"] = iso_recorder;
+    summary["iso_sessions"] = iso_sessions;
 
     if (!write_json_file(bundle.absoluteFilePath("summary.json"), summary) ||
         !write_json_file(bundle.absoluteFilePath("engine-status.json"),
@@ -896,7 +922,10 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         !write_json_file(bundle.absoluteFilePath("settings-redacted.json"),
                          settings_json(settings)) ||
         !write_json_file(bundle.absoluteFilePath("runtime-manifest.json"),
-                         QJsonObject{{"files", runtime_manifest}})) {
+                         QJsonObject{{"files", runtime_manifest}}) ||
+        !write_json_file(bundle.absoluteFilePath("iso-recorder.json"),
+                         QJsonObject{{"recorder", iso_recorder},
+                                     {"sessions", iso_sessions}})) {
         QMessageBox::warning(this, "Create Support Bundle",
             QString("Could not write support bundle JSON files in:\n%1")
                 .arg(bundle.absolutePath()));
@@ -957,6 +986,56 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         << "\n\n";
 
     out << runtime_manifest_text(runtime_manifest) << "\n";
+
+    out << "ISO Recorder\n";
+    out << "- Active: "
+        << (iso_recorder.value("active").toBool() ? "yes" : "no") << "\n";
+    out << "- Requested encoder: "
+        << iso_recorder.value("requested_video_encoder").toString() << "\n";
+    out << "- Active encoder: "
+        << iso_recorder.value("video_encoder").toString()
+        << (iso_recorder.value("encoder_fallback").toBool()
+                ? QStringLiteral(" (fallback)")
+                : QString{})
+        << "\n";
+    out << "- Hardware encoder: "
+        << (iso_recorder.value("hardware_encoder").toBool() ? "yes" : "no")
+        << "\n";
+    out << "- Program recording: "
+        << (iso_recorder.value("record_program").toBool() ? "enabled" : "off")
+        << "\n";
+    out << "- Sessions: active "
+        << iso_recorder.value("session_count").toInt()
+        << ", completed "
+        << iso_recorder.value("completed_session_count").toInt()
+        << "\n";
+    const QString iso_warning = iso_recorder.value("warning").toString();
+    if (!iso_warning.isEmpty())
+        out << "- Warning: " << iso_warning << "\n";
+    for (const QJsonValue &value : iso_sessions) {
+        const QJsonObject session = value.toObject();
+        out << "- "
+            << (session.value("completed").toBool() ? "completed" : "recording")
+            << " | " << session.value("display_name").toString()
+            << " | source " << session.value("source").toString()
+            << " | participant "
+            << QString::number(
+                   static_cast<qulonglong>(
+                       session.value("resolved_participant_id").toDouble()))
+            << " | " << session.value("width").toInt()
+            << "x" << session.value("height").toInt()
+            << " | frames " << session.value("video_frames").toInt()
+            << " | audio chunks " << session.value("audio_chunks").toInt()
+            << " | encoder " << session.value("video_encoder").toString()
+            << " | video " << session.value("video_path").toString()
+            << " | audio " << session.value("audio_path").toString()
+            << "\n";
+        const QString ffmpeg_error =
+            session.value("ffmpeg_error").toString().trimmed();
+        if (!ffmpeg_error.isEmpty())
+            out << "  ffmpeg error: " << ffmpeg_error << "\n";
+    }
+    out << "\n";
 
     out << "Outputs\n";
     for (const auto &output : outputs) {
