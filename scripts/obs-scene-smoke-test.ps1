@@ -19,7 +19,16 @@ param(
     [int]$TimeoutSeconds = 10,
 
     [Parameter()]
-    [switch]$AuditOnly
+    [switch]$AuditOnly,
+
+    [Parameter()]
+    [switch]$VerifyCoreVideoPlugin,
+
+    [Parameter()]
+    [string]$ObsLogPath,
+
+    [Parameter()]
+    [string[]]$ExpectedDockId = @()
 )
 
 $ErrorActionPreference = "Stop"
@@ -169,6 +178,12 @@ function Get-InputNames {
     return @($data.inputs | ForEach-Object { $_.inputName })
 }
 
+function Get-InputKinds {
+    param([System.Net.WebSockets.ClientWebSocket]$Socket)
+    $data = Invoke-ObsRequest -Socket $Socket -RequestType "GetInputKindList" -TimeoutSeconds $TimeoutSeconds
+    return @($data.inputKinds)
+}
+
 function Get-SceneItems {
     param(
         [System.Net.WebSockets.ClientWebSocket]$Socket,
@@ -283,6 +298,23 @@ function Assert-Contains {
     }
 }
 
+function Assert-LogContains {
+    param(
+        [string]$Path,
+        [string[]]$Expected
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "OBS log file not found: $Path"
+    }
+
+    $text = Get-Content -LiteralPath $Path -Raw
+    $missing = @($Expected | Where-Object { $text -notmatch [regex]::Escape($_) })
+    if ($missing.Count -gt 0) {
+        throw "OBS log missing expected CoreVideo marker(s): $($missing -join ', ')"
+    }
+}
+
 $socket = [System.Net.WebSockets.ClientWebSocket]::new()
 try {
     $uri = [Uri]::new("ws://$HostName`:$Port")
@@ -304,6 +336,31 @@ try {
     Send-ObsJson -Socket $socket -Message @{ op = 1; d = $identify }
     Receive-ObsOp -Socket $socket -Op 2 -TimeoutSeconds $TimeoutSeconds | Out-Null
     Write-Host "Connected and identified."
+
+    if ($VerifyCoreVideoPlugin) {
+        $expectedKinds = @(
+            "zoom_participant_source",
+            "corevideo_active_speaker_source",
+            "zoom_share_source",
+            "zoom_participant_audio_source",
+            "corevideo_active_speaker_audio_source",
+            "corevideo_audience_audio_source"
+        )
+        $inputKinds = Get-InputKinds -Socket $socket
+        Assert-Contains -Actual $inputKinds -Expected $expectedKinds -Label "CoreVideo OBS input kinds"
+        Write-Host "CoreVideo plugin input kinds are registered."
+    }
+
+    if ($ObsLogPath) {
+        $markers = @(
+            "[obs-zoom-plugin] Loading plugin",
+            "[obs-zoom-plugin] Registered CoreVideo source kinds",
+            "[obs-zoom-plugin] Plugin loaded successfully"
+        )
+        $markers += @($ExpectedDockId | ForEach-Object { "[obs-zoom-plugin] Registered dock: $_" })
+        Assert-LogContains -Path $ObsLogPath -Expected $markers
+        Write-Host "CoreVideo OBS log markers are present."
+    }
 
     $sourceScene = "CoreVideo Sources"
     $slotScenes = @(1..$ParticipantCount | ForEach-Object { "CoreVideo Slot $_" })

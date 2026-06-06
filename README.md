@@ -170,25 +170,35 @@ Release.
 Use the OBS smoke test when validating plugin-created OBS scene graph behavior
 on a machine with OBS running and obs-websocket enabled. It does not exercise
 the optional Sidecar UI. The script connects directly to obs-websocket v5,
-creates a deterministic CoreVideo test scene, links
+can verify that CoreVideo input kinds are registered, creates a deterministic CoreVideo test scene, links
 participant sources through nested slot scenes, switches OBS to the test scene,
 and audits that the expected scenes, inputs, and scene items are present.
 
 ```powershell
-.\scripts\obs-scene-smoke-test.ps1
+.\scripts\obs-scene-smoke-test.ps1 -VerifyCoreVideoPlugin
 ```
 
 If obs-websocket has a password, pass it explicitly or use the environment:
 
 ```powershell
 $env:OBS_WEBSOCKET_PASSWORD = "your-websocket-password"
-.\scripts\obs-scene-smoke-test.ps1 -ParticipantCount 8
+.\scripts\obs-scene-smoke-test.ps1 -VerifyCoreVideoPlugin -ParticipantCount 8
 ```
 
 To verify an already-created scene graph without creating or modifying sources:
 
 ```powershell
-.\scripts\obs-scene-smoke-test.ps1 -AuditOnly -SceneName "CoreVideo Smoke Test"
+.\scripts\obs-scene-smoke-test.ps1 -AuditOnly -VerifyCoreVideoPlugin -SceneName "CoreVideo Smoke Test"
+```
+
+To audit plugin load and dock registration markers, pass the current OBS log
+path. After manually opening docks in OBS, include their dock IDs in
+`-ExpectedDockId`:
+
+```powershell
+.\scripts\obs-scene-smoke-test.ps1 -AuditOnly -VerifyCoreVideoPlugin `
+  -ObsLogPath "$env:APPDATA\obs-studio\logs\latest.log" `
+  -ExpectedDockId ZoomControlDock,ZoomOutputManagerDock,ZoomDiagnosticsDock,ZoomIsoRecorderDock
 ```
 
 5. **Set up OAuth (for Marketplace / external-account joins)** - publishers configure the Cloudflare broker and bake `-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=https://corevideo.iamfatness.us/oauth/start` into the build. End users just open the Settings dialog and click **Sign in with Zoom**. See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full walkthrough.

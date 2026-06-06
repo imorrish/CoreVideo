@@ -100,13 +100,14 @@ static ZoomDock *ensure_zoom_dock()
 {
     auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
     if (!main_win) {
-        blog(LOG_WARNING, "[obs-zoom-plugin] obs_frontend_get_main_window() returned null — dock not created");
+        blog(LOG_WARNING, "[obs-zoom-plugin] obs_frontend_get_main_window() returned null - dock not created");
         return nullptr;
     }
 
     if (!g_dock) {
         g_dock = new ZoomDock(main_win);
         obs_frontend_add_dock_by_id("ZoomControlDock", "Zoom Control", g_dock);
+        blog(LOG_INFO, "[obs-zoom-plugin] Registered dock: ZoomControlDock");
     }
     return g_dock;
 }
@@ -144,6 +145,7 @@ static ZoomIsoPanel *ensure_iso_panel()
     if (!g_iso_panel) {
         g_iso_panel = new ZoomIsoPanel(main_win);
         obs_frontend_add_dock_by_id("ZoomIsoRecorderDock", "Zoom ISO Recorder", g_iso_panel);
+        blog(LOG_INFO, "[obs-zoom-plugin] Registered dock: ZoomIsoRecorderDock");
     }
     return g_iso_panel;
 }
@@ -204,6 +206,7 @@ static ZoomOutputDialog *ensure_output_panel()
     if (!g_output_panel) {
         g_output_panel = new ZoomOutputDialog(main_win);
         obs_frontend_add_dock_by_id("ZoomOutputManagerDock", "Zoom Output Manager", g_output_panel);
+        blog(LOG_INFO, "[obs-zoom-plugin] Registered dock: ZoomOutputManagerDock");
     }
     return g_output_panel;
 }
@@ -232,6 +235,7 @@ static ZoomDiagnosticsDialog *ensure_diagnostics_panel()
     if (!g_diagnostics_panel) {
         g_diagnostics_panel = new ZoomDiagnosticsDialog(main_win);
         obs_frontend_add_dock_by_id("ZoomDiagnosticsDock", "Zoom Diagnostics", g_diagnostics_panel);
+        blog(LOG_INFO, "[obs-zoom-plugin] Registered dock: ZoomDiagnosticsDock");
     }
     return g_diagnostics_panel;
 }
@@ -249,7 +253,7 @@ OBS_MODULE_USE_DEFAULT_LOCALE("obs-zoom-plugin", "en-US")
 
 MODULE_EXPORT const char *obs_module_description(void)
 {
-    return "OBS Zoom Plugin — stream and record Zoom meetings directly from OBS";
+    return "OBS Zoom Plugin - stream and record Zoom meetings directly from OBS";
 }
 
 bool obs_module_load(void)
@@ -258,7 +262,7 @@ bool obs_module_load(void)
 #ifdef COREVIDEO_HW_ACCEL
     blog(LOG_INFO, "[obs-zoom-plugin] Hardware video acceleration: enabled at build (FFmpeg)");
 #else
-    blog(LOG_INFO, "[obs-zoom-plugin] Hardware video acceleration: disabled (built without ENABLE_FFMPEG_HW_ACCEL — CPU path only)");
+    blog(LOG_INFO, "[obs-zoom-plugin] Hardware video acceleration: disabled (built without ENABLE_FFMPEG_HW_ACCEL - CPU path only)");
 #endif
     configure_qt_plugin_paths();
 
@@ -271,14 +275,15 @@ bool obs_module_load(void)
 
     zoom_source_register();
     zoom_participant_audio_source_register();
+    blog(LOG_INFO, "[obs-zoom-plugin] Registered CoreVideo source kinds");
 
     ZoomPluginSettings s = ZoomPluginSettings::load();
     ZoomReconnectManager::instance().set_policy(s.reconnect_policy);
     ZoomControlServer::instance().set_token(s.control_token);
     if (!ZoomControlServer::instance().start(s.control_server_port))
-        blog(LOG_WARNING, "[obs-zoom-plugin] TCP control server unavailable — continuing without it");
+        blog(LOG_WARNING, "[obs-zoom-plugin] TCP control server unavailable - continuing without it");
     if (!ZoomOscServer::instance().start(s.osc_server_port))
-        blog(LOG_WARNING, "[obs-zoom-plugin] OSC server unavailable — continuing without it");
+        blog(LOG_WARNING, "[obs-zoom-plugin] OSC server unavailable - continuing without it");
 
     obs_frontend_add_tools_menu_item("Zoom Plugin Settings", [](void *) {
         auto *main_win = static_cast<QMainWindow *>(obs_frontend_get_main_window());
