@@ -51,6 +51,7 @@
 #include <QHeaderView>
 #include <QTableWidget>
 #include <algorithm>
+#include <memory>
 
 namespace {
 constexpr int kSidecarPlaceholderIdBase = -1000;
@@ -1496,45 +1497,56 @@ void MainWindow::openParticipantMappingWindow()
     grid->addWidget(new QLabel("Zoom participant", dlg), 0, 2);
     grid->addWidget(new QLabel("Action", dlg), 0, 3);
 
-    QStringList sources = sourceNamesForSlots(8);
-    while (sources.size() < 8)
-        sources << m_settingsPage->sourcePattern().arg(sources.size() + 1);
-
-    QVector<QComboBox *> combos;
-    combos.reserve(8);
-    for (int i = 0; i < 8; ++i) {
-        auto *slotLabel = new QLabel(QStringLiteral("Slot %1").arg(i + 1), dlg);
-        auto *sourceLabel = new QLabel(sources.value(i), dlg);
-        sourceLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
-
-        auto *combo = new QComboBox(dlg);
-        combo->addItem("Unassigned", -1);
-        for (const auto &participant : m_participants) {
-            const QString status = participant.isSharingScreen
-                ? QStringLiteral("sharing")
-                : (participant.hasVideo ? QStringLiteral("video") : QStringLiteral("no video"));
-            combo->addItem(QStringLiteral("%1 (%2)").arg(participant.name, status),
-                           participant.id);
-            if (participant.slotAssign == i)
-                combo->setCurrentIndex(combo->count() - 1);
+    auto combos = std::make_shared<QVector<QComboBox *>>();
+    combos->reserve(8);
+    auto rebuildRows = [this, dlg, grid, combos]() {
+        while (grid->count() > 4) {
+            QLayoutItem *item = grid->takeAt(4);
+            if (QWidget *widget = item ? item->widget() : nullptr)
+                widget->deleteLater();
+            delete item;
         }
-        combos << combo;
+        combos->clear();
 
-        auto *assignBtn = new QPushButton("Assign", dlg);
-        connect(assignBtn, &QPushButton::clicked, dlg, [this, combo, i]() {
-            const int participantId = combo->currentData().toInt();
-            if (participantId == -1)
-                clearSlotAssignment(i);
-            else
-                onSlotAssigned(i, participantId);
-        });
+        QStringList sources = sourceNamesForSlots(8);
+        while (sources.size() < 8)
+            sources << m_settingsPage->sourcePattern().arg(sources.size() + 1);
 
-        const int row = i + 1;
-        grid->addWidget(slotLabel, row, 0);
-        grid->addWidget(sourceLabel, row, 1);
-        grid->addWidget(combo, row, 2);
-        grid->addWidget(assignBtn, row, 3);
-    }
+        for (int i = 0; i < 8; ++i) {
+            auto *slotLabel = new QLabel(QStringLiteral("Slot %1").arg(i + 1), dlg);
+            auto *sourceLabel = new QLabel(sources.value(i), dlg);
+            sourceLabel->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+            auto *combo = new QComboBox(dlg);
+            combo->addItem("Unassigned", -1);
+            for (const auto &participant : m_participants) {
+                const QString status = participant.isSharingScreen
+                    ? QStringLiteral("sharing")
+                    : (participant.hasVideo ? QStringLiteral("video") : QStringLiteral("no video"));
+                combo->addItem(QStringLiteral("%1 (%2)").arg(participant.name, status),
+                               participant.id);
+                if (participant.slotAssign == i)
+                    combo->setCurrentIndex(combo->count() - 1);
+            }
+            combos->append(combo);
+
+            auto *assignBtn = new QPushButton("Assign", dlg);
+            connect(assignBtn, &QPushButton::clicked, dlg, [this, combo, i]() {
+                const int participantId = combo->currentData().toInt();
+                if (participantId == -1)
+                    clearSlotAssignment(i);
+                else
+                    onSlotAssigned(i, participantId);
+            });
+
+            const int row = i + 1;
+            grid->addWidget(slotLabel, row, 0);
+            grid->addWidget(sourceLabel, row, 1);
+            grid->addWidget(combo, row, 2);
+            grid->addWidget(assignBtn, row, 3);
+        }
+    };
+    rebuildRows();
     root->addLayout(grid);
 
     auto *shareFrame = new QFrame(dlg);
@@ -1565,6 +1577,16 @@ void MainWindow::openParticipantMappingWindow()
     footer->addWidget(applyBtn);
     footer->addWidget(closeBtn);
     root->addLayout(footer);
+
+    if (m_zoomClient) {
+        connect(m_zoomClient, &ZoomControlClient::participantsUpdated, dlg,
+                [rebuildRows, refreshStatus]() {
+            rebuildRows();
+            refreshStatus();
+        });
+        connect(m_zoomClient, &ZoomControlClient::outputSourcesUpdated, dlg,
+                [refreshStatus]() { refreshStatus(); });
+    }
 
     connect(refreshBtn, &QPushButton::clicked, dlg, [this, refreshStatus]() {
         if (m_zoomClient) {
@@ -1609,8 +1631,8 @@ void MainWindow::openParticipantMappingWindow()
         refreshStatus();
     });
     connect(applyBtn, &QPushButton::clicked, dlg, [this, combos]() {
-        for (int i = 0; i < combos.size(); ++i) {
-            const int participantId = combos[i]->currentData().toInt();
+        for (int i = 0; i < combos->size(); ++i) {
+            const int participantId = combos->at(i)->currentData().toInt();
             if (participantId == -1)
                 clearSlotAssignment(i);
             else
