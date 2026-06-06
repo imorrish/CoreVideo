@@ -149,6 +149,14 @@ function Get-MakeNsis {
     return $null
 }
 
+function Test-ObsNotRunning {
+    $obs = Get-Process -Name "obs64" -ErrorAction SilentlyContinue
+    if ($obs) {
+        $ids = ($obs | Select-Object -ExpandProperty Id) -join ", "
+        throw "OBS Studio is running (obs64.exe PID $ids). Close OBS before installing CoreVideo locally."
+    }
+}
+
 function ConvertTo-NsisPath {
     param([string]$Path)
     return $Path.Replace('/', '\').Replace('$', '$$')
@@ -347,6 +355,7 @@ try {
     }
 
     if ($Install) {
+        Test-ObsNotRunning
         if (-not (Test-Path -LiteralPath $ObsInstallPath)) {
             throw "OBS install path does not exist: $ObsInstallPath"
         }

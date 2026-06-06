@@ -162,6 +162,7 @@ jobs:
           if ($env:COREVIDEO_HAS_ZOOM_RUNTIME -eq "true") {
             .\scripts\Test-CoreVideoPackage.ps1 -PackageRoot install -FullRuntime
           } else {
+            .\scripts\Test-CoreVideoPackage.ps1 -PackageRoot install
             Write-Warning "Package does not include ZoomObsEngine or sdk.dll because ZOOM_SDK_WINDOWS_URL is not configured."
           }
           Compress-Archive -Path install\* -DestinationPath CoreVideo-Windows-x64.zip -Force
