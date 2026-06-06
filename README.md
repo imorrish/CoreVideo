@@ -274,7 +274,9 @@ Use **OBS -> Tools -> Zoom ISO Recorder** for the operator UI. The dock provides
 an output-folder picker, FFmpeg path/test controls, CPU/GPU H.264 encoder
 selection, a program-recording toggle, Start/Stop buttons, disk-space warnings,
 encoder capacity guidance, and a live table of active ISO sessions and file
-paths. GPU encoders lower CPU use but consume one encoder session per ISO feed;
+paths. Recently completed sessions remain visible after stop so operators can
+verify the MP4/WAV outputs without browsing the folder manually. GPU encoders
+lower CPU use but consume one encoder session per ISO feed;
 8 ISO feeds plus an OBS program stream may require using CPU x264 for one path.
 If a selected hardware encoder is missing from the FFmpeg build, CoreVideo falls
 back to `libx264` when available and shows the requested vs actual encoder in

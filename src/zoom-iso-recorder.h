@@ -103,6 +103,7 @@ private:
                                    uint64_t timestamp_ns);
     void close_session_locked(const std::string &source_uuid);
     void close_session(Session &session);
+    QJsonObject session_status_json_locked(Session &session, bool completed);
     void refresh_ffmpeg_status_locked(Session &session);
     void mark_ffmpeg_failure_locked(Session &session, const QString &message);
     bool write_ffmpeg_locked(Session &session, const uint8_t *data,
@@ -118,4 +119,5 @@ private:
     QString m_status_warning;
     std::unordered_map<std::string, ZoomOutputInfo> m_outputs;
     std::unordered_map<std::string, Session> m_sessions;
+    std::vector<QJsonObject> m_completed_sessions;
 };

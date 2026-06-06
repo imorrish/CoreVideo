@@ -440,9 +440,15 @@ void ZoomIsoPanel::refresh_status()
 
     QString status_text = active
         ? QString("Recording - %1 active session%2")
-              .arg(sessions.size())
-              .arg(sessions.size() == 1 ? "" : "s")
+              .arg(recorder.value("session_count").toInt())
+              .arg(recorder.value("session_count").toInt() == 1 ? "" : "s")
         : QStringLiteral("Idle");
+    const int completed_count = recorder.value("completed_session_count").toInt();
+    if (completed_count > 0) {
+        status_text += QString(" - %1 completed session%2 retained")
+            .arg(completed_count)
+            .arg(completed_count == 1 ? "" : "s");
+    }
     const QString recorder_warning = recorder.value("warning").toString();
     if (!recorder_warning.isEmpty())
         status_text += QString(" - %1").arg(recorder_warning);
@@ -472,16 +478,19 @@ void ZoomIsoPanel::refresh_status()
             .arg(elapsed_ms / 60000)
             .arg((elapsed_ms / 1000) % 60, 2, 10, QLatin1Char('0'));
         const bool ffmpeg_running = s.value("ffmpeg_running").toBool();
+        const bool completed = s.value("completed").toBool();
         const QString ffmpeg_error = s.value("ffmpeg_error").toString();
         const QString ffmpeg_output = s.value("ffmpeg_output_tail").toString();
         const int video_frames = s.value("video_frames").toInt();
         const int audio_chunks = s.value("audio_chunks").toInt();
-        QString status = ffmpeg_running ? QStringLiteral("Recording") : QStringLiteral("Encoder stopped");
+        QString status = completed
+            ? QStringLiteral("Completed")
+            : (ffmpeg_running ? QStringLiteral("Recording") : QStringLiteral("Encoder stopped"));
         if (!ffmpeg_error.isEmpty())
             status = QStringLiteral("Encoder error");
         else if (video_frames == 0)
             status = QStringLiteral("Waiting for video");
-        else if (audio_chunks == 0)
+        else if (!completed && audio_chunks == 0)
             status += QStringLiteral(" / no audio yet");
         QString participant = s.value("display_name").toString();
         const int participant_id =
@@ -500,7 +509,9 @@ void ZoomIsoPanel::refresh_status()
                 tooltip += QString("\n\nFFmpeg output:\n%1").arg(ffmpeg_output);
             status_item->setToolTip(tooltip);
         }
-        if (!ffmpeg_running || video_frames == 0)
+        if (completed)
+            status_item->setForeground(QColor("#66d989"));
+        else if (!ffmpeg_running || video_frames == 0)
             status_item->setForeground(QColor("#f0b429"));
         m_sessions->setItem(row, 2, status_item);
         QString encoder_text = s.value("video_encoder").toString();

@@ -16,6 +16,7 @@
 static constexpr qint64 kIsoMinimumFreeBytes = 2ll * 1024ll * 1024ll * 1024ll;
 static constexpr qint64 kIsoWarningFreeBytes = 10ll * 1024ll * 1024ll * 1024ll;
 static constexpr int kFfmpegOutputTailChars = 2048;
+static constexpr size_t kMaxCompletedIsoSessions = 24;
 
 static QString default_iso_dir()
 {
@@ -215,6 +216,7 @@ bool ZoomIsoRecorder::start(const ZoomIsoRecordConfig &config,
         m_requested_video_encoder = requested_encoder;
         m_status_warning = status_warning;
         m_started_program_recording = false;
+        m_completed_sessions.clear();
         m_active.store(true, std::memory_order_release);
     }
 
@@ -251,51 +253,10 @@ QJsonArray ZoomIsoRecorder::status_json()
     QJsonArray arr;
     std::lock_guard<std::mutex> lock(m_mtx);
     for (auto &entry : m_sessions) {
-        Session &s = entry.second;
-        refresh_ffmpeg_status_locked(s);
-        QJsonObject obj;
-        obj["source_uuid"] = QString::fromStdString(s.source_uuid);
-        obj["source"] = QString::fromStdString(s.source_name);
-        obj["display_name"] = QString::fromStdString(s.display_name);
-        obj["assignment"] = assignment_label(s.assignment);
-        obj["configured_participant_id"] =
-            static_cast<double>(s.configured_participant_id);
-        obj["resolved_participant_id"] =
-            static_cast<double>(s.resolved_participant_id);
-        obj["width"] = static_cast<int>(s.width);
-        obj["height"] = static_cast<int>(s.height);
-        obj["video_frames"] = static_cast<int>(s.video_frames);
-        obj["audio_chunks"] = static_cast<int>(s.audio_chunks);
-        const uint64_t now_ns = os_gettime_ns();
-        obj["elapsed_ms"] = s.started_ns > 0 && now_ns >= s.started_ns
-            ? static_cast<double>((now_ns - s.started_ns) / 1000000ULL)
-            : 0.0;
-        obj["last_video_age_ms"] = s.last_video_ns > 0 && now_ns >= s.last_video_ns
-            ? static_cast<double>((now_ns - s.last_video_ns) / 1000000ULL)
-            : -1.0;
-        obj["last_audio_age_ms"] = s.last_audio_ns > 0 && now_ns >= s.last_audio_ns
-            ? static_cast<double>((now_ns - s.last_audio_ns) / 1000000ULL)
-            : -1.0;
-        obj["ffmpeg_running"] =
-            s.ffmpeg && s.ffmpeg->state() == QProcess::Running;
-        obj["ffmpeg_error"] = s.ffmpeg_error;
-        obj["ffmpeg_exit_code"] = s.ffmpeg_exit_code;
-        obj["ffmpeg_exit_status"] = s.ffmpeg_exit_status;
-        obj["ffmpeg_output_tail"] = s.ffmpeg_output_tail;
-        obj["requested_video_encoder"] =
-            QString::fromStdString(s.requested_video_encoder);
-        obj["video_encoder"] = QString::fromStdString(s.video_encoder);
-        obj["encoder_fallback"] = s.encoder_fallback;
-        obj["video_bytes"] = QFileInfo(s.video_path).exists()
-            ? static_cast<double>(QFileInfo(s.video_path).size())
-            : 0.0;
-        obj["audio_bytes"] = QFileInfo(s.audio_path).exists()
-            ? static_cast<double>(QFileInfo(s.audio_path).size())
-            : 0.0;
-        obj["video_path"] = s.video_path;
-        obj["audio_path"] = s.audio_path;
-        arr.append(obj);
+        arr.append(session_status_json_locked(entry.second, false));
     }
+    for (const QJsonObject &completed : m_completed_sessions)
+        arr.append(completed);
     return arr;
 }
 
@@ -318,6 +279,7 @@ QJsonObject ZoomIsoRecorder::status_overview()
     obj["record_program"] = m_config.record_program;
     obj["program_recording_started_by_corevideo"] = m_started_program_recording;
     obj["session_count"] = static_cast<int>(m_sessions.size());
+    obj["completed_session_count"] = static_cast<int>(m_completed_sessions.size());
     obj["warning"] = m_status_warning;
 
     const QDir dir(QString::fromStdString(m_config.output_dir));
@@ -473,10 +435,65 @@ void ZoomIsoRecorder::close_session(Session &session)
             session.ffmpeg->waitForFinished(2000);
         refresh_ffmpeg_status_locked(session);
     }
+    QJsonObject completed = session_status_json_locked(session, true);
+    completed["completed_at"] =
+        QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+    m_completed_sessions.insert(m_completed_sessions.begin(), completed);
+    if (m_completed_sessions.size() > kMaxCompletedIsoSessions)
+        m_completed_sessions.resize(kMaxCompletedIsoSessions);
     blog(LOG_INFO,
          "[obs-zoom-plugin] ISO session closed: source=%s participant=%u frames=%u audio_chunks=%u",
          session.source_name.c_str(), session.resolved_participant_id,
          session.video_frames, session.audio_chunks);
+}
+
+QJsonObject ZoomIsoRecorder::session_status_json_locked(Session &s,
+                                                        bool completed)
+{
+    refresh_ffmpeg_status_locked(s);
+    QJsonObject obj;
+    obj["completed"] = completed;
+    obj["source_uuid"] = QString::fromStdString(s.source_uuid);
+    obj["source"] = QString::fromStdString(s.source_name);
+    obj["display_name"] = QString::fromStdString(s.display_name);
+    obj["assignment"] = assignment_label(s.assignment);
+    obj["configured_participant_id"] =
+        static_cast<double>(s.configured_participant_id);
+    obj["resolved_participant_id"] =
+        static_cast<double>(s.resolved_participant_id);
+    obj["width"] = static_cast<int>(s.width);
+    obj["height"] = static_cast<int>(s.height);
+    obj["video_frames"] = static_cast<int>(s.video_frames);
+    obj["audio_chunks"] = static_cast<int>(s.audio_chunks);
+    const uint64_t now_ns = os_gettime_ns();
+    obj["elapsed_ms"] = s.started_ns > 0 && now_ns >= s.started_ns
+        ? static_cast<double>((now_ns - s.started_ns) / 1000000ULL)
+        : 0.0;
+    obj["last_video_age_ms"] = s.last_video_ns > 0 && now_ns >= s.last_video_ns
+        ? static_cast<double>((now_ns - s.last_video_ns) / 1000000ULL)
+        : -1.0;
+    obj["last_audio_age_ms"] = s.last_audio_ns > 0 && now_ns >= s.last_audio_ns
+        ? static_cast<double>((now_ns - s.last_audio_ns) / 1000000ULL)
+        : -1.0;
+    obj["ffmpeg_running"] =
+        !completed && s.ffmpeg && s.ffmpeg->state() == QProcess::Running;
+    obj["ffmpeg_error"] = s.ffmpeg_error;
+    obj["ffmpeg_exit_code"] = s.ffmpeg_exit_code;
+    obj["ffmpeg_exit_status"] = s.ffmpeg_exit_status;
+    obj["ffmpeg_output_tail"] = s.ffmpeg_output_tail;
+    obj["requested_video_encoder"] =
+        QString::fromStdString(s.requested_video_encoder);
+    obj["video_encoder"] = QString::fromStdString(s.video_encoder);
+    obj["encoder_fallback"] = s.encoder_fallback;
+    obj["video_bytes"] = QFileInfo(s.video_path).exists()
+        ? static_cast<double>(QFileInfo(s.video_path).size())
+        : 0.0;
+    obj["audio_bytes"] = QFileInfo(s.audio_path).exists()
+        ? static_cast<double>(QFileInfo(s.audio_path).size())
+        : 0.0;
+    obj["video_path"] = s.video_path;
+    obj["audio_path"] = s.audio_path;
+    return obj;
 }
 
 void ZoomIsoRecorder::refresh_ffmpeg_status_locked(Session &session)

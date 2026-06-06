@@ -227,6 +227,8 @@ dock. The panel provides:
 - Live status showing idle/recording and active session count.
 - Active session table with source, participant, resolution, video frame count,
   audio chunk count, current video/audio file paths, and FFmpeg error details.
+- Recently completed sessions remain in the table after stop so operators can
+  confirm completed MP4/WAV outputs before opening the folder.
 
 The panel uses the same `ZoomIsoRecorder` backend as the TCP and OSC APIs. It
 persists the output folder, FFmpeg path, and program-recording toggle in OBS
