@@ -7,6 +7,7 @@
 class QTableWidget;
 class QLineEdit;
 class QComboBox;
+class QLabel;
 
 class ZoomOutputDialog : public QWidget {
 public:
@@ -27,6 +28,7 @@ private:
     QTableWidget *m_participant_table = nullptr;
     QLineEdit    *m_filter            = nullptr;
     QComboBox    *m_profile_combo     = nullptr;
+    QLabel       *m_output_summary    = nullptr;
     // Shared liveness flag — set to false in destructor so any in-flight
     // preview callbacks don't try to update widgets that are already destroyed.
     std::shared_ptr<std::atomic<bool>> m_alive =

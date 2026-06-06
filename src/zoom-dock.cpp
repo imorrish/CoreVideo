@@ -206,10 +206,10 @@ static const char *state_label_text(MeetingState s)
 {
     switch (s) {
     case MeetingState::Idle:       return "Not connected";
-    case MeetingState::Joining:    return "Joiningâ€¦";
+    case MeetingState::Joining:    return "Joining...";
     case MeetingState::InMeeting:  return "In meeting";
-    case MeetingState::Leaving:    return "Leavingâ€¦";
-    case MeetingState::Recovering: return "Recoveringâ€¦";
+    case MeetingState::Leaving:    return "Leaving...";
+    case MeetingState::Recovering: return "Recovering...";
     case MeetingState::Failed:     return "Connection failed";
     }
     return "";
@@ -365,7 +365,7 @@ ZoomDock::ZoomDock(QWidget *parent)
     vLayout->addWidget(m_error_label);
 
     // â”€â”€ Active speaker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    m_speaker_label = new QLabel(QStringLiteral("â€”"), this);
+    m_speaker_label = new QLabel(QStringLiteral("-"), this);
     m_speaker_label->setObjectName("speakerValue");
 
     auto *speaker_row = new QHBoxLayout;
@@ -831,13 +831,13 @@ void ZoomDock::update_recovery_panel()
 
     if (ms_left > 0) {
         m_recovery_label->setText(
-            QString("Reconnecting in %1sâ€¦ (attempt %2/%3)")
+            QString("Reconnecting in %1s... (attempt %2/%3)")
                 .arg((ms_left + 999) / 1000)
                 .arg(attempt + 1)
                 .arg(max_att));
     } else {
         m_recovery_label->setText(
-            QString("Reconnectingâ€¦ (attempt %1/%2)")
+            QString("Reconnecting... (attempt %1/%2)")
                 .arg(attempt)
                 .arg(max_att));
     }
@@ -899,7 +899,7 @@ void ZoomDock::update_state_indicator()
     // Active speaker name
     const uint32_t spk_id = ZoomEngineClient::instance().active_speaker_id();
     if (spk_id == 0) {
-        m_speaker_label->setText(QStringLiteral("â€”"));
+        m_speaker_label->setText(QStringLiteral("-"));
     } else {
         QString spk_name = QString("ID %1").arg(spk_id);
         for (const auto &p : ZoomEngineClient::instance().roster()) {

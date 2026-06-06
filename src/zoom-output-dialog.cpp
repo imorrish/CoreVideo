@@ -245,6 +245,49 @@ static QString sdk_quality_tooltip(const ZoomOutputInfo &output)
     return text.trimmed();
 }
 
+static QString output_summary_text(const std::vector<ZoomOutputInfo> &outputs,
+                                   const std::vector<ParticipantInfo> &roster)
+{
+    int ok = 0;
+    int warnings = 0;
+    int stale_or_missing = 0;
+    int lower_resolution = 0;
+    int screen_share_outputs = 0;
+    int video_on = 0;
+    int sharing = 0;
+
+    for (const auto &p : roster) {
+        if (p.has_video)
+            ++video_on;
+        if (p.is_sharing_screen)
+            ++sharing;
+    }
+
+    for (const auto &output : outputs) {
+        if (output.assignment == AssignmentMode::ScreenShare)
+            ++screen_share_outputs;
+        if (output.health_reason == ZoomOutputHealthReason::Ok) {
+            ++ok;
+            continue;
+        }
+        ++warnings;
+        if (output_signal_missing_or_stale(output))
+            ++stale_or_missing;
+        if (output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution)
+            ++lower_resolution;
+    }
+
+    return QString("Outputs: %1  OK: %2  Warnings: %3  Stale/no signal: %4  Lower than requested: %5  Screen share outputs: %6  Participants with video: %7  Sharing: %8")
+        .arg(outputs.size())
+        .arg(ok)
+        .arg(warnings)
+        .arg(stale_or_missing)
+        .arg(lower_resolution)
+        .arg(screen_share_outputs)
+        .arg(video_on)
+        .arg(sharing);
+}
+
 static QString assignment_data_for_output(const ZoomOutputInfo &output)
 {
     switch (output.assignment) {
@@ -313,6 +356,10 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     m_filter->setPlaceholderText("Filter participants");
     connect(m_filter, &QLineEdit::textChanged, this,
             [this]() { refresh_participants(); });
+
+    m_output_summary = new QLabel(this);
+    m_output_summary->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    m_output_summary->setWordWrap(true);
 
     m_participant_table = new QTableWidget(this);
     m_participant_table->setColumnCount(5);
@@ -387,6 +434,7 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     layout->addWidget(m_filter);
     layout->addWidget(m_participant_table);
     layout->addWidget(new QLabel("Outputs", this));
+    layout->addWidget(m_output_summary);
     layout->addWidget(m_table);
     layout->addWidget(buttons);
 
@@ -427,6 +475,19 @@ void ZoomOutputDialog::refresh()
 
     const auto outputs = ZoomOutputManager::instance().outputs();
     const std::vector<ParticipantInfo> roster = ZoomEngineClient::instance().roster();
+    if (m_output_summary) {
+        bool has_warning = false;
+        for (const auto &output : outputs) {
+            if (output.health_reason != ZoomOutputHealthReason::Ok) {
+                has_warning = true;
+                break;
+            }
+        }
+        m_output_summary->setText(output_summary_text(outputs, roster));
+        m_output_summary->setStyleSheet(has_warning
+            ? "color: #f0b429; font-weight: 700;"
+            : "color: #66d989; font-weight: 700;");
+    }
 
     m_table->setRowCount(static_cast<int>(outputs.size()));
     for (int row = 0; row < static_cast<int>(outputs.size()); ++row) {

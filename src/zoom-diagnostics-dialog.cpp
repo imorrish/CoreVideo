@@ -25,6 +25,7 @@
 #include <QTextStream>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <obs-module.h>
 #include <util/platform.h>
 #include <algorithm>
 #include <unordered_map>
@@ -408,6 +409,61 @@ static bool write_json_file(const QString &path, const QJsonObject &obj)
     return true;
 }
 
+static QString obs_module_file_path(const char *name)
+{
+    char *path = obs_module_file(name);
+    const QString result = path ? QString::fromUtf8(path) : QString{};
+    if (path)
+        bfree(path);
+    return result;
+}
+
+static QJsonObject runtime_file_json(const QString &label, const QString &path)
+{
+    const QFileInfo info(path);
+    QJsonObject obj;
+    obj["label"] = label;
+    obj["path"] = path;
+    obj["exists"] = info.exists();
+    obj["is_file"] = info.isFile();
+    obj["size_bytes"] = info.exists() ? static_cast<double>(info.size()) : 0.0;
+    obj["last_modified"] = info.exists()
+        ? info.lastModified().toString(Qt::ISODate)
+        : QString{};
+    return obj;
+}
+
+static QJsonArray runtime_manifest_json()
+{
+    QJsonArray arr;
+    arr.append(runtime_file_json("OAuth callback helper",
+                                 obs_module_file_path("CoreVideoOAuthCallback.exe")));
+    arr.append(runtime_file_json("Zoom engine",
+                                 obs_module_file_path("zoom-runtime/ZoomObsEngine.exe")));
+    arr.append(runtime_file_json("Zoom Meeting SDK runtime",
+                                 obs_module_file_path("zoom-runtime/sdk.dll")));
+    arr.append(runtime_file_json("Qt Windows platform plugin",
+                                 obs_module_file_path("plugins/platforms/qwindows.dll")));
+    arr.append(runtime_file_json("Qt Schannel TLS plugin",
+                                 obs_module_file_path("plugins/tls/qschannelbackend.dll")));
+    return arr;
+}
+
+static QString runtime_manifest_text(const QJsonArray &manifest)
+{
+    QString text;
+    QTextStream out(&text);
+    out << "Runtime Files\n";
+    for (const auto &value : manifest) {
+        const QJsonObject obj = value.toObject();
+        out << "- " << obj.value("label").toString()
+            << " | exists=" << (obj.value("exists").toBool() ? "yes" : "no")
+            << " | " << obj.value("path").toString()
+            << "\n";
+    }
+    return text;
+}
+
 ZoomDiagnosticsDialog::ZoomDiagnosticsDialog(QWidget *parent)
     : QWidget(parent)
 {
@@ -594,6 +650,15 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     QJsonArray event_array;
     for (const auto &event : events)
         event_array.append(event_json(event));
+    const QJsonArray runtime_manifest = runtime_manifest_json();
+    for (const auto &value : runtime_manifest) {
+        const QJsonObject obj = value.toObject();
+        if (!obj.value("exists").toBool()) {
+            warnings << QString("Runtime file missing: %1 (%2)")
+                .arg(obj.value("label").toString(),
+                     obj.value("path").toString());
+        }
+    }
 
     const QString obs_log = latest_obs_log_path();
     const QString copied_log_name = obs_log.isEmpty()
@@ -648,6 +713,7 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     for (const QString &warning : warnings)
         warning_array.append(warning);
     summary["warnings"] = warning_array;
+    summary["runtime_manifest"] = runtime_manifest;
     summary["engine_status"] = engine_status;
     summary["plugin_settings_redacted"] = settings_json(settings);
     summary["outputs"] = output_array;
@@ -658,7 +724,9 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         !write_json_file(bundle.absoluteFilePath("engine-status.json"),
                          engine_status) ||
         !write_json_file(bundle.absoluteFilePath("settings-redacted.json"),
-                         settings_json(settings))) {
+                         settings_json(settings)) ||
+        !write_json_file(bundle.absoluteFilePath("runtime-manifest.json"),
+                         QJsonObject{{"files", runtime_manifest}})) {
         QMessageBox::warning(this, "Create Support Bundle",
             QString("Could not write support bundle JSON files in:\n%1")
                 .arg(bundle.absolutePath()));
@@ -713,6 +781,8 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     out << "- Reconnect: "
         << (settings.reconnect_policy.enabled ? "enabled" : "disabled")
         << "\n\n";
+
+    out << runtime_manifest_text(runtime_manifest) << "\n";
 
     out << "Outputs\n";
     for (const auto &output : outputs) {
