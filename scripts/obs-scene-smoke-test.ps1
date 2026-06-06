@@ -363,12 +363,16 @@ try {
     }
 
     $sourceScene = "CoreVideo Sources"
+    $shareScene = "CoreVideo Screen Share"
+    $shareSource = "Zoom Screen Share"
+    $sharePlaceholder = "CoreVideo Placeholder Screen Share"
     $slotScenes = @(1..$ParticipantCount | ForEach-Object { "CoreVideo Slot $_" })
     $participantSources = @(1..$ParticipantCount | ForEach-Object { "Zoom Participant $_" })
-    $placeholderSources = @(1..$ParticipantCount | ForEach-Object { "CoreVideo Slot $_ Placeholder" })
+    $placeholderSources = @(1..$ParticipantCount | ForEach-Object { "CoreVideo Placeholder Slot $_" })
 
     if (-not $AuditOnly) {
         Ensure-Scene -Socket $socket -Name $sourceScene
+        Ensure-Scene -Socket $socket -Name $shareScene
         Ensure-Scene -Socket $socket -Name $SceneName
 
         for ($i = 0; $i -lt $ParticipantCount; ++$i) {
@@ -381,6 +385,10 @@ try {
             Ensure-SceneItem -Socket $socket -SceneName $sourceScene -SourceName $participant | Out-Null
             Ensure-SceneItem -Socket $socket -SceneName $slotScene -SourceName $participant | Out-Null
         }
+        Ensure-ColorInput -Socket $socket -SceneName $sourceScene -InputName $shareSource -Color 4282400832
+        Ensure-ColorInput -Socket $socket -SceneName $shareScene -InputName $sharePlaceholder -Color 4280493056
+        Ensure-SceneItem -Socket $socket -SceneName $sourceScene -SourceName $shareSource | Out-Null
+        Ensure-SceneItem -Socket $socket -SceneName $shareScene -SourceName $shareSource | Out-Null
 
         $columns = [Math]::Ceiling([Math]::Sqrt($ParticipantCount))
         $rows = [Math]::Ceiling($ParticipantCount / $columns)
@@ -401,21 +409,24 @@ try {
     $sceneNames = Get-SceneNames -Socket $socket
     $inputNames = Get-InputNames -Socket $socket
     Assert-Contains -Actual $sceneNames -Expected @($sourceScene, $SceneName) -Label "Scenes"
-    Assert-Contains -Actual $sceneNames -Expected $slotScenes -Label "Slot scenes"
-    Assert-Contains -Actual $inputNames -Expected $participantSources -Label "Participant inputs"
+    Assert-Contains -Actual $sceneNames -Expected ($slotScenes + @($shareScene)) -Label "Nested CoreVideo scenes"
+    Assert-Contains -Actual $inputNames -Expected ($participantSources + @($shareSource)) -Label "CoreVideo media inputs"
+    Assert-Contains -Actual $inputNames -Expected ($placeholderSources + @($sharePlaceholder)) -Label "CoreVideo placeholder inputs"
 
     $sourceItems = @(Get-SceneItems -Socket $socket -SceneName $sourceScene | ForEach-Object { $_.sourceName })
-    Assert-Contains -Actual $sourceItems -Expected $participantSources -Label "CoreVideo Sources scene items"
+    Assert-Contains -Actual $sourceItems -Expected ($participantSources + @($shareSource)) -Label "CoreVideo Sources scene items"
 
     for ($i = 0; $i -lt $ParticipantCount; ++$i) {
         $slotItems = @(Get-SceneItems -Socket $socket -SceneName $slotScenes[$i] | ForEach-Object { $_.sourceName })
-        Assert-Contains -Actual $slotItems -Expected @($participantSources[$i]) -Label "$($slotScenes[$i]) scene items"
+        Assert-Contains -Actual $slotItems -Expected @($participantSources[$i], $placeholderSources[$i]) -Label "$($slotScenes[$i]) scene items"
     }
+    $shareItems = @(Get-SceneItems -Socket $socket -SceneName $shareScene | ForEach-Object { $_.sourceName })
+    Assert-Contains -Actual $shareItems -Expected @($shareSource, $sharePlaceholder) -Label "$shareScene scene items"
 
     $lookItems = @(Get-SceneItems -Socket $socket -SceneName $SceneName | ForEach-Object { $_.sourceName })
     Assert-Contains -Actual $lookItems -Expected $slotScenes -Label "$SceneName scene items"
 
-    Write-Host "OBS smoke test passed: $ParticipantCount participant source(s), $($slotScenes.Count) slot scene(s), and '$SceneName' are present and linked."
+    Write-Host "OBS smoke test passed: $ParticipantCount participant source(s), screen share, $($slotScenes.Count) slot scene(s), and '$SceneName' are present and linked."
 } finally {
     if ($socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
         $socket.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, "CoreVideo smoke test complete", [Threading.CancellationToken]::None).GetAwaiter().GetResult() | Out-Null

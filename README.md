@@ -175,9 +175,11 @@ to copy into OBS while `obs64.exe` is running, matching the installer guard.
 Use the OBS smoke test when validating plugin-created OBS scene graph behavior
 on a machine with OBS running and obs-websocket enabled. It does not exercise
 the optional Sidecar UI. The script connects directly to obs-websocket v5,
-can verify that CoreVideo input kinds are registered, creates a deterministic CoreVideo test scene, links
-participant sources through nested slot scenes, switches OBS to the test scene,
-and audits that the expected scenes, inputs, and scene items are present.
+can verify that CoreVideo input kinds are registered, creates a deterministic
+CoreVideo test scene, links participant sources through nested slot scenes,
+creates the screen-share source/nested scene, switches OBS to the test scene,
+and audits that the expected scenes, inputs, placeholders, and scene items are
+present.
 
 ```powershell
 .\scripts\obs-scene-smoke-test.ps1 -VerifyCoreVideoPlugin
