@@ -24,6 +24,7 @@ private:
     void start_recording();
     void stop_recording();
     void refresh_status();
+    void refresh_encoder_guidance();
     void persist_settings() const;
     void set_error(const QString &message);
 
@@ -36,6 +37,7 @@ private:
     QPushButton *m_test_btn = nullptr;
     QPushButton *m_open_folder_btn = nullptr;
     QLabel *m_status = nullptr;
+    QLabel *m_encoder_guidance = nullptr;
     QLabel *m_disk_status = nullptr;
     QLabel *m_error = nullptr;
     QTableWidget *m_sessions = nullptr;

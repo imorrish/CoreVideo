@@ -242,9 +242,11 @@ Commands: `help`, `status`, `list_participants`, `list_outputs`, `assign_output`
 Use **OBS -> Tools -> Zoom ISO Recorder** for the operator UI. The dock provides
 an output-folder picker, FFmpeg path/test controls, CPU/GPU H.264 encoder
 selection, a program-recording toggle, Start/Stop buttons, disk-space warnings,
-and a live table of active ISO sessions and file paths. The recorder blocks
-starts below 2 GB free, warns below 10 GB free, and surfaces FFmpeg process
-errors in the session table and TCP/OSC status JSON.
+encoder capacity guidance, and a live table of active ISO sessions and file
+paths. GPU encoders lower CPU use but consume one encoder session per ISO feed;
+8 ISO feeds plus an OBS program stream may require using CPU x264 for one path.
+The recorder blocks starts below 2 GB free, warns below 10 GB free, and surfaces
+FFmpeg process errors in the session table and TCP/OSC status JSON.
 
 ```sh
 # Start ISO recording. record_program=true also starts OBS program recording.

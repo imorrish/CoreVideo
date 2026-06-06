@@ -106,6 +106,27 @@ static bool ffmpeg_has_encoder(const QString &path, const QString &encoder)
     return QString::fromUtf8(probe.readAll()).contains(encoder);
 }
 
+static QString encoder_guidance_text(const QString &encoder)
+{
+    if (encoder == QStringLiteral("libx264")) {
+        return QStringLiteral(
+            "CPU x264 avoids GPU encoder session limits but can be heavy with 8 ISO feeds plus program streaming. Use veryfast/fast CPU presets and monitor OBS CPU load.");
+    }
+    if (encoder == QStringLiteral("h264_nvenc")) {
+        return QStringLiteral(
+            "NVENC lowers CPU load, but each ISO feed uses an encoder session. 8 ISO feeds plus OBS program output may exceed GeForce session limits; use CPU for one path if sessions fail.");
+    }
+    if (encoder == QStringLiteral("h264_qsv")) {
+        return QStringLiteral(
+            "Intel Quick Sync lowers CPU load and is useful for ISO feeds when available. Watch GPU media-engine usage and fall back to CPU x264 if FFmpeg reports encoder failures.");
+    }
+    if (encoder == QStringLiteral("h264_amf")) {
+        return QStringLiteral(
+            "AMD AMF lowers CPU load when available. Watch GPU encoder utilization and fall back to CPU x264 if FFmpeg reports encoder failures.");
+    }
+    return QStringLiteral("Unknown encoder. Test FFmpeg before recording.");
+}
+
 ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     : QWidget(parent)
 {
@@ -167,7 +188,10 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
         "Hardware encoders reduce CPU load but consume GPU encoder sessions. "
         "Use CPU x264 if the selected FFmpeg build or GPU does not support the hardware encoder.");
     connect(m_video_encoder, QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [this]() { persist_settings(); });
+            this, [this]() {
+                refresh_encoder_guidance();
+                persist_settings();
+            });
     encoder_row->addWidget(new QLabel("Video encoder:", config_group));
     encoder_row->addWidget(m_video_encoder, 1);
     config_layout->addLayout(encoder_row);
@@ -197,12 +221,15 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     config_layout->addLayout(button_row);
 
     m_status = new QLabel("Idle", config_group);
+    m_encoder_guidance = new QLabel(config_group);
+    m_encoder_guidance->setWordWrap(true);
     m_disk_status = new QLabel(config_group);
     m_error = new QLabel(config_group);
     m_error->setObjectName("errorLabel");
     m_error->setWordWrap(true);
     m_error->setVisible(false);
     config_layout->addWidget(m_status);
+    config_layout->addWidget(m_encoder_guidance);
     config_layout->addWidget(m_disk_status);
     config_layout->addWidget(m_error);
     layout->addWidget(config_group);
@@ -240,6 +267,7 @@ ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
     m_refresh_timer->start();
 
     setStyleSheet(cv_stylesheet());
+    refresh_encoder_guidance();
     refresh_status();
 }
 
@@ -436,6 +464,18 @@ void ZoomIsoPanel::refresh_status()
         files->setToolTip(files->text());
         m_sessions->setItem(row, 10, files);
     }
+}
+
+void ZoomIsoPanel::refresh_encoder_guidance()
+{
+    if (!m_encoder_guidance || !m_video_encoder)
+        return;
+    const QString encoder = m_video_encoder->currentData().toString();
+    m_encoder_guidance->setText(encoder_guidance_text(encoder));
+    m_encoder_guidance->setStyleSheet(
+        encoder == QStringLiteral("libx264")
+            ? "color: #c0c0d8;"
+            : "color: #f0b429; font-weight: 700;");
 }
 
 void ZoomIsoPanel::persist_settings() const

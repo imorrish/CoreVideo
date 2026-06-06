@@ -179,6 +179,8 @@ dock. The panel provides:
 - FFmpeg executable field with a test button.
 - Video encoder selector for CPU x264, NVIDIA NVENC, Intel Quick Sync, or AMD
   AMF when the selected FFmpeg build supports that encoder.
+- Encoder guidance explaining CPU load, GPU encoder-session limits, and when to
+  fall back to CPU x264 for 8 ISO feeds plus a program stream.
 - **Also start/stop OBS program recording** toggle.
 - **Start ISO Recording** and **Stop ISO Recording** buttons.
 - Live status showing idle/recording and active session count.
