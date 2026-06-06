@@ -28,7 +28,13 @@ param(
     [string]$ObsLogPath,
 
     [Parameter()]
-    [string[]]$ExpectedDockId = @()
+    [string[]]$ExpectedDockId = @(),
+
+    [Parameter()]
+    [switch]$ExpectShutdown,
+
+    [Parameter()]
+    [switch]$LogOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -315,6 +321,60 @@ function Assert-LogContains {
     }
 }
 
+function Assert-LogDoesNotContain {
+    param(
+        [string]$Path,
+        [string[]]$Forbidden
+    )
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        throw "OBS log file not found: $Path"
+    }
+
+    $text = Get-Content -LiteralPath $Path -Raw
+    $found = @($Forbidden | Where-Object { $text -match [regex]::Escape($_) })
+    if ($found.Count -gt 0) {
+        throw "OBS log contains failure marker(s): $($found -join ', ')"
+    }
+}
+
+function Test-CoreVideoObsLog {
+    param(
+        [string]$Path,
+        [string[]]$ExpectedDockId,
+        [bool]$ExpectShutdown
+    )
+
+    if (-not $Path) {
+        throw "Pass -ObsLogPath when using -LogOnly or -ExpectShutdown."
+    }
+
+    $markers = @(
+        "[obs-zoom-plugin] Loading plugin",
+        "[obs-zoom-plugin] Registered CoreVideo source kinds",
+        "[obs-zoom-plugin] Plugin loaded successfully"
+    )
+    $markers += @($ExpectedDockId | ForEach-Object { "[obs-zoom-plugin] Registered dock: $_" })
+    if ($ExpectShutdown) {
+        $markers += "[obs-zoom-plugin] Shutting down CoreVideo runtime"
+    }
+    Assert-LogContains -Path $Path -Expected $markers
+    Assert-LogDoesNotContain -Path $Path -Forbidden @(
+        "[obs-zoom-plugin] obs_frontend_get_main_window() returned null",
+        "Unhandled exception",
+        "Access violation"
+    )
+    Write-Host "CoreVideo OBS log lifecycle markers are present."
+}
+
+if ($LogOnly) {
+    Test-CoreVideoObsLog `
+        -Path $ObsLogPath `
+        -ExpectedDockId $ExpectedDockId `
+        -ExpectShutdown:$ExpectShutdown
+    return
+}
+
 $socket = [System.Net.WebSockets.ClientWebSocket]::new()
 try {
     $uri = [Uri]::new("ws://$HostName`:$Port")
@@ -352,14 +412,10 @@ try {
     }
 
     if ($ObsLogPath) {
-        $markers = @(
-            "[obs-zoom-plugin] Loading plugin",
-            "[obs-zoom-plugin] Registered CoreVideo source kinds",
-            "[obs-zoom-plugin] Plugin loaded successfully"
-        )
-        $markers += @($ExpectedDockId | ForEach-Object { "[obs-zoom-plugin] Registered dock: $_" })
-        Assert-LogContains -Path $ObsLogPath -Expected $markers
-        Write-Host "CoreVideo OBS log markers are present."
+        Test-CoreVideoObsLog `
+            -Path $ObsLogPath `
+            -ExpectedDockId $ExpectedDockId `
+            -ExpectShutdown:$ExpectShutdown
     }
 
     $sourceScene = "CoreVideo Sources"

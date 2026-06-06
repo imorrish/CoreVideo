@@ -221,6 +221,16 @@ path. After manually opening docks in OBS, include their dock IDs in
   -ExpectedDockId ZoomControlDock,ZoomOutputManagerDock,ZoomDiagnosticsDock,ZoomIsoRecorderDock
 ```
 
+After closing OBS, run the log-only lifecycle audit against the same log to
+verify that CoreVideo registered the docks and reached its shutdown path without
+obvious crash markers:
+
+```powershell
+.\scripts\obs-scene-smoke-test.ps1 -LogOnly -ExpectShutdown `
+  -ObsLogPath "$env:APPDATA\obs-studio\logs\latest.log" `
+  -ExpectedDockId ZoomControlDock,ZoomOutputManagerDock,ZoomDiagnosticsDock,ZoomIsoRecorderDock
+```
+
 5. **Set up OAuth (for Marketplace / external-account joins)** - publishers configure the Cloudflare broker and bake `-DZOOM_EMBED_OAUTH_AUTHORIZATION_URL=https://corevideo.iamfatness.us/oauth/start` into the build. End users just open the Settings dialog and click **Sign in with Zoom**. See [`docs/ZOOM_MARKETPLACE_OAUTH.md`](docs/ZOOM_MARKETPLACE_OAUTH.md) for the full walkthrough.
 
 6. **Join once, then assign outputs** - use the CoreVideo dock or the TCP/OSC control APIs to join the meeting once per OBS session. Then add **Zoom Participant**, **Zoom Participant Audio**, **Zoom Share**, or **Zoom Interpretation Audio** sources and assign them to participants, active speaker, screen share, or Spotlight 1-8 dynamic roles.
