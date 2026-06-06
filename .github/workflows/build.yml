@@ -189,14 +189,15 @@ jobs:
       - name: Build
         run: cmake --build build --config Release --parallel
 
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
       - name: Package as ZIP
         shell: powershell
         run: |
           cmake --install build --config Release --prefix install
           if ($env:COREVIDEO_HAS_ZOOM_RUNTIME -eq "true") {
-              if (-not (Test-Path "install\obs-plugins\64bit\zoom-runtime\sdk.dll")) {
-                  throw "Release package is missing zoom-runtime\sdk.dll; Zoom join would fail."
-              }
+              .\scripts\Test-CoreVideoPackage.ps1 -PackageRoot install -FullRuntime
           } else {
               Write-Warning "Windows artifact is validation-only; it does not include zoom-runtime\sdk.dll."
           }
@@ -305,6 +306,9 @@ jobs:
 
       - name: Build
         run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
 
       - name: Package as ZIP
         run: |
