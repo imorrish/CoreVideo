@@ -110,6 +110,10 @@ inline bool output_signal_below_requested(const ZoomOutputInfo &output)
 {
     if (output.observed_width == 0 || output.observed_height == 0)
         return false;
+    if (output.video_resolution == VideoResolution::P1080 &&
+        output.observed_height + 8 >= video_resolution_height(VideoResolution::P1080)) {
+        return false;
+    }
     return output.observed_width + 8 < video_resolution_width(output.video_resolution) ||
            output.observed_height + 8 < video_resolution_height(output.video_resolution);
 }

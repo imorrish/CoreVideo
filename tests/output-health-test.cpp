@@ -103,6 +103,14 @@ int main()
                        {participant(1)}, true, ZoomOutputHealthReason::Ok))
         return 1;
 
+    ZoomOutputInfo narrow_1080 = output();
+    narrow_1080.video_resolution = VideoResolution::P1080;
+    narrow_1080.observed_width = 1440;
+    narrow_1080.observed_height = 1080;
+    if (!expect_reason("1080-line non-16:9 feed is healthy", narrow_1080,
+                       {participant(1)}, true, ZoomOutputHealthReason::Ok))
+        return 1;
+
     ZoomOutputInfo below_1080 = output();
     below_1080.video_resolution = VideoResolution::P1080;
     below_1080.observed_width = 1280;
