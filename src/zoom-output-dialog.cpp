@@ -5,7 +5,6 @@
 #include "zoom-output-profile.h"
 #include <QAbstractItemView>
 #include <QApplication>
-#include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QHBoxLayout>
@@ -37,7 +36,7 @@ enum OutputColumns {
     ColumnDelivered,
     ColumnSdk,
     ColumnAudio,
-    ColumnIsolate,
+    ColumnAudioRole,
     ColumnCount
 };
 
@@ -323,6 +322,23 @@ static AssignmentMode assignment_mode_from_data(const QString &data,
     return AssignmentMode::Participant;
 }
 
+static QString audio_role_data_for_output(const ZoomOutputInfo &output)
+{
+    if (output.isolate_audio)
+        return QStringLiteral("isolate");
+    if (output.audience_audio)
+        return QStringLiteral("audience");
+    return QStringLiteral("mix");
+}
+
+static void audio_route_flags_from_data(const QString &data,
+                                        bool &isolate_audio,
+                                        bool &audience_audio)
+{
+    isolate_audio = data == QStringLiteral("isolate");
+    audience_audio = !isolate_audio && data == QStringLiteral("audience");
+}
+
 ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     : QWidget(parent)
 {
@@ -380,7 +396,7 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     m_table->setColumnCount(ColumnCount);
     m_table->setHorizontalHeaderLabels({
         "Preview", "Output", "Assignment", "Requested", "Delivered",
-        "SDK", "Audio", "Isolated audio"
+        "SDK", "Channels", "Audio role"
     });
     m_table->horizontalHeader()->setMinimumSectionSize(90);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnPreview,    QHeaderView::Fixed);
@@ -390,7 +406,7 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     m_table->horizontalHeader()->setSectionResizeMode(ColumnDelivered,  QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnSdk,        QHeaderView::Fixed);
     m_table->horizontalHeader()->setSectionResizeMode(ColumnAudio,      QHeaderView::Fixed);
-    m_table->horizontalHeader()->setSectionResizeMode(ColumnIsolate,    QHeaderView::Fixed);
+    m_table->horizontalHeader()->setSectionResizeMode(ColumnAudioRole,  QHeaderView::Fixed);
     m_table->setColumnWidth(ColumnPreview, 162);
     m_table->setColumnWidth(ColumnName, 240);
     m_table->setColumnWidth(ColumnAssignment, 300);
@@ -398,7 +414,7 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
     m_table->setColumnWidth(ColumnDelivered, 148);
     m_table->setColumnWidth(ColumnSdk, 180);
     m_table->setColumnWidth(ColumnAudio, 130);
-    m_table->setColumnWidth(ColumnIsolate, 138);
+    m_table->setColumnWidth(ColumnAudioRole, 148);
     m_table->verticalHeader()->setVisible(false);
     m_table->verticalHeader()->setDefaultSectionSize(112);
     m_table->setSelectionMode(QAbstractItemView::NoSelection);
@@ -591,11 +607,19 @@ void ZoomOutputDialog::refresh()
 
         m_table->setCellWidget(row, ColumnAudio, audio);
 
-        auto *isolate = new QCheckBox(m_table);
-        isolate->setChecked(output.isolate_audio);
-        isolate->setMinimumWidth(116);
-        isolate->setToolTip("Use the assigned participant's isolated audio instead of the meeting mix.");
-        m_table->setCellWidget(row, ColumnIsolate, isolate);
+        auto *audio_role = new QComboBox(m_table);
+        audio_role->setMinimumWidth(132);
+        audio_role->addItem("Mix", "mix");
+        audio_role->addItem("Isolated", "isolate");
+        audio_role->addItem("Audience", "audience");
+        audio_role->setToolTip(
+            "Mix uses the meeting mix. Isolated follows the assigned participant. "
+            "Audience follows the residual active speaker not already isolated.");
+        const int role_index =
+            audio_role->findData(audio_role_data_for_output(output));
+        if (role_index >= 0)
+            audio_role->setCurrentIndex(role_index);
+        m_table->setCellWidget(row, ColumnAudioRole, audio_role);
     }
 }
 
@@ -663,8 +687,8 @@ void ZoomOutputDialog::save_profile()
         auto *assignment = qobject_cast<QComboBox *>(m_table->cellWidget(row, ColumnAssignment));
         auto *resolution = qobject_cast<QComboBox *>(m_table->cellWidget(row, ColumnResolution));
         auto *audio      = qobject_cast<QComboBox *>(m_table->cellWidget(row, ColumnAudio));
-        auto *isolate    = qobject_cast<QCheckBox *>(m_table->cellWidget(row, ColumnIsolate));
-        if (!name_item || !assignment || !resolution || !audio || !isolate) continue;
+        auto *audio_role = qobject_cast<QComboBox *>(m_table->cellWidget(row, ColumnAudioRole));
+        if (!name_item || !assignment || !resolution || !audio || !audio_role) continue;
 
         ZoomOutputInfo o;
         o.source_name    = name_item->data(Qt::UserRole).toString().toStdString();
@@ -675,7 +699,9 @@ void ZoomOutputDialog::save_profile()
         o.active_speaker = (o.assignment == AssignmentMode::ActiveSpeaker);
         o.participant_id = participant_id;
         o.spotlight_slot = spotlight_slot;
-        o.isolate_audio  = isolate->isChecked();
+        audio_route_flags_from_data(audio_role->currentData().toString(),
+                                    o.isolate_audio,
+                                    o.audience_audio);
         o.audio_mode     = static_cast<AudioChannelMode>(audio->currentData().toInt());
         o.video_resolution =
             static_cast<VideoResolution>(resolution->currentData().toInt());
@@ -712,8 +738,8 @@ void ZoomOutputDialog::load_profile()
             auto *assignment = qobject_cast<QComboBox *>(m_table->cellWidget(row, ColumnAssignment));
             auto *resolution = qobject_cast<QComboBox *>(m_table->cellWidget(row, ColumnResolution));
             auto *audio      = qobject_cast<QComboBox *>(m_table->cellWidget(row, ColumnAudio));
-            auto *isolate    = qobject_cast<QCheckBox *>(m_table->cellWidget(row, ColumnIsolate));
-            if (!assignment || !resolution || !audio || !isolate) continue;
+            auto *audio_role = qobject_cast<QComboBox *>(m_table->cellWidget(row, ColumnAudioRole));
+            if (!assignment || !resolution || !audio || !audio_role) continue;
 
             const QString ad = assignment_data_for_output(o);
             const int idx = assignment->findData(ad);
@@ -722,7 +748,10 @@ void ZoomOutputDialog::load_profile()
                 static_cast<int>(o.video_resolution));
             if (res_idx >= 0) resolution->setCurrentIndex(res_idx);
             audio->setCurrentIndex(o.audio_mode == AudioChannelMode::Stereo ? 1 : 0);
-            isolate->setChecked(o.isolate_audio);
+            const int role_idx =
+                audio_role->findData(audio_role_data_for_output(o));
+            if (role_idx >= 0)
+                audio_role->setCurrentIndex(role_idx);
             break;
         }
     }
@@ -791,9 +820,9 @@ void ZoomOutputDialog::apply()
             m_table->cellWidget(row, ColumnResolution));
         auto *audio = qobject_cast<QComboBox *>(
             m_table->cellWidget(row, ColumnAudio));
-        auto *isolate = qobject_cast<QCheckBox *>(
-            m_table->cellWidget(row, ColumnIsolate));
-        if (!name_item || !assignment || !resolution || !audio || !isolate) continue;
+        auto *audio_role = qobject_cast<QComboBox *>(
+            m_table->cellWidget(row, ColumnAudioRole));
+        if (!name_item || !assignment || !resolution || !audio || !audio_role) continue;
 
         const std::string source_name =
             name_item->data(Qt::UserRole).toString().toStdString();
@@ -807,9 +836,15 @@ void ZoomOutputDialog::apply()
         const auto video_resolution = static_cast<VideoResolution>(
             resolution->currentData().toInt());
 
+        bool isolate_audio = false;
+        bool audience_audio = false;
+        audio_route_flags_from_data(audio_role->currentData().toString(),
+                                    isolate_audio,
+                                    audience_audio);
+
         ZoomOutputManager::instance().configure_output_ex(
             source_name, assignment_mode, participant_id, spotlight_slot, 0,
-            isolate->isChecked(), audio_mode, video_resolution);
+            isolate_audio, audio_mode, video_resolution, audience_audio);
     }
     refresh();
 }

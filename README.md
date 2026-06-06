@@ -331,7 +331,7 @@ Named profiles save the full source-to-participant mapping to JSON files under:
 obs-studio/plugin_config/obs-zoom-plugin/profiles/<name>.json
 ```
 
-Use the **Zoom Output Manager** dock, or **OBS -> Tools -> Zoom Output Manager** to focus it, to save, load, and delete profiles interactively. Code can call `ZoomOutputProfile::save() / load() / list() / remove()` directly.
+Use the **Zoom Output Manager** dock, or **OBS -> Tools -> Zoom Output Manager** to focus it, to save, load, and delete profiles interactively. Profiles preserve assignment mode, requested resolution, channel mode, and audio role (`Mix`, `Isolated`, or `Audience`). Code can call `ZoomOutputProfile::save() / load() / list() / remove()` directly.
 
 ## Architecture Overview
 

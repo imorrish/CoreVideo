@@ -97,6 +97,7 @@ bool save(const std::string &name, const std::vector<ZoomOutputInfo> &outputs)
         obj["failover_participant_id"] = static_cast<double>(o.failover_participant_id);
         obj["active_speaker"] = o.active_speaker;
         obj["isolate_audio"]  = o.isolate_audio;
+        obj["audience_audio"] = o.audience_audio;
         obj["audio_channels"] = o.audio_mode == AudioChannelMode::Stereo
                                 ? "stereo" : "mono";
         obj["video_resolution"] = static_cast<int>(o.video_resolution);
@@ -143,6 +144,8 @@ std::vector<ZoomOutputInfo> load(const std::string &name)
             o.spotlight_slot = 1;
         o.active_speaker = o.assignment == AssignmentMode::ActiveSpeaker;
         o.isolate_audio  = obj.value("isolate_audio").toBool(false);
+        o.audience_audio = !o.isolate_audio &&
+            obj.value("audience_audio").toBool(false);
         o.audio_mode     = obj.value("audio_channels").toString() == "stereo"
                            ? AudioChannelMode::Stereo : AudioChannelMode::Mono;
         const int resolution = obj.value("video_resolution")
