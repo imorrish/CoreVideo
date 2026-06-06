@@ -3,7 +3,13 @@ param(
     [string]$PackageRoot,
 
     [Parameter()]
-    [switch]$FullRuntime
+    [switch]$FullRuntime,
+
+    [Parameter()]
+    [string]$ExpectedOAuthClientId = $env:ZOOM_EMBED_OAUTH_CLIENT_ID,
+
+    [Parameter()]
+    [string]$ExpectedMeetingSdkPublicAppKey = $env:ZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY
 )
 
 $ErrorActionPreference = "Stop"
@@ -41,6 +47,32 @@ $required = @(
 foreach ($file in $required) {
     Test-RequiredFile $file
 }
+
+function Test-BinaryContainsText {
+    param(
+        [string]$RelativePath,
+        [string]$ExpectedText,
+        [string]$Description
+    )
+
+    if (-not $ExpectedText) { return }
+
+    $path = Join-Path $root $RelativePath
+    $bytes = [System.IO.File]::ReadAllBytes($path)
+    $haystack = [System.Text.Encoding]::ASCII.GetString($bytes)
+    if (-not $haystack.Contains($ExpectedText)) {
+        throw "Release package validation failed. $Description '$ExpectedText' was not found in $RelativePath. The package may have been built with stale Zoom app identity values."
+    }
+}
+
+Test-BinaryContainsText `
+    -RelativePath "obs-plugins\64bit\obs-zoom-plugin.dll" `
+    -ExpectedText $ExpectedOAuthClientId `
+    -Description "Expected embedded OAuth public client ID"
+Test-BinaryContainsText `
+    -RelativePath "obs-plugins\64bit\obs-zoom-plugin.dll" `
+    -ExpectedText $ExpectedMeetingSdkPublicAppKey `
+    -Description "Expected embedded Meeting SDK public app key"
 
 $ffmpegDlls = @(
     "avcodec-62.dll",

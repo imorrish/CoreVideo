@@ -62,6 +62,7 @@ if (-not $DistDir) { $DistDir = "dist" }
 if (-not $Generator) { $Generator = "NMake Makefiles" }
 if (-not $ZoomSdkDir) { $ZoomSdkDir = "third_party/zoom-sdk" }
 if (-not $ObsInstallPath) { $ObsInstallPath = "C:\Program Files\obs-studio" }
+$DefaultPublicClientId = "y6sIWSwiTZe1JygMx4C9EQ"
 if (-not $FfmpegRoot -and
     (Test-Path -LiteralPath "C:\ffmpeg\include\libavfilter\avfilter.h") -and
     (Test-Path -LiteralPath "C:\ffmpeg\lib\avfilter.lib") -and
@@ -74,6 +75,8 @@ if ($FfmpegRoot) {
 if (-not $OAuthClientId) { $OAuthClientId = $env:ZOOM_EMBED_OAUTH_CLIENT_ID }
 if (-not $OAuthAuthorizationUrl) { $OAuthAuthorizationUrl = $env:ZOOM_EMBED_OAUTH_AUTHORIZATION_URL }
 if (-not $MeetingSdkPublicAppKey) { $MeetingSdkPublicAppKey = $env:ZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY }
+if (-not $OAuthClientId) { $OAuthClientId = $DefaultPublicClientId }
+if (-not $MeetingSdkPublicAppKey) { $MeetingSdkPublicAppKey = $DefaultPublicClientId }
 
 function Resolve-RepoPath {
     param([string]$Path)
@@ -321,7 +324,11 @@ try {
     New-Item -ItemType Directory -Force -Path $installPath | Out-Null
     Invoke-NativeCommand cmake --install $resolvedBuildPath --config $Configuration --prefix $installPath
 
-    & (Join-Path $PSScriptRoot "Test-CoreVideoPackage.ps1") -PackageRoot $installPath -FullRuntime
+    & (Join-Path $PSScriptRoot "Test-CoreVideoPackage.ps1") `
+        -PackageRoot $installPath `
+        -FullRuntime `
+        -ExpectedOAuthClientId $OAuthClientId `
+        -ExpectedMeetingSdkPublicAppKey $MeetingSdkPublicAppKey
 
     New-Item -ItemType Directory -Force -Path $distPath | Out-Null
     if (Test-Path -LiteralPath $zipPath) {

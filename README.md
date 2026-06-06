@@ -164,11 +164,12 @@ Useful options:
 ```
 
 The script builds, installs into a staging folder, validates the plugin, OAuth
-callback helper, Qt/TLS files, locale data, sidecar templates/looks, Zoom SDK
-runtime files, and any bundled FFmpeg runtime, creates a ZIP under `dist/`,
-optionally creates the NSIS setup EXE, and optionally uploads both assets plus
-their `.sha256` files to the matching GitHub Release. Local `-Install` refuses
-to copy into OBS while `obs64.exe` is running, matching the installer guard.
+callback helper, Qt/TLS files, locale data, embedded public OAuth / Meeting SDK
+app identity, sidecar templates/looks, Zoom SDK runtime files, and any bundled
+FFmpeg runtime, creates a ZIP under `dist/`, optionally creates the NSIS setup
+EXE, and optionally uploads both assets plus their `.sha256` files to the
+matching GitHub Release. Local `-Install` refuses to copy into OBS while
+`obs64.exe` is running, matching the installer guard.
 
 ### OBS scene smoke test
 
