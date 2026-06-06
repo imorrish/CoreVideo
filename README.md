@@ -20,6 +20,7 @@ CoreVideo integrates the Zoom Meeting SDK into OBS - no screen capture or virtua
 
 Docs: **[Full Documentation & Architecture Diagrams ->](https://corevideo.iamfatness.us/documentation/)**
 Guide: **[Core Plugin Guide & Examples ->](https://corevideo.iamfatness.us/core-plugin/)**
+Operator Quickstart: **[Install, sign in, assign outputs, record ISO ->](docs/OPERATOR_QUICKSTART.md)**
 
 ---
 
@@ -491,6 +492,8 @@ CoreVideo/
 |-- data/locale/en-US.ini
 |-- docs/                                     # GitHub Pages documentation
 |   |-- index.html
+|   |-- OPERATOR_QUICKSTART.md                # End-user production workflow
+|   |-- RELEASE_CHECKLIST.md                  # Publisher release validation steps
 |   |-- ZOOM_MARKETPLACE_OAUTH.md             # OAuth setup guide
 |   `-- policies/                             # Security & privacy policy documents
 |-- engine/src/                               # ZoomObsEngine (owns ALL SDK access)
