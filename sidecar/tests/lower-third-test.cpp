@@ -71,6 +71,22 @@ int main(int argc, char **argv)
     if (ctl.participantSyncedOverlays(look, {p}).size() != 1)
         return fail("Clearing override should restore generated lower third");
 
+    look.slotAssignments.clear();
+    look.slotAssignments.append({0, -1000});
+    ParticipantInfo placeholder;
+    placeholder.id = -1000;
+    placeholder.name = "Placeholder 1";
+    placeholder.color = QColor("#1e6ae0");
+    placeholder.hasVideo = true;
+    const QVector<Overlay> placeholderOverlays =
+        ctl.participantSyncedOverlays(look, {placeholder});
+    if (placeholderOverlays.size() != 1 ||
+        placeholderOverlays[0].text1 != "Placeholder 1") {
+        return fail("Placeholder participants should exercise generated lower thirds");
+    }
+
+    look.slotAssignments.clear();
+    look.slotAssignments.append({0, 101});
     look.tileStyle.showNameTag = false;
     if (!ctl.participantSyncedOverlays(look, {p}).isEmpty())
         return fail("showNameTag=false should disable generated lower thirds");

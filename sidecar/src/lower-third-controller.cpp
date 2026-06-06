@@ -13,7 +13,7 @@ static QString participantInitialSubtitle(const ParticipantInfo &p)
 void LowerThirdController::setOverride(int participantId,
                                        const LowerThirdOverride &value)
 {
-    if (participantId <= 0) return;
+    if (participantId == 0) return;
     m_overrides.insert(participantId, value);
 }
 
@@ -37,7 +37,7 @@ QVector<Overlay> LowerThirdController::participantSyncedOverlays(
 
     for (const auto &slot : look.tmpl.slotList) {
         const int participantId = look.participantInSlot(slot.index);
-        if (participantId <= 0) continue;
+        if (participantId == 0) continue;
 
         auto it = std::find_if(participants.begin(), participants.end(),
             [participantId](const ParticipantInfo &p) {
