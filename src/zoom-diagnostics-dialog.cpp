@@ -580,6 +580,12 @@ void ZoomDiagnosticsDialog::refresh_now()
     refresh();
 }
 
+void ZoomDiagnosticsDialog::prepare_shutdown()
+{
+    if (m_timer)
+        m_timer->stop();
+}
+
 void ZoomDiagnosticsDialog::refresh()
 {
     const auto outputs = ZoomOutputManager::instance().outputs();

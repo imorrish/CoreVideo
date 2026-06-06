@@ -14,6 +14,7 @@ public:
     explicit ZoomOutputDialog(QWidget *parent = nullptr);
     ~ZoomOutputDialog() override;
     void refresh_now();
+    void prepare_shutdown();
 
 private:
     void refresh();

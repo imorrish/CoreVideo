@@ -45,6 +45,10 @@ static void shutdown_corevideo()
         g_dock->prepare_shutdown();
     if (g_iso_panel)
         g_iso_panel->prepare_shutdown();
+    if (g_output_panel)
+        g_output_panel->prepare_shutdown();
+    if (g_diagnostics_panel)
+        g_diagnostics_panel->prepare_shutdown();
     ZoomControlServer::instance().stop();
     ZoomOscServer::instance().stop();
     ZoomIsoRecorder::instance().stop();

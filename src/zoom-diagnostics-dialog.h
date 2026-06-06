@@ -10,6 +10,7 @@ class ZoomDiagnosticsDialog : public QWidget {
 public:
     explicit ZoomDiagnosticsDialog(QWidget *parent = nullptr);
     void refresh_now();
+    void prepare_shutdown();
 
 private:
     void refresh();

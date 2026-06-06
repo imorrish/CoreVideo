@@ -472,7 +472,13 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
 
 ZoomOutputDialog::~ZoomOutputDialog()
 {
-    m_alive->store(false, std::memory_order_release);
+    prepare_shutdown();
+}
+
+void ZoomOutputDialog::prepare_shutdown()
+{
+    if (m_alive)
+        m_alive->store(false, std::memory_order_release);
     ZoomEngineClient::instance().remove_roster_callback(this);
     ZoomOutputManager::instance().clear_all_preview_cbs();
 }
