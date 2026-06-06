@@ -990,6 +990,32 @@ sequenceDiagram
       <tr><td><strong>Screen Share</strong></td><td><code>AssignmentMode::ScreenShare</code></td><td>Subscribe to the active screen-share feed. Uses <code>subscribe_screenshare(uuid)</code> on the engine. The source shows a placeholder when no share is active.</td></tr>
     </table>
 
+    <h3>Screen Share Workflow</h3>
+    <p>
+      To capture slides, demos, or a shared desktop, add a
+      <strong>CoreVideo Screen Share</strong> source or set any
+      <strong>CoreVideo Participant</strong> source to
+      <strong>Assignment &gt; Active screen share</strong>. The source follows
+      Zoom's active share feed and shows a placeholder when no participant is
+      sharing.
+    </p>
+    <p>
+      The Zoom Output Manager assignment menu also includes
+      <strong>Screen share</strong>. When a share is active, the menu label
+      includes the sharing participant name. The TCP
+      <code>list_outputs</code> response for screen-share outputs includes the
+      current sharing participant ID and display name.
+    </p>
+    <pre><code>{
+  "assignment_mode": "screen_share",
+  "screen_share_available": true,
+  "screen_share_participant_id": 123456,
+  "screen_share_participant_name": "Alex Rivera",
+  "observed_width": 1920,
+  "observed_height": 1080,
+  "observed_fps": 30.0
+}</code></pre>
+
     <h3>Failover Participant</h3>
     <p>
       In <strong>Participant</strong> mode, a <code>failover_participant_id</code>

@@ -97,6 +97,29 @@ different assignment mode:
 Each output reports observed resolution and frame rate through the output
 manager and TCP `list_outputs` command.
 
+### Screen Share Workflow
+
+To capture slides, demos, or a shared desktop, add a **CoreVideo Screen Share**
+source or set any **CoreVideo Participant** source to **Assignment > Active
+screen share**. The source follows Zoom's active share feed and shows a
+placeholder when no participant is sharing.
+
+The Zoom Output Manager assignment menu also includes **Screen share**. When a
+share is active, the menu label includes the sharing participant name. The TCP
+`list_outputs` response for screen-share outputs includes:
+
+```json
+{
+  "assignment_mode": "screen_share",
+  "screen_share_available": true,
+  "screen_share_participant_id": 123456,
+  "screen_share_participant_name": "Alex Rivera",
+  "observed_width": 1920,
+  "observed_height": 1080,
+  "observed_fps": 30.0
+}
+```
+
 For a single directed speaker-follow output, add the dedicated **CoreVideo Active
 Speaker** OBS source. It follows the central Active Speaker Director and uses a
 two-slot handoff internally: the current participant remains visible while the

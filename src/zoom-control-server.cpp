@@ -201,6 +201,19 @@ void ZoomControlServer::on_new_connection()
 
 static QJsonObject output_to_json(const ZoomOutputInfo &o)
 {
+    const auto roster = ZoomEngineClient::instance().roster();
+    auto find_participant = [&roster](uint32_t participant_id) {
+        return std::find_if(roster.begin(), roster.end(),
+            [participant_id](const ParticipantInfo &participant) {
+                return participant.user_id == participant_id;
+            });
+    };
+    const auto sharing_participant = std::find_if(
+        roster.begin(), roster.end(),
+        [](const ParticipantInfo &participant) {
+            return participant.is_sharing_screen;
+        });
+
     QJsonObject obj;
     obj["source_uuid"]    = QString::fromStdString(o.source_uuid);
     obj["source"]         = QString::fromStdString(o.source_name);
@@ -225,6 +238,35 @@ static QJsonObject output_to_json(const ZoomOutputInfo &o)
         break;
     }
     obj["spotlight_slot"] = static_cast<double>(o.spotlight_slot);
+    if (o.assignment == AssignmentMode::ScreenShare) {
+        obj["screen_share_available"] = sharing_participant != roster.end();
+        obj["screen_share_participant_id"] = sharing_participant != roster.end()
+            ? static_cast<double>(sharing_participant->user_id)
+            : 0.0;
+        obj["screen_share_participant_name"] = sharing_participant != roster.end()
+            ? QString::fromStdString(sharing_participant->display_name)
+            : QString();
+    }
+    if (o.assignment == AssignmentMode::SpotlightIndex) {
+        const auto spotlight_owner = std::find_if(
+            roster.begin(), roster.end(),
+            [&o](const ParticipantInfo &participant) {
+                return participant.spotlight_index == o.spotlight_slot;
+            });
+        obj["spotlight_participant_id"] = spotlight_owner != roster.end()
+            ? static_cast<double>(spotlight_owner->user_id)
+            : 0.0;
+        obj["spotlight_participant_name"] = spotlight_owner != roster.end()
+            ? QString::fromStdString(spotlight_owner->display_name)
+            : QString();
+    }
+    if (o.assignment == AssignmentMode::Participant && o.participant_id != 0) {
+        const auto participant = find_participant(o.participant_id);
+        obj["participant_present"] = participant != roster.end();
+        obj["participant_name"] = participant != roster.end()
+            ? QString::fromStdString(participant->display_name)
+            : QString();
+    }
     obj["failover_participant_id"] =
         static_cast<double>(o.failover_participant_id);
     obj["isolate_audio"]  = o.isolate_audio;
@@ -273,6 +315,11 @@ static QJsonObject participant_to_json(const ParticipantInfo &p)
     obj["has_video"] = p.has_video;
     obj["is_talking"] = p.is_talking;
     obj["is_muted"] = p.is_muted;
+    obj["is_host"] = p.is_host;
+    obj["is_co_host"] = p.is_co_host;
+    obj["raised_hand"] = p.raised_hand;
+    obj["spotlight_index"] = static_cast<double>(p.spotlight_index);
+    obj["is_sharing_screen"] = p.is_sharing_screen;
     return obj;
 }
 
