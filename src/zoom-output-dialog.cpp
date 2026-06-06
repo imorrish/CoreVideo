@@ -759,8 +759,12 @@ void ZoomOutputDialog::load_profile()
         return;
     }
 
+    int matched = 0;
+    int unmatched = 0;
+    QStringList missing_sources;
     // Apply each entry in the profile to the matching output row
     for (const auto &o : profile) {
+        bool found = false;
         for (int row = 0; row < m_table->rowCount(); ++row) {
             auto *name_item = m_table->item(row, ColumnName);
             if (!name_item) continue;
@@ -784,9 +788,25 @@ void ZoomOutputDialog::load_profile()
                 audio_role->findData(audio_role_data_for_output(o));
             if (role_idx >= 0)
                 audio_role->setCurrentIndex(role_idx);
+            found = true;
+            ++matched;
             break;
         }
+        if (!found) {
+            ++unmatched;
+            missing_sources << QString::fromStdString(o.source_name);
+        }
     }
+
+    QString message = QString("Loaded profile '%1'.\n\nMatched outputs: %2")
+        .arg(QString::fromStdString(name))
+        .arg(matched);
+    if (unmatched > 0) {
+        message += QString("\nMissing current outputs: %1").arg(unmatched);
+        message += QStringLiteral("\n\nProfile entries not found in this OBS scene/source set:\n");
+        message += missing_sources.join(QStringLiteral("\n"));
+    }
+    QMessageBox::information(this, "Load Profile", message);
 }
 
 void ZoomOutputDialog::delete_profile()

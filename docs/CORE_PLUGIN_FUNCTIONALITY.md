@@ -45,6 +45,8 @@ participants, active speaker, screen share, and Spotlight 1-8 so an eight-feed
 show can be routed without opening individual source properties.
 In `v0.1.18` it is a persistent OBS dock, so operators can keep assignments,
 live previews, and feed health visible while working in normal OBS scenes.
+Profile loading reports matched outputs and any saved source names that are not
+present in the current OBS scene/source set before the operator clicks Apply.
 
 Open the **Zoom Diagnostics** dock, or use **Tools > Zoom Diagnostics** to focus it,
 during a live session to see requested versus
