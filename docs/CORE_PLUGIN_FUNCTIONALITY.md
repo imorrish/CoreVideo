@@ -56,6 +56,9 @@ write a redacted troubleshooting bundle with engine status, output health,
 recent debug events, plugin settings with tokens removed, runtime/package
 validation, and the latest OBS log when available. On Windows, CoreVideo also
 creates a `.zip` next to the support bundle folder when PowerShell is available.
+OBS log data is written as a recent redacted excerpt; OAuth codes, access
+tokens, refresh tokens, ZAK/JWT values, passcodes, client secrets, and
+authorization headers are removed before the bundle is written.
 
 ![CoreVideo Zoom Participant source properties](images/corevideo-source-properties.svg)
 

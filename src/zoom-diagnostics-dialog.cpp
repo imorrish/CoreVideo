@@ -20,12 +20,14 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QStringList>
 #include <QTableWidget>
 #include <QTextStream>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QVector>
 #include <obs-module.h>
 #include <util/platform.h>
 #include <algorithm>
@@ -247,6 +249,45 @@ static QString redacted_presence(const std::string &value)
     return value.empty()
         ? QStringLiteral("")
         : QStringLiteral("[redacted set len=%1]").arg(value.size());
+}
+
+static QString redact_support_text(QString text)
+{
+    const QVector<QPair<QRegularExpression, QString>> patterns = {
+        {QRegularExpression(R"rx((Authorization:\s*(?:Bearer|Basic)\s+)[^\s\r\n]+)rx",
+                            QRegularExpression::CaseInsensitiveOption),
+         QStringLiteral("\\1[redacted]")},
+        {QRegularExpression(R"rx(((?:access_token|refresh_token|id_token|zak|jwt|token|code|client_secret|passcode|pwd)=)[^&\s\r\n]+)rx",
+                            QRegularExpression::CaseInsensitiveOption),
+         QStringLiteral("\\1[redacted]")},
+        {QRegularExpression(R"rx(("(?:access_token|refresh_token|id_token|zak|jwt|token|code|client_secret|passcode|pwd)"\s*:\s*")[^"]+("))rx",
+                            QRegularExpression::CaseInsensitiveOption),
+         QStringLiteral("\\1[redacted]\\2")},
+        {QRegularExpression(R"rx(((?:access_token|refresh_token|id_token|zak|jwt|token|code|client_secret|passcode|pwd)\s*[:=]\s*)[A-Za-z0-9._~+/=-]{12,})rx",
+                            QRegularExpression::CaseInsensitiveOption),
+         QStringLiteral("\\1[redacted]")},
+    };
+    for (const auto &pattern : patterns)
+        text.replace(pattern.first, pattern.second);
+    return text;
+}
+
+static QString redacted_obs_log_excerpt(const QString &path, QStringList &warnings)
+{
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        warnings << QStringLiteral("Could not read OBS log from %1").arg(path);
+        return {};
+    }
+
+    QStringList lines;
+    QTextStream in(&file);
+    while (!in.atEnd()) {
+        lines << in.readLine();
+        if (lines.size() > 500)
+            lines.removeFirst();
+    }
+    return redact_support_text(lines.join(QLatin1Char('\n'))) + QLatin1Char('\n');
 }
 
 static QJsonObject reconnect_policy_json(const ZoomReconnectPolicy &policy)
@@ -783,10 +824,14 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     const QString copied_log_name = obs_log.isEmpty()
         ? QString{}
         : QStringLiteral("obs-latest.log");
-    if (!obs_log.isEmpty())
-        if (!QFile::copy(obs_log, bundle.absoluteFilePath(copied_log_name)))
-            warnings << QStringLiteral("Could not copy OBS log from %1")
+    if (!obs_log.isEmpty()) {
+        const QString excerpt = redacted_obs_log_excerpt(obs_log, warnings);
+        if (!excerpt.isEmpty() &&
+            !write_text_file(bundle.absoluteFilePath(copied_log_name), excerpt)) {
+            warnings << QStringLiteral("Could not write redacted OBS log excerpt from %1")
                 .arg(obs_log);
+        }
+    }
 
     const QStringList classifications =
         failure_classifications(settings, runtime_manifest, outputs);
