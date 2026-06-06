@@ -326,7 +326,8 @@ Each active source segment writes one `*.mp4` video file and one matching `*.wav
 | `/zoom/assign_output` | `,si[i]` | source, participant_id, [active_speaker] |
 | `/zoom/assign_output/active_speaker` | `,s` | source |
 | `/zoom/isolate_audio` | `,si` | source, 0\|1 |
-| `/zoom/iso/start` | `[,s]` | optional output directory |
+| `/zoom/iso/start` | `[,ssi]` | optional output directory, video encoder, record-program flag |
+| `/zoom/iso/status` | - | Reply with active count, completed count, requested/actual encoder, fallback, hardware, disk warning, and recorder warning |
 | `/zoom/iso/stop` | - | Stop ISO recording |
 
 `/zoom/status` also replies with `/zoom/status/screen_share ,is` containing

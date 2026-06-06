@@ -652,7 +652,7 @@ void ZoomOscServer::dispatch(const QString &address,
         return;
     }
 
-    // /zoom/iso/start [,s output_dir]
+    // /zoom/iso/start [,ssi output_dir video_encoder record_program]
     if (address == "/zoom/iso/start") {
         ZoomIsoRecordConfig cfg;
         const ZoomPluginSettings settings = ZoomPluginSettings::load();
@@ -661,6 +661,10 @@ void ZoomOscServer::dispatch(const QString &address,
         cfg.record_program = settings.iso_record_program;
         if (!args.empty() && args[0].type == OscArg::String)
             cfg.output_dir = args[0].s;
+        if (args.size() >= 2 && args[1].type == OscArg::String)
+            cfg.video_encoder = args[1].s;
+        if (args.size() >= 3 && args[2].type == OscArg::Int32)
+            cfg.record_program = args[2].i != 0;
         std::string error;
         if (!ZoomIsoRecorder::instance().start(cfg, &error)) {
             blog(LOG_WARNING, "[obs-zoom-plugin] OSC /zoom/iso/start failed: %s",
@@ -669,6 +673,35 @@ void ZoomOscServer::dispatch(const QString &address,
         }
         for (const auto &o : ZoomOutputManager::instance().outputs())
             ZoomIsoRecorder::instance().on_output_updated(o);
+        return;
+    }
+
+    // /zoom/iso/status
+    if (address == "/zoom/iso/status") {
+        const QJsonObject recorder =
+            ZoomIsoRecorder::instance().status_overview();
+        std::vector<OscArg> reply(9);
+        reply[0].type = OscArg::Int32;
+        reply[0].i = recorder.value("active").toBool() ? 1 : 0;
+        reply[1].type = OscArg::Int32;
+        reply[1].i = recorder.value("session_count").toInt();
+        reply[2].type = OscArg::Int32;
+        reply[2].i = recorder.value("completed_session_count").toInt();
+        reply[3].type = OscArg::String;
+        reply[3].s = recorder.value("requested_video_encoder").toString().toStdString();
+        reply[4].type = OscArg::String;
+        reply[4].s = recorder.value("video_encoder").toString().toStdString();
+        reply[5].type = OscArg::Int32;
+        reply[5].i = recorder.value("encoder_fallback").toBool() ? 1 : 0;
+        reply[6].type = OscArg::Int32;
+        reply[6].i = recorder.value("hardware_encoder").toBool() ? 1 : 0;
+        reply[7].type = OscArg::Int32;
+        reply[7].i = recorder.value("disk_warning").toBool() ? 1 : 0;
+        reply[8].type = OscArg::String;
+        reply[8].s = recorder.value("warning").toString().toStdString();
+        m_socket->writeDatagram(build_osc("/zoom/iso/status",
+                                          "iiissiiis", reply),
+                                sender, sender_port);
         return;
     }
 

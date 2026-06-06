@@ -264,7 +264,8 @@ OSC equivalents:
 
 | Address | Type tags | Action |
 |---|---|---|
-| `/zoom/iso/start` | optional `,s` | Start ISO recording, optional output directory |
+| `/zoom/iso/start` | optional `,ssi` | Start ISO recording with optional output directory, video encoder, and record-program flag |
+| `/zoom/iso/status` | none | Reply with active sessions, completed sessions, requested/actual encoder, fallback, hardware, disk warning, and recorder warning |
 | `/zoom/iso/stop` | none | Stop ISO recording |
 
 Output files are written as:
@@ -423,7 +424,8 @@ Set isolated audio:
 Start and stop ISO recording:
 
 ```text
-/zoom/iso/start "C:/Recordings/CoreVideo"
+/zoom/iso/start "C:/Recordings/CoreVideo" "h264_nvenc" 1
+/zoom/iso/status
 /zoom/iso/stop
 ```
 
