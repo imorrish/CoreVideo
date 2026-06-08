@@ -88,6 +88,17 @@ static QString duration_text_from_seconds(qint64 seconds)
     return QString("%1m").arg(minutes);
 }
 
+static QString age_text(double age_ms)
+{
+    if (age_ms < 0.0)
+        return QStringLiteral("never");
+    if (age_ms < 1000.0)
+        return QString("%1 ms").arg(static_cast<int>(age_ms));
+    return QString("%1.%2s")
+        .arg(static_cast<int>(age_ms) / 1000)
+        .arg((static_cast<int>(age_ms) / 100) % 10);
+}
+
 static QStorageInfo storage_for_output_dir(const QString &path)
 {
     QFileInfo info(effective_output_dir(path));
@@ -541,17 +552,24 @@ void ZoomIsoPanel::refresh_status()
         const bool completed = s.value("completed").toBool();
         const QString ffmpeg_error = s.value("ffmpeg_error").toString();
         const QString ffmpeg_output = s.value("ffmpeg_output_tail").toString();
+        const QString session_health = s.value("session_health").toString();
         const int video_frames = s.value("video_frames").toInt();
         const int audio_chunks = s.value("audio_chunks").toInt();
+        const double last_video_age_ms =
+            s.value("last_video_age_ms").toDouble(-1.0);
+        const double last_audio_age_ms =
+            s.value("last_audio_age_ms").toDouble(-1.0);
         QString status = completed
             ? QStringLiteral("Completed")
             : (ffmpeg_running ? QStringLiteral("Recording") : QStringLiteral("Encoder stopped"));
         if (!ffmpeg_error.isEmpty())
             status = QStringLiteral("Encoder error");
         else if (video_frames == 0)
-            status = QStringLiteral("Waiting for video");
+            status = QString("Waiting for video (%1)")
+                .arg(age_text(static_cast<double>(elapsed_ms)));
         else if (!completed && audio_chunks == 0)
-            status += QStringLiteral(" / no audio yet");
+            status += QString(" / no audio (%1)")
+                .arg(age_text(static_cast<double>(elapsed_ms)));
         QString participant = s.value("display_name").toString();
         const int participant_id =
             static_cast<int>(s.value("resolved_participant_id").toDouble());
@@ -563,12 +581,20 @@ void ZoomIsoPanel::refresh_status()
         m_sessions->setItem(row, 0, item(s.value("source").toString()));
         m_sessions->setItem(row, 1, item(participant));
         auto *status_item = item(status);
+        QString tooltip = QString("Health: %1\nLast video: %2\nLast audio: %3")
+            .arg(session_health.isEmpty()
+                    ? QStringLiteral("unknown")
+                    : session_health,
+                 age_text(last_video_age_ms),
+                 age_text(last_audio_age_ms));
         if (!ffmpeg_error.isEmpty()) {
-            QString tooltip = ffmpeg_error;
+            tooltip += QString("\n\nFFmpeg error:\n%1").arg(ffmpeg_error);
             if (!ffmpeg_output.isEmpty())
                 tooltip += QString("\n\nFFmpeg output:\n%1").arg(ffmpeg_output);
-            status_item->setToolTip(tooltip);
+        } else if (!ffmpeg_output.isEmpty()) {
+            tooltip += QString("\n\nFFmpeg output:\n%1").arg(ffmpeg_output);
         }
+        status_item->setToolTip(tooltip);
         if (completed)
             status_item->setForeground(QColor("#66d989"));
         else if (!ffmpeg_running || video_frames == 0)

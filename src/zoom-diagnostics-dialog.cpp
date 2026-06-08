@@ -536,6 +536,17 @@ static QJsonObject iso_capacity_summary_json(
     return obj;
 }
 
+static QJsonObject iso_session_health_counts_json(const QJsonArray &sessions)
+{
+    QJsonObject counts;
+    for (const QJsonValue &value : sessions) {
+        const QString health = value.toObject()
+            .value("session_health").toString(QStringLiteral("unknown"));
+        counts[health] = counts.value(health).toInt() + 1;
+    }
+    return counts;
+}
+
 static QJsonObject participant_json(const ParticipantInfo &participant)
 {
     QJsonObject obj;
@@ -720,6 +731,27 @@ static QStringList failure_classifications(const ZoomPluginSettings &settings,
         });
     if (iso_encoder_error)
         classes << QStringLiteral("iso_encoder_error");
+
+    if (std::any_of(iso_sessions.begin(), iso_sessions.end(), [](const QJsonValue &value) {
+            return value.toObject().value("session_health").toString() ==
+                QStringLiteral("encoder_stopped");
+        })) {
+        classes << QStringLiteral("iso_encoder_stopped");
+    }
+
+    if (std::any_of(iso_sessions.begin(), iso_sessions.end(), [](const QJsonValue &value) {
+            return value.toObject().value("session_health").toString() ==
+                QStringLiteral("waiting_for_video");
+        })) {
+        classes << QStringLiteral("iso_waiting_for_video");
+    }
+
+    if (std::any_of(iso_sessions.begin(), iso_sessions.end(), [](const QJsonValue &value) {
+            return value.toObject().value("session_health").toString() ==
+                QStringLiteral("no_audio_yet");
+        })) {
+        classes << QStringLiteral("iso_no_audio_yet");
+    }
 
     if (iso_recorder.value("disk_warning").toBool())
         classes << QStringLiteral("iso_disk_warning");
@@ -944,6 +976,8 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         output_action_counts_json(outputs);
     const QJsonObject iso_capacity =
         iso_capacity_summary_json(outputs, iso_recorder);
+    const QJsonObject iso_session_health_counts =
+        iso_session_health_counts_json(iso_sessions);
     const QDateTime now = QDateTime::currentDateTime();
     const QString stamp = now.toString("yyyyMMdd-HHmmss");
     QStringList warnings;
@@ -1028,6 +1062,7 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     engine_status["iso_completed_session_count"] =
         iso_recorder.value("completed_session_count").toInt();
     engine_status["iso_capacity"] = iso_capacity;
+    engine_status["iso_session_health_counts"] = iso_session_health_counts;
     const int unhealthy_outputs = static_cast<int>(std::count_if(
         outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
             return output.health_reason != ZoomOutputHealthReason::Ok;
@@ -1069,6 +1104,7 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     summary["recent_engine_events"] = event_array;
     summary["iso_recorder"] = iso_recorder;
     summary["iso_capacity"] = iso_capacity;
+    summary["iso_session_health_counts"] = iso_session_health_counts;
     summary["iso_sessions"] = iso_sessions;
 
     if (!write_json_file(bundle.absoluteFilePath("summary.json"), summary) ||
@@ -1081,6 +1117,7 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         !write_json_file(bundle.absoluteFilePath("iso-recorder.json"),
                          QJsonObject{{"recorder", iso_recorder},
                                      {"capacity", iso_capacity},
+                                     {"session_health_counts", iso_session_health_counts},
                                      {"sessions", iso_sessions}})) {
         QMessageBox::warning(this, "Create Support Bundle",
             QString("Could not write support bundle JSON files in:\n%1")
@@ -1200,6 +1237,16 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     }
     if (iso_capacity.value("hardware_encoder_session_pressure").toBool())
         out << "- Capacity warning: hardware encoder session pressure likely\n";
+    out << "- Session health:";
+    if (iso_session_health_counts.isEmpty()) {
+        out << " none\n";
+    } else {
+        for (auto it = iso_session_health_counts.begin();
+             it != iso_session_health_counts.end(); ++it) {
+            out << " " << it.key() << "=" << it.value().toInt();
+        }
+        out << "\n";
+    }
     out << "- Sessions: active "
         << iso_recorder.value("session_count").toInt()
         << ", completed "
@@ -1223,6 +1270,7 @@ void ZoomDiagnosticsDialog::export_diagnostics()
             << " | frames " << session.value("video_frames").toInt()
             << " | audio chunks " << session.value("audio_chunks").toInt()
             << " | encoder " << session.value("video_encoder").toString()
+            << " | health " << session.value("session_health").toString()
             << " | video " << session.value("video_path").toString()
             << " | audio " << session.value("audio_path").toString()
             << "\n";

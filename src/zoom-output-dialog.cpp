@@ -506,12 +506,24 @@ ZoomOutputDialog::ZoomOutputDialog(QWidget *parent)
 
     connect(refresh_button, &QPushButton::clicked, this, [this]() { refresh(); });
     connect(recover_button, &QPushButton::clicked, this, [this]() {
-        ZoomOutputManager::instance().recover_stale_sources(true);
+        const uint32_t recovered =
+            ZoomOutputManager::instance().recover_stale_sources(true);
         refresh();
+        QMessageBox::information(
+            this, "Recover Stale Feeds",
+            QString("Recovery requested for %1 output%2.")
+                .arg(recovered)
+                .arg(recovered == 1 ? "" : "s"));
     });
     connect(quality_button, &QPushButton::clicked, this, [this]() {
-        ZoomOutputManager::instance().upgrade_low_quality_sources(true);
+        const uint32_t upgraded =
+            ZoomOutputManager::instance().upgrade_low_quality_sources(true);
         refresh();
+        QMessageBox::information(
+            this, "Retry Quality Upgrade",
+            QString("Quality upgrade requested for %1 output%2.")
+                .arg(upgraded)
+                .arg(upgraded == 1 ? "" : "s"));
     });
     connect(buttons->button(QDialogButtonBox::Apply), &QPushButton::clicked,
             this, [this]() { apply(); });

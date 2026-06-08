@@ -475,8 +475,9 @@ QJsonObject ZoomIsoRecorder::session_status_json_locked(Session &s,
     obj["last_audio_age_ms"] = s.last_audio_ns > 0 && now_ns >= s.last_audio_ns
         ? static_cast<double>((now_ns - s.last_audio_ns) / 1000000ULL)
         : -1.0;
-    obj["ffmpeg_running"] =
+    const bool ffmpeg_running =
         !completed && s.ffmpeg && s.ffmpeg->state() == QProcess::Running;
+    obj["ffmpeg_running"] = ffmpeg_running;
     obj["ffmpeg_error"] = s.ffmpeg_error;
     obj["ffmpeg_exit_code"] = s.ffmpeg_exit_code;
     obj["ffmpeg_exit_status"] = s.ffmpeg_exit_status;
@@ -485,6 +486,19 @@ QJsonObject ZoomIsoRecorder::session_status_json_locked(Session &s,
         QString::fromStdString(s.requested_video_encoder);
     obj["video_encoder"] = QString::fromStdString(s.video_encoder);
     obj["encoder_fallback"] = s.encoder_fallback;
+    QString session_health = QStringLiteral("recording");
+    if (completed) {
+        session_health = QStringLiteral("completed");
+    } else if (!s.ffmpeg_error.isEmpty()) {
+        session_health = QStringLiteral("encoder_error");
+    } else if (!ffmpeg_running) {
+        session_health = QStringLiteral("encoder_stopped");
+    } else if (s.video_frames == 0) {
+        session_health = QStringLiteral("waiting_for_video");
+    } else if (s.audio_chunks == 0) {
+        session_health = QStringLiteral("no_audio_yet");
+    }
+    obj["session_health"] = session_health;
     obj["video_bytes"] = QFileInfo(s.video_path).exists()
         ? static_cast<double>(QFileInfo(s.video_path).size())
         : 0.0;
