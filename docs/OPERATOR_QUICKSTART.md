@@ -55,6 +55,8 @@ changing settings. The bundle redacts tokens and includes OBS/engine/ISO status.
    - Resolution/FPS show what Zoom is actually delivering.
    - A warning marker means the observed feed does not match the requested
      output or is stale.
+   - Active-speaker, spotlight, and screen-share assignments show dedicated
+     warnings when no eligible routed source is available.
 
 CoreVideo keeps OBS sources at a stable canvas size and lets OBS scale lower
 quality feeds instead of changing source geometry during a meeting.

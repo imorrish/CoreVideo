@@ -153,6 +153,39 @@ int main()
                        ZoomOutputHealthReason::Ok))
         return 1;
 
+    ZoomOutputInfo active;
+    active.assignment = AssignmentMode::ActiveSpeaker;
+    active.observed_width = 0;
+    active.observed_height = 0;
+    if (!expect_reason("active speaker without video speaker", active,
+                       {participant(1, true)}, true,
+                       ZoomOutputHealthReason::ActiveSpeakerUnavailable))
+        return 1;
+
+    ParticipantInfo talking = participant(2, true);
+    talking.is_talking = true;
+    ZoomOutputInfo active_waiting = active;
+    if (!expect_reason("active speaker with talking video participant waits for frame",
+                       active_waiting, {talking}, true,
+                       ZoomOutputHealthReason::WaitingForFirstFrame))
+        return 1;
+
+    ZoomOutputInfo spotlight;
+    spotlight.assignment = AssignmentMode::SpotlightIndex;
+    spotlight.spotlight_slot = 3;
+    spotlight.observed_width = 1920;
+    spotlight.observed_height = 1080;
+    if (!expect_reason("spotlight slot unavailable", spotlight,
+                       {participant(1)}, true,
+                       ZoomOutputHealthReason::SpotlightUnavailable))
+        return 1;
+
+    ParticipantInfo spotlighted = participant(3, true);
+    spotlighted.spotlight_index = 3;
+    if (!expect_reason("spotlight slot available", spotlight,
+                       {spotlighted}, true, ZoomOutputHealthReason::Ok))
+        return 1;
+
     // Combination: raw media inactive takes precedence over everything
     ZoomOutputInfo bad;
     bad.assignment = AssignmentMode::Participant;

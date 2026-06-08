@@ -568,6 +568,18 @@ static QStringList failure_classifications(const ZoomPluginSettings &settings,
         classes << QStringLiteral("duplicate_assignment");
     }
 
+    if (std::any_of(outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
+            return output.health_reason == ZoomOutputHealthReason::ActiveSpeakerUnavailable;
+        })) {
+        classes << QStringLiteral("active_speaker_unavailable");
+    }
+
+    if (std::any_of(outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
+            return output.health_reason == ZoomOutputHealthReason::SpotlightUnavailable;
+        })) {
+        classes << QStringLiteral("spotlight_unavailable");
+    }
+
     const bool iso_active = iso_recorder.value("active").toBool();
     if (iso_active && iso_sessions.isEmpty())
         classes << QStringLiteral("iso_no_sessions");

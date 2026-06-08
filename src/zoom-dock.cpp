@@ -264,6 +264,10 @@ static QString signal_label(const ZoomOutputInfo &output)
         return QStringLiteral("Video off");
     if (output.health_reason == ZoomOutputHealthReason::ScreenShareUnavailable)
         return QStringLiteral("No screen\nshare");
+    if (output.health_reason == ZoomOutputHealthReason::ActiveSpeakerUnavailable)
+        return QStringLiteral("No active\nvideo speaker");
+    if (output.health_reason == ZoomOutputHealthReason::SpotlightUnavailable)
+        return QString("Spotlight %1\nunavailable").arg(output.spotlight_slot);
     if (output.observed_width == 0 || output.observed_height == 0)
         return QStringLiteral("Waiting");
     if (output.video_stale)
@@ -298,6 +302,11 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
         return QStringLiteral("The assigned participant is present, but Zoom reports their video is off.");
     if (output.health_reason == ZoomOutputHealthReason::ScreenShareUnavailable)
         return QStringLiteral("This output is assigned to screen share, but no participant is currently sharing.");
+    if (output.health_reason == ZoomOutputHealthReason::ActiveSpeakerUnavailable)
+        return QStringLiteral("This output is assigned to active speaker, but no participant with video is currently talking.");
+    if (output.health_reason == ZoomOutputHealthReason::SpotlightUnavailable)
+        return QString("This output is assigned to spotlight slot %1, but no current participant owns that slot.")
+            .arg(output.spotlight_slot);
     if (output.observed_width == 0 || output.observed_height == 0)
         return output.subscribed_age_ms > 0
             ? QString("No video frame has been received for this output yet. CoreVideo has been waiting %1 ms and will retry automatically if the feed does not arrive.")

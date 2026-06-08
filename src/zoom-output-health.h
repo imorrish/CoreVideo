@@ -32,6 +32,11 @@ inline void apply_output_health(std::vector<ZoomOutputInfo> &outputs,
         [](const ParticipantInfo &participant) {
             return participant.is_sharing_screen;
         });
+    const bool active_video_speaker_available = std::any_of(
+        roster.begin(), roster.end(),
+        [](const ParticipantInfo &participant) {
+            return participant.is_talking && participant.has_video;
+        });
 
     auto find_participant = [&roster](uint32_t participant_id) {
         return std::find_if(roster.begin(), roster.end(),
@@ -55,6 +60,22 @@ inline void apply_output_health(std::vector<ZoomOutputInfo> &outputs,
         } else if (output.assignment == AssignmentMode::ScreenShare &&
                    !screen_share_available) {
             output.health_reason = ZoomOutputHealthReason::ScreenShareUnavailable;
+        } else if (output.assignment == AssignmentMode::ActiveSpeaker &&
+                   output.participant_id == 0 &&
+                   !active_video_speaker_available) {
+            output.health_reason = ZoomOutputHealthReason::ActiveSpeakerUnavailable;
+        } else if (output.assignment == AssignmentMode::SpotlightIndex &&
+                   output.spotlight_slot > 0) {
+            const auto spotlight_it = std::find_if(
+                roster.begin(), roster.end(),
+                [&output](const ParticipantInfo &participant) {
+                    return participant.spotlight_index == output.spotlight_slot;
+                });
+            if (spotlight_it == roster.end()) {
+                output.health_reason = ZoomOutputHealthReason::SpotlightUnavailable;
+            } else if (!spotlight_it->has_video) {
+                output.health_reason = ZoomOutputHealthReason::ParticipantVideoOff;
+            }
         } else if (output.assignment == AssignmentMode::Participant &&
                    output.participant_id != 0) {
             const auto participant_it = find_participant(output.participant_id);

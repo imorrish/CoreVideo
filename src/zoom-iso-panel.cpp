@@ -312,6 +312,11 @@ void ZoomIsoPanel::prepare_shutdown()
         m_refresh_timer->stop();
 }
 
+void ZoomIsoPanel::refresh_now()
+{
+    refresh_status();
+}
+
 void ZoomIsoPanel::browse_output_dir()
 {
     const QString dir = QFileDialog::getExistingDirectory(

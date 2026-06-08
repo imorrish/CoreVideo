@@ -18,6 +18,8 @@ enum class ZoomOutputHealthReason {
     ZoomDeliveredLowerResolution,
     DuplicateAssignment,
     ScreenShareUnavailable,
+    ActiveSpeakerUnavailable,
+    SpotlightUnavailable,
 };
 
 struct ZoomOutputInfo {
@@ -66,6 +68,8 @@ inline const char *output_health_reason_id(ZoomOutputHealthReason reason)
     case ZoomOutputHealthReason::ZoomDeliveredLowerResolution: return "zoom_delivered_lower_resolution";
     case ZoomOutputHealthReason::DuplicateAssignment: return "duplicate_assignment";
     case ZoomOutputHealthReason::ScreenShareUnavailable: return "screen_share_unavailable";
+    case ZoomOutputHealthReason::ActiveSpeakerUnavailable: return "active_speaker_unavailable";
+    case ZoomOutputHealthReason::SpotlightUnavailable: return "spotlight_unavailable";
     }
     return "unknown";
 }
@@ -82,6 +86,8 @@ inline const char *output_health_reason_label(ZoomOutputHealthReason reason)
     case ZoomOutputHealthReason::ZoomDeliveredLowerResolution: return "Zoom delivered lower resolution";
     case ZoomOutputHealthReason::DuplicateAssignment: return "Duplicate assignment";
     case ZoomOutputHealthReason::ScreenShareUnavailable: return "Screen share unavailable";
+    case ZoomOutputHealthReason::ActiveSpeakerUnavailable: return "Active speaker unavailable";
+    case ZoomOutputHealthReason::SpotlightUnavailable: return "Spotlight slot unavailable";
     }
     return "Unknown";
 }

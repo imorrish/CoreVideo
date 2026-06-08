@@ -264,6 +264,8 @@ static ZoomIsoPanel *ensure_iso_panel()
 static void show_iso_panel()
 {
     ZoomIsoPanel *panel = ensure_iso_panel();
+    if (panel)
+        panel->refresh_now();
     show_registered_dock("ZoomIsoRecorderDock", "Zoom ISO Recorder", panel,
                          g_iso_dock_host);
 }

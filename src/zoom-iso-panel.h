@@ -16,6 +16,7 @@ public:
     explicit ZoomIsoPanel(QWidget *parent = nullptr);
     ~ZoomIsoPanel() override;
     void prepare_shutdown();
+    void refresh_now();
 
 private:
     void browse_output_dir();

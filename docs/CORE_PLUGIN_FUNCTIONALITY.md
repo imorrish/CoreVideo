@@ -43,6 +43,9 @@ frame rate, assignment mode, screen-share/spotlight roster markers, and audio
 routing information for each output. The assignment menu exposes fixed
 participants, active speaker, screen share, and Spotlight 1-8 so an eight-feed
 show can be routed without opening individual source properties.
+Active-speaker, spotlight, and screen-share routing gaps are reported as
+specific health states, so operators can tell the difference between "waiting
+for the next directed speaker" and a stale or missing video feed.
 In `v0.1.18` it is a persistent OBS dock, so operators can keep assignments,
 live previews, and feed health visible while working in normal OBS scenes.
 Profile loading reports matched outputs and any saved source names that are not
