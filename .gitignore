@@ -2,6 +2,8 @@ build/
 build-*/
 build_*/
 install-local-release*/
+install-package-validation/
+artifacts/package-validation/
 dist/
 .cache/
 .wrangler/
