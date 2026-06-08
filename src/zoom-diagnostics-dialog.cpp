@@ -406,6 +406,18 @@ static QJsonObject output_json(const ZoomOutputInfo &output)
     return obj;
 }
 
+static QJsonObject output_health_counts_json(
+    const std::vector<ZoomOutputInfo> &outputs)
+{
+    QJsonObject counts;
+    for (const auto &output : outputs) {
+        const QString key =
+            QString::fromUtf8(output_health_reason_id(output.health_reason));
+        counts[key] = counts.value(key).toInt() + 1;
+    }
+    return counts;
+}
+
 static QJsonObject participant_json(const ParticipantInfo &participant)
 {
     QJsonObject obj;
@@ -895,6 +907,7 @@ void ZoomDiagnosticsDialog::export_diagnostics()
             return output.health_reason != ZoomOutputHealthReason::Ok;
         }));
     engine_status["unhealthy_output_count"] = unhealthy_outputs;
+    engine_status["output_health_counts"] = output_health_counts_json(outputs);
 
     QJsonObject summary;
     summary["bundle_type"] = QStringLiteral("corevideo_support_bundle");
@@ -921,6 +934,7 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     summary["failure_classifications"] = classification_array;
     summary["runtime_manifest"] = runtime_manifest;
     summary["engine_status"] = engine_status;
+    summary["output_health_counts"] = output_health_counts_json(outputs);
     summary["plugin_settings_redacted"] = settings_json(settings);
     summary["outputs"] = output_array;
     summary["participants"] = roster_array;

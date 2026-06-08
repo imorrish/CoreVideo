@@ -260,6 +260,7 @@ static QString output_summary_text(const std::vector<ZoomOutputInfo> &outputs,
     int warnings = 0;
     int stale_or_missing = 0;
     int lower_resolution = 0;
+    int routing_unavailable = 0;
     int screen_share_outputs = 0;
     int video_on = 0;
     int sharing = 0;
@@ -283,14 +284,20 @@ static QString output_summary_text(const std::vector<ZoomOutputInfo> &outputs,
             ++stale_or_missing;
         if (output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution)
             ++lower_resolution;
+        if (output.health_reason == ZoomOutputHealthReason::ActiveSpeakerUnavailable ||
+            output.health_reason == ZoomOutputHealthReason::SpotlightUnavailable ||
+            output.health_reason == ZoomOutputHealthReason::ScreenShareUnavailable) {
+            ++routing_unavailable;
+        }
     }
 
-    return QString("Outputs: %1  OK: %2  Warnings: %3  Stale/no signal: %4  Lower than requested: %5  Screen share outputs: %6  Participants with video: %7  Sharing: %8")
+    return QString("Outputs: %1  OK: %2  Warnings: %3  Stale/no signal: %4  Lower than requested: %5  Routing unavailable: %6  Screen share outputs: %7  Participants with video: %8  Sharing: %9")
         .arg(outputs.size())
         .arg(ok)
         .arg(warnings)
         .arg(stale_or_missing)
         .arg(lower_resolution)
+        .arg(routing_unavailable)
         .arg(screen_share_outputs)
         .arg(video_on)
         .arg(sharing);
