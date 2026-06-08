@@ -72,6 +72,11 @@ BrandingText "CoreVideo ${VERSION}"
 
 !insertmacro MUI_LANGUAGE "English"
 
+!macro SetInstallDirIfObsRoot CANDIDATE
+  IfFileExists "${CANDIDATE}\bin\64bit\obs64.exe" 0 +2
+    StrCpy $INSTDIR "${CANDIDATE}"
+!macroend
+
 Function .onInit
   ${IfNot} ${RunningX64}
     MessageBox MB_ICONSTOP "CoreVideo requires 64-bit Windows and 64-bit OBS Studio."
@@ -81,12 +86,27 @@ Function .onInit
   ReadRegStr $0 HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\OBS Studio" "InstallLocation"
   ${If} $0 != ""
     StrCpy $INSTDIR $0
+  ${Else}
+    ReadRegStr $0 HKLM "Software\OBS Studio" "Install_Dir"
+    ${If} $0 != ""
+      StrCpy $INSTDIR $0
+    ${EndIf}
   ${EndIf}
+  IfFileExists "$INSTDIR\bin\64bit\obs64.exe" init_done
+  !insertmacro SetInstallDirIfObsRoot "$PROGRAMFILES64\obs-studio"
+  IfFileExists "$INSTDIR\bin\64bit\obs64.exe" init_done
+  !insertmacro SetInstallDirIfObsRoot "$LOCALAPPDATA\Programs\obs-studio"
+init_done:
 FunctionEnd
 
 Function .onVerifyInstDir
   IfFileExists "$INSTDIR\bin\64bit\obs64.exe" done
-  IfFileExists "$INSTDIR\obs64.exe" done
+  IfFileExists "$INSTDIR\obs64.exe" 0 invalid
+  IfFileExists "$INSTDIR\..\..\bin\64bit\obs64.exe" 0 invalid
+  StrCpy $INSTDIR "$INSTDIR\..\.."
+  Goto done
+invalid:
+  MessageBox MB_ICONSTOP "Select the OBS Studio install folder, usually C:\Program Files\obs-studio. Do not select a profile folder or a CoreVideo package folder."
   Abort
 done:
 FunctionEnd
