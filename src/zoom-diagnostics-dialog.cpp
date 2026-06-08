@@ -23,6 +23,7 @@
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QStorageInfo>
 #include <QStringList>
 #include <QTableWidget>
 #include <QTextStream>
@@ -418,6 +419,123 @@ static QJsonObject output_health_counts_json(
     return counts;
 }
 
+static bool output_missing_or_stale(const ZoomOutputInfo &output)
+{
+    return output.health_reason == ZoomOutputHealthReason::WaitingForFirstFrame ||
+        output.health_reason == ZoomOutputHealthReason::StaleFrame ||
+        output.observed_width == 0 || output.observed_height == 0 ||
+        output.video_stale;
+}
+
+static bool output_lower_than_requested(const ZoomOutputInfo &output)
+{
+    return output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution ||
+        output.subscription_downgraded ||
+        (output.observed_height > 0 &&
+         output.observed_height <
+             static_cast<uint32_t>(video_resolution_height(output.video_resolution)));
+}
+
+static bool output_iso_eligible(const ZoomOutputInfo &output)
+{
+    if (output.assignment == AssignmentMode::ScreenShare)
+        return false;
+    if (output.assignment == AssignmentMode::ActiveSpeaker ||
+        output.assignment == AssignmentMode::SpotlightIndex)
+        return true;
+    return output.participant_id != 0;
+}
+
+static qint64 estimated_output_bytes_per_second(const ZoomOutputInfo &output)
+{
+    const int requested_height = video_resolution_height(output.video_resolution);
+    const uint32_t observed_height = output.observed_height;
+    const int height = static_cast<int>(observed_height > 0
+        ? observed_height
+        : static_cast<uint32_t>(requested_height));
+    if (height >= 1000)
+        return 1100ll * 1024ll;
+    if (height >= 700)
+        return 700ll * 1024ll;
+    return 350ll * 1024ll;
+}
+
+static QJsonObject output_action_counts_json(
+    const std::vector<ZoomOutputInfo> &outputs)
+{
+    QJsonObject counts;
+    int recover_stale = 0;
+    int retry_quality = 0;
+    int reassign_duplicate = 0;
+    int routing_unavailable = 0;
+    int video_or_roster_action = 0;
+    for (const auto &output : outputs) {
+        if (output_missing_or_stale(output))
+            ++recover_stale;
+        if (output_lower_than_requested(output))
+            ++retry_quality;
+        if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
+            ++reassign_duplicate;
+        if (output.health_reason == ZoomOutputHealthReason::ActiveSpeakerUnavailable ||
+            output.health_reason == ZoomOutputHealthReason::SpotlightUnavailable ||
+            output.health_reason == ZoomOutputHealthReason::ScreenShareUnavailable)
+            ++routing_unavailable;
+        if (output.health_reason == ZoomOutputHealthReason::ParticipantMissing ||
+            output.health_reason == ZoomOutputHealthReason::ParticipantVideoOff)
+            ++video_or_roster_action;
+    }
+    counts["recover_stale_or_missing"] = recover_stale;
+    counts["retry_quality_upgrade"] = retry_quality;
+    counts["reassign_duplicate"] = reassign_duplicate;
+    counts["routing_unavailable"] = routing_unavailable;
+    counts["participant_video_or_roster"] = video_or_roster_action;
+    return counts;
+}
+
+static QJsonObject iso_capacity_summary_json(
+    const std::vector<ZoomOutputInfo> &outputs,
+    const QJsonObject &iso_recorder)
+{
+    const bool record_program = iso_recorder.value("record_program").toBool();
+    int eligible_outputs = 0;
+    qint64 estimated_bytes_per_second = 0;
+    for (const auto &output : outputs) {
+        if (!output_iso_eligible(output))
+            continue;
+        ++eligible_outputs;
+        estimated_bytes_per_second += estimated_output_bytes_per_second(output);
+    }
+    if (record_program)
+        estimated_bytes_per_second += 1100ll * 1024ll;
+
+    const QString output_dir = iso_recorder.value("output_dir").toString();
+    const QStorageInfo storage(output_dir);
+    const qint64 available = storage.isValid() && storage.isReady()
+        ? storage.bytesAvailable()
+        : -1;
+    const int encode_paths = eligible_outputs + (record_program ? 1 : 0);
+
+    QJsonObject obj;
+    obj["eligible_iso_output_count"] = eligible_outputs;
+    obj["program_recording_path"] = record_program;
+    obj["estimated_h264_path_count"] = encode_paths;
+    obj["estimated_bytes_per_second"] =
+        static_cast<double>(estimated_bytes_per_second);
+    obj["estimated_bytes_per_minute"] =
+        static_cast<double>(estimated_bytes_per_second * 60);
+    obj["disk_available_bytes"] = static_cast<double>(available);
+    obj["estimated_runway_seconds"] =
+        available > 0 && estimated_bytes_per_second > 0
+            ? static_cast<double>(available / estimated_bytes_per_second)
+            : -1.0;
+    obj["hardware_encoder_session_pressure"] =
+        iso_recorder.value("hardware_encoder").toBool() && encode_paths > 3;
+    obj["low_runway_warning"] =
+        available > 0 && estimated_bytes_per_second > 0 &&
+        available / estimated_bytes_per_second < 30 * 60;
+    return obj;
+}
+
 static QJsonObject participant_json(const ParticipantInfo &participant)
 {
     QJsonObject obj;
@@ -602,6 +720,9 @@ static QStringList failure_classifications(const ZoomPluginSettings &settings,
         });
     if (iso_encoder_error)
         classes << QStringLiteral("iso_encoder_error");
+
+    if (iso_recorder.value("disk_warning").toBool())
+        classes << QStringLiteral("iso_disk_warning");
 
     classes.removeDuplicates();
     if (classes.isEmpty())
@@ -819,6 +940,10 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         ZoomIsoRecorder::instance().status_overview();
     const QJsonArray iso_sessions =
         ZoomIsoRecorder::instance().status_json();
+    const QJsonObject output_action_counts =
+        output_action_counts_json(outputs);
+    const QJsonObject iso_capacity =
+        iso_capacity_summary_json(outputs, iso_recorder);
     const QDateTime now = QDateTime::currentDateTime();
     const QString stamp = now.toString("yyyyMMdd-HHmmss");
     QStringList warnings;
@@ -902,12 +1027,14 @@ void ZoomDiagnosticsDialog::export_diagnostics()
         iso_recorder.value("session_count").toInt();
     engine_status["iso_completed_session_count"] =
         iso_recorder.value("completed_session_count").toInt();
+    engine_status["iso_capacity"] = iso_capacity;
     const int unhealthy_outputs = static_cast<int>(std::count_if(
         outputs.begin(), outputs.end(), [](const ZoomOutputInfo &output) {
             return output.health_reason != ZoomOutputHealthReason::Ok;
         }));
     engine_status["unhealthy_output_count"] = unhealthy_outputs;
     engine_status["output_health_counts"] = output_health_counts_json(outputs);
+    engine_status["output_action_counts"] = output_action_counts;
 
     QJsonObject summary;
     summary["bundle_type"] = QStringLiteral("corevideo_support_bundle");
@@ -935,11 +1062,13 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     summary["runtime_manifest"] = runtime_manifest;
     summary["engine_status"] = engine_status;
     summary["output_health_counts"] = output_health_counts_json(outputs);
+    summary["output_action_counts"] = output_action_counts;
     summary["plugin_settings_redacted"] = settings_json(settings);
     summary["outputs"] = output_array;
     summary["participants"] = roster_array;
     summary["recent_engine_events"] = event_array;
     summary["iso_recorder"] = iso_recorder;
+    summary["iso_capacity"] = iso_capacity;
     summary["iso_sessions"] = iso_sessions;
 
     if (!write_json_file(bundle.absoluteFilePath("summary.json"), summary) ||
@@ -951,6 +1080,7 @@ void ZoomDiagnosticsDialog::export_diagnostics()
                          QJsonObject{{"files", runtime_manifest}}) ||
         !write_json_file(bundle.absoluteFilePath("iso-recorder.json"),
                          QJsonObject{{"recorder", iso_recorder},
+                                     {"capacity", iso_capacity},
                                      {"sessions", iso_sessions}})) {
         QMessageBox::warning(this, "Create Support Bundle",
             QString("Could not write support bundle JSON files in:\n%1")
@@ -1013,6 +1143,23 @@ void ZoomDiagnosticsDialog::export_diagnostics()
 
     out << runtime_manifest_text(runtime_manifest) << "\n";
 
+    out << "Output Actions\n";
+    out << "- Recover stale/missing: "
+        << output_action_counts.value("recover_stale_or_missing").toInt()
+        << "\n";
+    out << "- Retry quality upgrade: "
+        << output_action_counts.value("retry_quality_upgrade").toInt()
+        << "\n";
+    out << "- Reassign duplicate: "
+        << output_action_counts.value("reassign_duplicate").toInt()
+        << "\n";
+    out << "- Routing unavailable: "
+        << output_action_counts.value("routing_unavailable").toInt()
+        << "\n";
+    out << "- Participant video/roster action: "
+        << output_action_counts.value("participant_video_or_roster").toInt()
+        << "\n\n";
+
     out << "ISO Recorder\n";
     out << "- Active: "
         << (iso_recorder.value("active").toBool() ? "yes" : "no") << "\n";
@@ -1030,6 +1177,29 @@ void ZoomDiagnosticsDialog::export_diagnostics()
     out << "- Program recording: "
         << (iso_recorder.value("record_program").toBool() ? "enabled" : "off")
         << "\n";
+    out << "- Estimated H.264 paths: "
+        << iso_capacity.value("estimated_h264_path_count").toInt()
+        << " (ISO outputs "
+        << iso_capacity.value("eligible_iso_output_count").toInt()
+        << ")\n";
+    out << "- Estimated disk rate: "
+        << QString::number(
+               iso_capacity.value("estimated_bytes_per_minute").toDouble() /
+               (1024.0 * 1024.0), 'f', 1)
+        << " MB/min\n";
+    const double runway_seconds =
+        iso_capacity.value("estimated_runway_seconds").toDouble(-1.0);
+    if (runway_seconds >= 0.0) {
+        out << "- Estimated disk runway: "
+            << QString::number(runway_seconds / 60.0, 'f', 1)
+            << " min"
+            << (iso_capacity.value("low_runway_warning").toBool()
+                    ? QStringLiteral(" (low)")
+                    : QString{})
+            << "\n";
+    }
+    if (iso_capacity.value("hardware_encoder_session_pressure").toBool())
+        out << "- Capacity warning: hardware encoder session pressure likely\n";
     out << "- Sessions: active "
         << iso_recorder.value("session_count").toInt()
         << ", completed "

@@ -179,6 +179,47 @@ static QString signal_tooltip(const ZoomOutputInfo &output)
     return text;
 }
 
+static QString operator_action_text(const ZoomOutputInfo &output)
+{
+    switch (output.health_reason) {
+    case ZoomOutputHealthReason::RawMediaNotReady:
+        return QStringLiteral("Start engine/media");
+    case ZoomOutputHealthReason::DuplicateAssignment:
+        return QStringLiteral("Reassign duplicate");
+    case ZoomOutputHealthReason::ParticipantMissing:
+        return QStringLiteral("Refresh roster or choose another participant");
+    case ZoomOutputHealthReason::ParticipantVideoOff:
+        return QStringLiteral("Ask participant to start video");
+    case ZoomOutputHealthReason::WaitingForFirstFrame:
+        return QStringLiteral("Wait for first frame or recover");
+    case ZoomOutputHealthReason::StaleFrame:
+        return QStringLiteral("Recover stale feed");
+    case ZoomOutputHealthReason::ZoomDeliveredLowerResolution:
+        return QStringLiteral("Retry quality upgrade");
+    case ZoomOutputHealthReason::ScreenShareUnavailable:
+        return QStringLiteral("Start screen share or reassign");
+    case ZoomOutputHealthReason::ActiveSpeakerUnavailable:
+        return QStringLiteral("Wait for a talking participant with video");
+    case ZoomOutputHealthReason::SpotlightUnavailable:
+        return QStringLiteral("Set spotlight slot or reassign");
+    case ZoomOutputHealthReason::Ok:
+    default:
+        break;
+    }
+    if (output_signal_below_requested(output))
+        return QStringLiteral("Retry quality upgrade");
+    if (output_signal_missing_or_stale(output))
+        return QStringLiteral("Recover stale feed");
+    return QStringLiteral("No action needed");
+}
+
+static QString with_operator_action_tooltip(const QString &tooltip,
+                                            const ZoomOutputInfo &output)
+{
+    return QString("%1\n\nRecommended action: %2")
+        .arg(tooltip, operator_action_text(output));
+}
+
 static QString resolution_label_from_int(int resolution)
 {
     switch (static_cast<VideoResolution>(resolution)) {
@@ -261,6 +302,9 @@ static QString output_summary_text(const std::vector<ZoomOutputInfo> &outputs,
     int stale_or_missing = 0;
     int lower_resolution = 0;
     int routing_unavailable = 0;
+    int duplicate_assignments = 0;
+    int recoverable = 0;
+    int quality_retries = 0;
     int screen_share_outputs = 0;
     int video_on = 0;
     int sharing = 0;
@@ -284,6 +328,13 @@ static QString output_summary_text(const std::vector<ZoomOutputInfo> &outputs,
             ++stale_or_missing;
         if (output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution)
             ++lower_resolution;
+        if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
+            ++duplicate_assignments;
+        if (output_signal_missing_or_stale(output))
+            ++recoverable;
+        if (output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution ||
+            output_signal_below_requested(output))
+            ++quality_retries;
         if (output.health_reason == ZoomOutputHealthReason::ActiveSpeakerUnavailable ||
             output.health_reason == ZoomOutputHealthReason::SpotlightUnavailable ||
             output.health_reason == ZoomOutputHealthReason::ScreenShareUnavailable) {
@@ -291,13 +342,16 @@ static QString output_summary_text(const std::vector<ZoomOutputInfo> &outputs,
         }
     }
 
-    return QString("Outputs: %1  OK: %2  Warnings: %3  Stale/no signal: %4  Lower than requested: %5  Routing unavailable: %6  Screen share outputs: %7  Participants with video: %8  Sharing: %9")
+    return QString("Outputs: %1  OK: %2  Warnings: %3  Stale/no signal: %4  Lower than requested: %5  Routing unavailable: %6  Duplicates: %7  Actions: Recover %8, Retry quality %9  Screen share outputs: %10  Participants with video: %11  Sharing: %12")
         .arg(outputs.size())
         .arg(ok)
         .arg(warnings)
         .arg(stale_or_missing)
         .arg(lower_resolution)
         .arg(routing_unavailable)
+        .arg(duplicate_assignments)
+        .arg(recoverable)
+        .arg(quality_retries)
         .arg(screen_share_outputs)
         .arg(video_on)
         .arg(sharing);
@@ -609,7 +663,7 @@ void ZoomOutputDialog::refresh()
         signal->setMargin(4);
         signal->setTextInteractionFlags(Qt::TextSelectableByMouse);
         signal->setText(signal_text(output));
-        signal->setToolTip(signal_tooltip(output));
+        signal->setToolTip(with_operator_action_tooltip(signal_tooltip(output), output));
         if (output.health_reason == ZoomOutputHealthReason::DuplicateAssignment)
             signal->setStyleSheet("color: #ff6b6b; font-weight: 700;");
         else if (output.health_reason == ZoomOutputHealthReason::ZoomDeliveredLowerResolution ||
@@ -626,7 +680,7 @@ void ZoomOutputDialog::refresh()
         sdk->setMargin(4);
         sdk->setTextInteractionFlags(Qt::TextSelectableByMouse);
         sdk->setText(sdk_quality_text(output));
-        sdk->setToolTip(sdk_quality_tooltip(output));
+        sdk->setToolTip(with_operator_action_tooltip(sdk_quality_tooltip(output), output));
         if (output.last_video_subscribe_code > 0)
             sdk->setStyleSheet("color: #ff6b6b; font-weight: 700;");
         else if (output.subscription_downgraded ||

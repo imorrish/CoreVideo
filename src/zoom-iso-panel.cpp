@@ -31,6 +31,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <vector>
 
 static constexpr qint64 kIsoMinimumFreeBytes = 2ll * 1024ll * 1024ll * 1024ll;
 static constexpr qint64 kIsoWarningFreeBytes = 10ll * 1024ll * 1024ll * 1024ll;
@@ -74,6 +75,17 @@ static QString bytes_text(qint64 bytes)
         return QString("%1 GB").arg(gb, 0, 'f', 1);
     const double mb = static_cast<double>(bytes) / (1024.0 * 1024.0);
     return QString("%1 MB").arg(mb, 0, 'f', 1);
+}
+
+static QString duration_text_from_seconds(qint64 seconds)
+{
+    if (seconds < 0)
+        return QStringLiteral("unknown");
+    const qint64 hours = seconds / 3600;
+    const qint64 minutes = (seconds % 3600) / 60;
+    if (hours > 0)
+        return QString("%1h %2m").arg(hours).arg(minutes);
+    return QString("%1m").arg(minutes);
 }
 
 static QStorageInfo storage_for_output_dir(const QString &path)
@@ -144,6 +156,33 @@ static bool is_iso_eligible_output(const ZoomOutputInfo &output)
         output.assignment == AssignmentMode::SpotlightIndex)
         return true;
     return output.participant_id != 0;
+}
+
+static qint64 estimated_output_bytes_per_second(const ZoomOutputInfo &output)
+{
+    const int requested_height = video_resolution_height(output.video_resolution);
+    const uint32_t observed_height = output.observed_height;
+    const int height = static_cast<int>(observed_height > 0
+        ? observed_height
+        : static_cast<uint32_t>(requested_height));
+    if (height >= 1000)
+        return 1100ll * 1024ll;
+    if (height >= 700)
+        return 700ll * 1024ll;
+    return 350ll * 1024ll;
+}
+
+static qint64 estimated_iso_bytes_per_second(
+    const std::vector<ZoomOutputInfo> &outputs, bool record_program)
+{
+    qint64 bytes_per_second = 0;
+    for (const auto &output : outputs) {
+        if (is_iso_eligible_output(output))
+            bytes_per_second += estimated_output_bytes_per_second(output);
+    }
+    if (record_program)
+        bytes_per_second += 1100ll * 1024ll;
+    return bytes_per_second;
 }
 
 ZoomIsoPanel::ZoomIsoPanel(QWidget *parent)
@@ -382,6 +421,22 @@ void ZoomIsoPanel::start_recording()
             if (choice != QMessageBox::Yes)
                 return;
         }
+        const auto outputs = ZoomOutputManager::instance().outputs();
+        const qint64 estimated_bytes_per_second =
+            estimated_iso_bytes_per_second(outputs, m_record_program->isChecked());
+        if (estimated_bytes_per_second > 0 &&
+            available / estimated_bytes_per_second < 30 * 60) {
+            const int choice = QMessageBox::warning(
+                this, "Limited Recording Runway",
+                QString("Current assignments are estimated at %1/min with about %2 "
+                        "of free-space runway. Continue recording?")
+                    .arg(bytes_text(estimated_bytes_per_second * 60),
+                         duration_text_from_seconds(
+                             available / estimated_bytes_per_second)),
+                QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+            if (choice != QMessageBox::Yes)
+                return;
+        }
     }
 
     const QString encoder = m_video_encoder->currentData().toString();
@@ -563,13 +618,32 @@ void ZoomIsoPanel::refresh_capacity_guidance()
     const int eligible_outputs = static_cast<int>(std::count_if(
         outputs.begin(), outputs.end(), is_iso_eligible_output));
     const int encode_paths = eligible_outputs + (m_record_program->isChecked() ? 1 : 0);
+    const qint64 estimated_bytes_per_second =
+        estimated_iso_bytes_per_second(outputs, m_record_program->isChecked());
+    const QStorageInfo storage = storage_for_output_dir(m_output_dir->text());
+    const qint64 available = storage.isValid() && storage.isReady()
+        ? storage.bytesAvailable()
+        : -1;
+    const qint64 runway_seconds = available > 0 && estimated_bytes_per_second > 0
+        ? available / estimated_bytes_per_second
+        : -1;
 
-    QString text = QString("Estimated encode load: %1 ISO feed%2%3.")
+    QString text = QString("Estimated encode load: %1 ISO feed%2%3 (%4 H.264 path%5).")
         .arg(eligible_outputs)
         .arg(eligible_outputs == 1 ? "" : "s")
         .arg(m_record_program->isChecked()
             ? QStringLiteral(" plus OBS program recording")
-            : QString());
+            : QString())
+        .arg(encode_paths)
+        .arg(encode_paths == 1 ? "" : "s");
+    if (estimated_bytes_per_second > 0) {
+        text += QString(" Estimated disk rate: %1/min.")
+            .arg(bytes_text(estimated_bytes_per_second * 60));
+    }
+    if (runway_seconds >= 0) {
+        text += QString(" Estimated runway: %1.")
+            .arg(duration_text_from_seconds(runway_seconds));
+    }
 
     if (is_hardware_encoder(encoder) && encode_paths > 3) {
         text += QStringLiteral(
@@ -578,6 +652,10 @@ void ZoomIsoPanel::refresh_capacity_guidance()
     } else if (encoder == QStringLiteral("libx264") && eligible_outputs >= 6) {
         text += QStringLiteral(
             " CPU load may be high with 6-8 ISO feeds; monitor OBS CPU and dropped frames.");
+        m_capacity_guidance->setStyleSheet("color: #f0b429; font-weight: 700;");
+    } else if (runway_seconds >= 0 && runway_seconds < 30 * 60) {
+        text += QStringLiteral(
+            " Free space is tight for multi-feed ISO recording; clear disk space before long captures.");
         m_capacity_guidance->setStyleSheet("color: #f0b429; font-weight: 700;");
     } else {
         m_capacity_guidance->setStyleSheet("color: #c0c0d8;");
