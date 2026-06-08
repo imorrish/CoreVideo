@@ -61,6 +61,14 @@ Use the smoke audit script where possible:
 .\scripts\obs-scene-smoke-test.ps1 -AuditOnly -VerifyCoreVideoPlugin -ExpectShutdown
 ```
 
+For a deeper local smoke pass that instantiates the actual CoreVideo source
+kinds and lays out an 8-slot scene:
+
+```powershell
+.\scripts\obs-scene-smoke-test.ps1 -VerifyCoreVideoPlugin -CreateCoreVideoInputs `
+  -ParticipantCount 8
+```
+
 After manually opening each CoreVideo dock from OBS **Tools**, validate the OBS
 log contains both registration and show markers:
 
@@ -93,6 +101,10 @@ For 8-feed testing, run:
 ```
 
 Review process drop warnings, CPU, memory, and FFmpeg counts before publishing.
+
+Use `docs/VALIDATION_MATRIX.md` as the detailed pass/fail matrix for screen
+share, Active Speaker Director, OBS lifecycle/reopen, package validation,
+automated OBS smoke, and sidecar release gates.
 
 ## Documentation
 

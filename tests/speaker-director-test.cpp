@@ -186,6 +186,43 @@ int main()
     if (snap.candidate_elapsed_ms != 0) fail("should have no candidate");
     if (snap.hold_remaining_ms != 2050) fail("hold remaining calculation wrong");
 
+    // --- Candidate snapshot reports pending live switch state ---
+    director.reset();
+    director.configure(500, 1000, true, {});
+    t = 70000;
+    director.update_roster(roster({p(1001, true, true), p(1002, true, false)}), 1001, t);
+    t += 100;
+    director.update_roster(roster({p(1001, true, false), p(1002, true, true)}), 1002, t);
+    snap = director.snapshot(t + 250);
+    if (snap.directed_speaker_id != 1001) fail("candidate snapshot should keep current directed speaker");
+    if (snap.candidate_speaker_id != 1002) fail("candidate snapshot should expose pending speaker");
+    if (snap.candidate_elapsed_ms != 250) fail("candidate elapsed calculation wrong");
+    if (snap.sensitivity_ms - snap.candidate_elapsed_ms != 250)
+        fail("sensitivity remaining calculation wrong");
+
+    // --- Candidate invalidation keeps the current shot until a valid candidate appears ---
+    director.reset();
+    director.configure(400, 50, true, {});
+    t = 72000;
+    director.update_roster(roster({p(1101, true, true), p(1102, true, false)}), 1101, t);
+    t += 100;
+    director.update_roster(roster({p(1101, true, false), p(1102, true, true)}), 1102, t);
+    t += 100;
+    director.update_roster(roster({p(1101, true, false), p(1102, false, true)}), 1102, t);
+    t += 500;
+    director.tick(t);
+    if (!check_directed(1101)) fail("invalid candidate should not steal directed speaker");
+
+    // --- Manual take rejects participants filtered by require_video ---
+    director.reset();
+    director.configure(100, 50, true, {});
+    t = 73000;
+    director.update_roster(roster({p(1201, true, true), p(1202, false, true)}), 1201, t);
+    if (director.set_manual_speaker(1202, t + 10)) {
+        fail("manual take should reject no-video participant when require_video=true");
+    }
+    if (!check_directed(1201)) fail("rejected manual take should keep current directed speaker");
+
     if (failures == 0) {
         std::cout << "All SpeakerDirector tests passed.\n";
         return 0;

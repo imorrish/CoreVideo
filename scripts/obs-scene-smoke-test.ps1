@@ -25,6 +25,9 @@ param(
     [switch]$VerifyCoreVideoPlugin,
 
     [Parameter()]
+    [switch]$CreateCoreVideoInputs,
+
+    [Parameter()]
     [string]$ObsLogPath,
 
     [Parameter()]
@@ -235,6 +238,28 @@ function Ensure-ColorInput {
         }
 }
 
+function Ensure-Input {
+    param(
+        [System.Net.WebSockets.ClientWebSocket]$Socket,
+        [string]$SceneName,
+        [string]$InputName,
+        [string]$InputKind,
+        [hashtable]$InputSettings = @{}
+    )
+
+    Invoke-ObsRequestIfNeeded `
+        -AlreadyDone { (Get-InputNames -Socket $Socket) -contains $InputName } `
+        -Request {
+            Invoke-ObsRequest -Socket $Socket -RequestType "CreateInput" -RequestData @{
+                sceneName = $SceneName
+                inputName = $InputName
+                inputKind = $InputKind
+                inputSettings = $InputSettings
+                sceneItemEnabled = $true
+            } -TimeoutSeconds $TimeoutSeconds
+        }
+}
+
 function Ensure-SceneItem {
     param(
         [System.Net.WebSockets.ClientWebSocket]$Socket,
@@ -419,6 +444,13 @@ try {
         Write-Host "CoreVideo plugin input kinds are registered."
     }
 
+    if ($CreateCoreVideoInputs -and -not $VerifyCoreVideoPlugin) {
+        throw "-CreateCoreVideoInputs requires -VerifyCoreVideoPlugin so source kinds are checked before creation."
+    }
+    if ($CreateCoreVideoInputs -and $AuditOnly) {
+        throw "-CreateCoreVideoInputs cannot be combined with -AuditOnly because it needs to instantiate sources."
+    }
+
     if ($ObsLogPath) {
         Test-CoreVideoObsLog `
             -Path $ObsLogPath `
@@ -455,6 +487,14 @@ try {
         Ensure-SceneItem -Socket $socket -SceneName $sourceScene -SourceName $shareSource | Out-Null
         Ensure-SceneItem -Socket $socket -SceneName $shareScene -SourceName $shareSource | Out-Null
 
+        if ($CreateCoreVideoInputs) {
+            Ensure-Input -Socket $socket -SceneName $sourceScene -InputName "CoreVideo Plugin Participant" -InputKind "zoom_participant_source"
+            Ensure-Input -Socket $socket -SceneName $sourceScene -InputName "CoreVideo Plugin Active Speaker" -InputKind "corevideo_active_speaker_source"
+            Ensure-Input -Socket $socket -SceneName $sourceScene -InputName "CoreVideo Plugin Screen Share" -InputKind "zoom_share_source"
+            Ensure-Input -Socket $socket -SceneName $sourceScene -InputName "CoreVideo Plugin Participant Audio" -InputKind "zoom_participant_audio_source"
+            Write-Host "Created CoreVideo plugin input instances for lifecycle smoke coverage."
+        }
+
         $columns = [Math]::Ceiling([Math]::Sqrt($ParticipantCount))
         $rows = [Math]::Ceiling($ParticipantCount / $columns)
         $tileW = 1920.0 / $columns
@@ -477,6 +517,14 @@ try {
     Assert-Contains -Actual $sceneNames -Expected ($slotScenes + @($shareScene)) -Label "Nested CoreVideo scenes"
     Assert-Contains -Actual $inputNames -Expected ($participantSources + @($shareSource)) -Label "CoreVideo media inputs"
     Assert-Contains -Actual $inputNames -Expected ($placeholderSources + @($sharePlaceholder)) -Label "CoreVideo placeholder inputs"
+    if ($CreateCoreVideoInputs) {
+        Assert-Contains -Actual $inputNames -Expected @(
+            "CoreVideo Plugin Participant",
+            "CoreVideo Plugin Active Speaker",
+            "CoreVideo Plugin Screen Share",
+            "CoreVideo Plugin Participant Audio"
+        ) -Label "CoreVideo plugin smoke inputs"
+    }
 
     $sourceItems = @(Get-SceneItems -Socket $socket -SceneName $sourceScene | ForEach-Object { $_.sourceName })
     Assert-Contains -Actual $sourceItems -Expected ($participantSources + @($shareSource)) -Label "CoreVideo Sources scene items"

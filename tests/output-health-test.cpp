@@ -17,6 +17,13 @@ static ParticipantInfo participant(uint32_t id, bool has_video = true)
     return p;
 }
 
+static ParticipantInfo sharing_participant(uint32_t id)
+{
+    ParticipantInfo p = participant(id, true);
+    p.is_sharing_screen = true;
+    return p;
+}
+
 static ZoomOutputInfo output(uint32_t participant_id = 1)
 {
     ZoomOutputInfo o;
@@ -153,6 +160,30 @@ int main()
                        ZoomOutputHealthReason::Ok))
         return 1;
 
+    ZoomOutputInfo share_waiting = share_ok;
+    share_waiting.observed_width = 0;
+    share_waiting.observed_height = 0;
+    if (!expect_reason("screen share available but waiting for first frame",
+                       share_waiting, {sharing_participant(100)}, true,
+                       ZoomOutputHealthReason::WaitingForFirstFrame))
+        return 1;
+
+    ZoomOutputInfo share_stale = share_ok;
+    share_stale.video_stale = true;
+    if (!expect_reason("screen share available but stale",
+                       share_stale, {sharing_participant(101)}, true,
+                       ZoomOutputHealthReason::StaleFrame))
+        return 1;
+
+    ZoomOutputInfo share_low = share_ok;
+    share_low.video_resolution = VideoResolution::P1080;
+    share_low.observed_width = 1280;
+    share_low.observed_height = 720;
+    if (!expect_reason("screen share available but lower than requested",
+                       share_low, {sharing_participant(102)}, true,
+                       ZoomOutputHealthReason::ZoomDeliveredLowerResolution))
+        return 1;
+
     ZoomOutputInfo active;
     active.assignment = AssignmentMode::ActiveSpeaker;
     active.observed_width = 0;
@@ -168,6 +199,13 @@ int main()
     if (!expect_reason("active speaker with talking video participant waits for frame",
                        active_waiting, {talking}, true,
                        ZoomOutputHealthReason::WaitingForFirstFrame))
+        return 1;
+
+    ParticipantInfo audio_only_talking = participant(4, false);
+    audio_only_talking.is_talking = true;
+    if (!expect_reason("active speaker ignores talking participant with video off",
+                       active, {audio_only_talking}, true,
+                       ZoomOutputHealthReason::ActiveSpeakerUnavailable))
         return 1;
 
     ZoomOutputInfo spotlight;

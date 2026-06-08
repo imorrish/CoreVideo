@@ -12,6 +12,12 @@ param(
     [string]$ExpectedMeetingSdkPublicAppKey = $env:ZOOM_EMBED_MEETING_SDK_PUBLIC_APP_KEY,
 
     [Parameter()]
+    [string[]]$ForbiddenBinaryText = @(
+        $env:ZOOM_EMBED_OAUTH_CLIENT_SECRET,
+        $env:ZOOM_EMBED_MEETING_SDK_SECRET
+    ),
+
+    [Parameter()]
     [string]$ManifestPath
 )
 
@@ -77,6 +83,15 @@ Test-BinaryContainsText `
     -ExpectedText $ExpectedMeetingSdkPublicAppKey `
     -Description "Expected embedded Meeting SDK public app key"
 
+foreach ($forbidden in @($ForbiddenBinaryText | Where-Object { $_ })) {
+    $path = Join-Path $root "obs-plugins\64bit\obs-zoom-plugin.dll"
+    $bytes = [System.IO.File]::ReadAllBytes($path)
+    $haystack = [System.Text.Encoding]::ASCII.GetString($bytes)
+    if ($haystack.Contains($forbidden)) {
+        throw "Release package validation failed. Forbidden secret-like text was found in obs-zoom-plugin.dll."
+    }
+}
+
 $ffmpegDlls = @(
     "avcodec-62.dll",
     "avdevice-62.dll",
@@ -104,6 +119,16 @@ if (Test-Path -LiteralPath $sidecarPath -PathType Leaf) {
         "obs-plugins\64bit\data\looks\speaker-screenshare.json"
     )) {
         Test-RequiredFile $file
+    }
+    foreach ($folder in @(
+        "obs-plugins\64bit\data\templates",
+        "obs-plugins\64bit\data\looks"
+    )) {
+        $path = Join-Path $root $folder
+        $count = @(Get-ChildItem -LiteralPath $path -Filter *.json -File -ErrorAction Stop).Count
+        if ($count -lt 6) {
+            throw "Release package is incomplete. Sidecar data folder '$folder' contains too few JSON files ($count)."
+        }
     }
 }
 
