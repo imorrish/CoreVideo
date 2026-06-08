@@ -111,14 +111,23 @@ invalid:
 done:
 FunctionEnd
 
-Function CheckObsClosed
-  nsExec::ExecToStack 'cmd /C tasklist /FI "IMAGENAME eq obs64.exe" /NH ^| findstr /I /R "^obs64\.exe" >NUL'
+!macro RequireProcessClosed PROCESS_NAME DISPLAY_NAME ACTION_NAME
+  nsExec::ExecToStack 'cmd /C tasklist /FI "IMAGENAME eq ${PROCESS_NAME}" /NH ^| findstr /I "${PROCESS_NAME}" >NUL'
   Pop $0
   Pop $1
   ${If} $0 == 0
-    MessageBox MB_ICONSTOP "OBS Studio is currently running. Close OBS before installing CoreVideo."
+    MessageBox MB_ICONSTOP "${DISPLAY_NAME} is currently running. Close ${ACTION_NAME} before installing CoreVideo."
     Abort
   ${EndIf}
+!macroend
+
+Function CheckObsClosed
+  !insertmacro RequireProcessClosed "obs64.exe" "OBS Studio" "OBS Studio"
+  !insertmacro RequireProcessClosed "CoreVideoSidecar.exe" "CoreVideo Sidecar" "CoreVideo Sidecar"
+  !insertmacro RequireProcessClosed "ZoomObsEngine.exe" "CoreVideo Zoom engine" "CoreVideo Zoom engine"
+  !insertmacro RequireProcessClosed "CoreVideoOAuthCallback.exe" "CoreVideo OAuth callback helper" "the browser sign-in callback helper"
+  !insertmacro RequireProcessClosed "ZoomSdkAuthProbe.exe" "CoreVideo Zoom SDK auth probe" "the Zoom SDK auth probe"
+  !insertmacro RequireProcessClosed "ffmpeg.exe" "FFmpeg" "FFmpeg"
 FunctionEnd
 
 !macro VerifyInstalledFile RELPATH
@@ -174,11 +183,10 @@ Section "Uninstall"
 SectionEnd
 
 Function un.CheckObsClosed
-  nsExec::ExecToStack 'cmd /C tasklist /FI "IMAGENAME eq obs64.exe" /NH ^| findstr /I /R "^obs64\.exe" >NUL'
-  Pop $0
-  Pop $1
-  ${If} $0 == 0
-    MessageBox MB_ICONSTOP "OBS Studio is currently running. Close OBS before uninstalling CoreVideo."
-    Abort
-  ${EndIf}
+  !insertmacro RequireProcessClosed "obs64.exe" "OBS Studio" "OBS Studio"
+  !insertmacro RequireProcessClosed "CoreVideoSidecar.exe" "CoreVideo Sidecar" "CoreVideo Sidecar"
+  !insertmacro RequireProcessClosed "ZoomObsEngine.exe" "CoreVideo Zoom engine" "CoreVideo Zoom engine"
+  !insertmacro RequireProcessClosed "CoreVideoOAuthCallback.exe" "CoreVideo OAuth callback helper" "the browser sign-in callback helper"
+  !insertmacro RequireProcessClosed "ZoomSdkAuthProbe.exe" "CoreVideo Zoom SDK auth probe" "the Zoom SDK auth probe"
+  !insertmacro RequireProcessClosed "ffmpeg.exe" "FFmpeg" "FFmpeg"
 FunctionEnd
