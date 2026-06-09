@@ -692,6 +692,7 @@ void ZoomSource::configure_output_ex(AssignmentMode mode,
 void ZoomSource::subscribe()
 {
     if (source_uuid.empty()) source_uuid = make_source_uuid();
+    m_last_roster_video_state.store(-1, std::memory_order_release);
     if (!ZoomEngineClient::instance().is_running()) {
         m_subscribed = false;
         m_current_subscription_id = 0;
@@ -782,6 +783,7 @@ void ZoomSource::unsubscribe()
     m_stale_recover_attempts.store(0, std::memory_order_relaxed);
     m_last_quality_upgrade_ns.store(0, std::memory_order_relaxed);
     m_quality_upgrade_attempts.store(0, std::memory_order_relaxed);
+    m_last_roster_video_state.store(-1, std::memory_order_relaxed);
 }
 
 bool ZoomSource::recover_stale_video(uint64_t now_ns, bool force)
@@ -911,6 +913,53 @@ void ZoomSource::deactivate()
 void ZoomSource::on_roster_changed()
 {
     const AssignmentMode mode = assignment.load(std::memory_order_acquire);
+    const auto roster = ZoomEngineClient::instance().roster();
+    const auto participant_has_video = [&roster](uint32_t id, bool &has_video) {
+        const auto it = std::find_if(
+            roster.begin(), roster.end(),
+            [id](const ParticipantInfo &p) { return p.user_id == id; });
+        if (it == roster.end())
+            return false;
+        has_video = it->has_video;
+        return true;
+    };
+    auto resubscribe_if_video_resumed = [this, &participant_has_video](
+        uint32_t target_id, const char *reason) {
+        if (target_id == 0) {
+            m_last_roster_video_state.store(-1, std::memory_order_release);
+            return false;
+        }
+
+        bool has_video = false;
+        if (!participant_has_video(target_id, has_video)) {
+            m_last_roster_video_state.store(-1, std::memory_order_release);
+            return false;
+        }
+
+        const int previous =
+            m_last_roster_video_state.exchange(has_video ? 1 : 0,
+                                               std::memory_order_acq_rel);
+        if (previous != 0 || !has_video)
+            return false;
+
+        const uint64_t now_ns = os_gettime_ns();
+        const uint64_t last_frame_ns =
+            m_last_frame_ns.load(std::memory_order_acquire);
+        const bool missing_or_stale =
+            last_frame_ns == 0 ||
+            (now_ns > last_frame_ns && now_ns - last_frame_ns > kStaleVideoNs);
+        if (!missing_or_stale)
+            return false;
+
+        m_last_stale_recover_ns.store(0, std::memory_order_release);
+        m_stale_recover_attempts.store(0, std::memory_order_release);
+        blog(LOG_INFO,
+             "[obs-zoom-plugin] Participant video resumed; resubscribing Zoom source: source=%s uuid=%s participant_id=%u reason=%s",
+             output_name().c_str(), source_uuid.c_str(), target_id, reason);
+        subscribe();
+        return true;
+    };
+
     if (!m_subscribed) {
         if (m_active.load(std::memory_order_acquire) &&
             source_wants_subscription(
@@ -921,16 +970,38 @@ void ZoomSource::on_roster_changed()
 
     // Spotlight & screen-share assignments are resolved by the engine on
     // every roster change; nothing for the plugin to do here.
-    if (mode == AssignmentMode::SpotlightIndex ||
-        mode == AssignmentMode::ScreenShare) return;
+    if (mode == AssignmentMode::SpotlightIndex) {
+        const uint32_t slot = spotlight_slot.load(std::memory_order_acquire);
+        const auto it = std::find_if(
+            roster.begin(), roster.end(),
+            [slot](const ParticipantInfo &p) {
+                return p.spotlight_index == slot;
+            });
+        if (it != roster.end())
+            resubscribe_if_video_resumed(it->user_id, "spotlight_video_resumed");
+        else
+            m_last_roster_video_state.store(-1, std::memory_order_release);
+        return;
+    }
+    if (mode == AssignmentMode::ScreenShare) {
+        m_last_roster_video_state.store(-1, std::memory_order_release);
+        return;
+    }
 
     if (is_active_speaker_assignment(mode)) {
         if (dedicated_active_speaker_source) {
             maybe_update_director_subscription();
+            resubscribe_if_video_resumed(
+                m_current_subscription_id.load(std::memory_order_acquire),
+                "director_video_resumed");
             return;
         }
         const uint32_t subscribe_id =
             effective_participant_id(participant_id, true);
+        if (resubscribe_if_video_resumed(
+                subscribe_id, "active_speaker_video_resumed")) {
+            return;
+        }
         if (subscribe_id == 0 || subscribe_id == m_current_subscription_id) return;
         subscribe();
         return;
@@ -938,16 +1009,22 @@ void ZoomSource::on_roster_changed()
 
     // Failover handling: if our primary participant is no longer in the
     // roster but we have a configured failover, re-subscribe.
-    const uint32_t failover = failover_participant_id.load(std::memory_order_acquire);
-    if (failover == 0) return;
     const uint32_t primary = participant_id.load(std::memory_order_acquire);
     if (primary == 0) return;
+    if (resubscribe_if_video_resumed(
+            m_current_subscription_id.load(std::memory_order_acquire),
+            "participant_video_resumed")) {
+        return;
+    }
 
-    const auto roster = ZoomEngineClient::instance().roster();
+    const uint32_t failover = failover_participant_id.load(std::memory_order_acquire);
+    if (failover == 0) return;
     const bool primary_present = std::any_of(
         roster.begin(), roster.end(),
         [primary](const ParticipantInfo &p) { return p.user_id == primary; });
     const uint32_t want = primary_present ? primary : failover;
+    if (resubscribe_if_video_resumed(want, "participant_video_resumed"))
+        return;
     if (want != m_current_subscription_id) subscribe();
 }
 

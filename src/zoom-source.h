@@ -130,6 +130,7 @@ private:
     std::atomic<uint32_t> m_stale_recover_attempts{0};
     std::atomic<uint64_t> m_last_quality_upgrade_ns{0};
     std::atomic<uint32_t> m_quality_upgrade_attempts{0};
+    std::atomic<int> m_last_roster_video_state{-1};
     std::vector<int16_t> m_stereo_buf;
     ZoomPreviewCallback m_preview_cb;
     uint64_t m_preview_last_ns = 0;
