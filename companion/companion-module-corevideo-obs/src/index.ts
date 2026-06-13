@@ -1,7 +1,10 @@
 import {
 	InstanceBase,
 	InstanceStatus,
-	runEntrypoint,
+	type CompanionActionSchema,
+	type CompanionFeedbackSchema,
+	type CompanionOptionValues,
+	type CompanionVariableValues,
 	type SomeCompanionConfigField,
 } from '@companion-module/base'
 import * as net from 'net'
@@ -13,7 +16,21 @@ import { variableDefinitions, buildVariableValues, buildOutputVariableDefs } fro
 import { OBSWebSocketClient } from './obs-ws-client.js'
 import { SidecarClient } from './sidecar-client.js'
 
-export class CoreVideoInstance extends InstanceBase<CoreVideoConfig> {
+/**
+ * Manifest type describing the typed surface of this module for the
+ * @companion-module/base v2 generic `InstanceBase`. The action/feedback/variable
+ * id maps use string index signatures so any id used in code is accepted; the
+ * concrete definitions are produced by the `build*` helpers.
+ */
+export interface CoreVideoManifest {
+	config: CoreVideoConfig
+	secrets: undefined
+	actions: Record<string, CompanionActionSchema<CompanionOptionValues>>
+	feedbacks: Record<string, CompanionFeedbackSchema<CompanionOptionValues>>
+	variables: CompanionVariableValues
+}
+
+export class CoreVideoInstance extends InstanceBase<CoreVideoManifest> {
 	public config!: CoreVideoConfig
 	public state: ModuleState = defaultState()
 
@@ -32,10 +49,10 @@ export class CoreVideoInstance extends InstanceBase<CoreVideoConfig> {
 
 	// ── Lifecycle ──────────────────────────────────────────────────────────────
 
-	async init(config: CoreVideoConfig): Promise<void> {
+	async init(config: CoreVideoConfig, _isFirstInit: boolean, _secrets: undefined): Promise<void> {
 		this.config = config
 		this.state = defaultState()
-		this.setVariableDefinitions([...variableDefinitions, ...buildOutputVariableDefs(8)])
+		this.setVariableDefinitions({ ...variableDefinitions, ...buildOutputVariableDefs(8) })
 		this.setVariableValues(buildVariableValues(this.state))
 		this.setActionDefinitions(buildActions(this))
 		this.setFeedbackDefinitions(buildFeedbacks(this))
@@ -56,7 +73,7 @@ export class CoreVideoInstance extends InstanceBase<CoreVideoConfig> {
 		this.sidecarClient = null
 	}
 
-	async configUpdated(config: CoreVideoConfig): Promise<void> {
+	async configUpdated(config: CoreVideoConfig, _secrets: undefined): Promise<void> {
 		this.config = config
 		// Plugin
 		this.clearPluginReconnect()
@@ -168,10 +185,10 @@ export class CoreVideoInstance extends InstanceBase<CoreVideoConfig> {
 				this.state.zoom.participants = msg['participants'] as ModuleState['zoom']['participants']
 			if (Array.isArray(msg['outputs'])) {
 				this.state.zoom.outputs = msg['outputs'] as ModuleState['zoom']['outputs']
-				this.setVariableDefinitions([
+				this.setVariableDefinitions({
 					...variableDefinitions,
 					...buildOutputVariableDefs(this.state.zoom.outputs.length),
-				])
+				})
 			}
 			this.flushState()
 		}
@@ -379,4 +396,4 @@ export class CoreVideoInstance extends InstanceBase<CoreVideoConfig> {
 	}
 }
 
-runEntrypoint(CoreVideoInstance, [])
+export default CoreVideoInstance

@@ -1,24 +1,24 @@
-import type { CompanionVariableDefinition, CompanionVariableValues } from '@companion-module/base'
+import type { CompanionVariableDefinitions, CompanionVariableValues } from '@companion-module/base'
 import type { ModuleState } from './state.js'
 
-export const variableDefinitions: CompanionVariableDefinition[] = [
+export const variableDefinitions: CompanionVariableDefinitions = {
 	// ── Zoom ──────────────────────────────────────────────────────────────────
-	{ variableId: 'zoom_meeting_state',       name: 'Zoom: Meeting State' },
-	{ variableId: 'zoom_active_speaker_name', name: 'Zoom: Active Speaker Name' },
-	{ variableId: 'zoom_active_speaker_id',   name: 'Zoom: Active Speaker ID' },
-	{ variableId: 'zoom_participant_count',   name: 'Zoom: Participant Count' },
-	{ variableId: 'zoom_output_count',        name: 'Zoom: Output Count' },
+	zoom_meeting_state:       { name: 'Zoom: Meeting State' },
+	zoom_active_speaker_name: { name: 'Zoom: Active Speaker Name' },
+	zoom_active_speaker_id:   { name: 'Zoom: Active Speaker ID' },
+	zoom_participant_count:   { name: 'Zoom: Participant Count' },
+	zoom_output_count:        { name: 'Zoom: Output Count' },
 	// ── OBS ───────────────────────────────────────────────────────────────────
-	{ variableId: 'obs_current_scene', name: 'OBS: Current Scene' },
-	{ variableId: 'obs_recording',     name: 'OBS: Recording' },
-	{ variableId: 'obs_streaming',     name: 'OBS: Streaming' },
-	{ variableId: 'obs_virtual_cam',   name: 'OBS: Virtual Camera Active' },
+	obs_current_scene: { name: 'OBS: Current Scene' },
+	obs_recording:     { name: 'OBS: Recording' },
+	obs_streaming:     { name: 'OBS: Streaming' },
+	obs_virtual_cam:   { name: 'OBS: Virtual Camera Active' },
 	// ── Sidecar / Show ────────────────────────────────────────────────────────
-	{ variableId: 'sidecar_phase',         name: 'Show: Phase' },
-	{ variableId: 'sidecar_template_id',   name: 'Show: Template ID' },
-	{ variableId: 'sidecar_template_name', name: 'Show: Template Name' },
-	{ variableId: 'sidecar_scene',         name: 'Show: Current Scene' },
-]
+	sidecar_phase:         { name: 'Show: Phase' },
+	sidecar_template_id:   { name: 'Show: Template ID' },
+	sidecar_template_name: { name: 'Show: Template Name' },
+	sidecar_scene:         { name: 'Show: Current Scene' },
+}
 
 export function buildVariableValues(state: ModuleState): CompanionVariableValues {
 	const vals: CompanionVariableValues = {
@@ -50,14 +50,12 @@ export function buildVariableValues(state: ModuleState): CompanionVariableValues
 	return vals
 }
 
-export function buildOutputVariableDefs(count: number): CompanionVariableDefinition[] {
-	const defs: CompanionVariableDefinition[] = []
+export function buildOutputVariableDefs(count: number): CompanionVariableDefinitions {
+	const defs: CompanionVariableDefinitions = {}
 	for (let i = 1; i <= Math.min(count, 16); i++) {
-		defs.push(
-			{ variableId: `zoom_output_${i}_source`,      name: `Zoom Output ${i} Source` },
-			{ variableId: `zoom_output_${i}_participant`, name: `Zoom Output ${i} Participant` },
-			{ variableId: `zoom_output_${i}_mode`,        name: `Zoom Output ${i} Assignment Mode` },
-		)
+		defs[`zoom_output_${i}_source`]      = { name: `Zoom Output ${i} Source` }
+		defs[`zoom_output_${i}_participant`] = { name: `Zoom Output ${i} Participant` }
+		defs[`zoom_output_${i}_mode`]        = { name: `Zoom Output ${i} Assignment Mode` }
 	}
 	return defs
 }
