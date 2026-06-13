@@ -243,6 +243,9 @@ bool ZoomEngineClient::start(const std::string &jwt_token,
         return false;
     }
 
+    // Seed the heartbeat clock so a freshly connected engine isn't immediately
+    // considered stale before its first line arrives.
+    m_last_rx_ms.store(os_gettime_ns() / 1000000ULL, std::memory_order_release);
     m_running.store(true, std::memory_order_release);
     m_reader  = std::thread([this]() { reader_loop(); });
     m_monitor = std::thread([this]() { monitor_loop(); });
@@ -287,31 +290,90 @@ void ZoomEngineClient::stop_for_reconnect()
 
 void ZoomEngineClient::monitor_loop()
 {
-    // Wait for the engine process to exit.
+    // Poll until the engine process exits OR it stops responding (heartbeat
+    // timeout). A hung-but-alive engine (process up, pipe silent) would
+    // otherwise block reader_loop on ipc_read_line() forever and never recover.
+    constexpr uint64_t kHeartbeatTimeoutMs = 10000;
     int exit_code = 0;
-#if defined(WIN32)
-    if (m_process) {
-        WaitForSingleObject(static_cast<HANDLE>(m_process), INFINITE);
-        DWORD code = 0;
-        GetExitCodeProcess(static_cast<HANDLE>(m_process), &code);
-        exit_code = static_cast<int>(code);
-        CloseHandle(static_cast<HANDLE>(m_process));
-        m_process = nullptr;
-    }
-#else
-    if (m_pid > 0) {
-        int status = 0;
-        waitpid(m_pid, &status, 0);
-        exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
-        m_pid = -1;
-    }
-#endif
+    bool heartbeat_timeout = false;
 
-    // If m_running is still true the engine exited without being asked to.
+    while (m_running.load(std::memory_order_acquire)) {
+#if defined(WIN32)
+        if (m_process) {
+            DWORD waited = WaitForSingleObject(static_cast<HANDLE>(m_process), 1000);
+            if (waited == WAIT_OBJECT_0) {
+                DWORD code = 0;
+                GetExitCodeProcess(static_cast<HANDLE>(m_process), &code);
+                exit_code = static_cast<int>(code);
+                CloseHandle(static_cast<HANDLE>(m_process));
+                m_process = nullptr;
+                break;
+            }
+        } else {
+            break;
+        }
+#else
+        if (m_pid > 0) {
+            int status = 0;
+            pid_t r = waitpid(m_pid, &status, WNOHANG);
+            if (r == m_pid) {
+                exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+                m_pid = -1;
+                break;
+            }
+            if (r < 0) { // process already reaped / error
+                m_pid = -1;
+                break;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        } else {
+            break;
+        }
+#endif
+        // Engine is still alive — check that it is still talking to us. Only
+        // enforce the timeout once we're connected/in a meeting, where a
+        // steady heartbeat is expected.
+        const MeetingState st = m_state.load(std::memory_order_acquire);
+        if (m_running.load(std::memory_order_acquire) &&
+            (st == MeetingState::InMeeting || st == MeetingState::Joining)) {
+            const uint64_t now = os_gettime_ns() / 1000000ULL;
+            const uint64_t last = m_last_rx_ms.load(std::memory_order_acquire);
+            if (last != 0 && now > last && (now - last) > kHeartbeatTimeoutMs) {
+                heartbeat_timeout = true;
+                break;
+            }
+        }
+    }
+
+    // If m_running is still true the engine exited (or went silent) without
+    // being asked to.
     if (m_running.exchange(false, std::memory_order_acq_rel)) {
-        blog(LOG_ERROR,
-             "[obs-zoom-plugin] ZoomObsEngine exited unexpectedly (code %d)",
-             exit_code);
+        if (heartbeat_timeout) {
+            blog(LOG_ERROR,
+                 "[obs-zoom-plugin] ZoomObsEngine stopped responding (no IPC for >%llums)",
+                 static_cast<unsigned long long>(kHeartbeatTimeoutMs));
+            set_last_error("Zoom engine stopped responding");
+            // The process is hung but still alive — terminate and reap it so the
+            // recovery path starts from a clean slate, mirroring the crash case.
+#if defined(WIN32)
+            if (m_process) {
+                TerminateProcess(static_cast<HANDLE>(m_process), 1);
+                WaitForSingleObject(static_cast<HANDLE>(m_process), 3000);
+                CloseHandle(static_cast<HANDLE>(m_process));
+                m_process = nullptr;
+            }
+#else
+            if (m_pid > 0) {
+                kill(m_pid, SIGKILL);
+                waitpid(m_pid, nullptr, 0);
+                m_pid = -1;
+            }
+#endif
+        } else {
+            blog(LOG_ERROR,
+                 "[obs-zoom-plugin] ZoomObsEngine exited unexpectedly (code %d)",
+                 exit_code);
+        }
         disconnect_ipc(); // unblocks reader_loop so it exits cleanly
 
         // If the user is in the middle of leaving / stopping, don't try to recover —
@@ -322,9 +384,11 @@ void ZoomEngineClient::monitor_loop()
         }
 
         RecoveryReason reason = RecoveryReason::EngineCrash;
-        if (exit_code == 2) reason = RecoveryReason::AuthFailure;
-        else if (exit_code == 3) reason = RecoveryReason::SdkError;
-        else if (exit_code == 4) reason = RecoveryReason::LicenseError;
+        if (!heartbeat_timeout) {
+            if (exit_code == 2) reason = RecoveryReason::AuthFailure;
+            else if (exit_code == 3) reason = RecoveryReason::SdkError;
+            else if (exit_code == 4) reason = RecoveryReason::LicenseError;
+        }
 
         m_state.store(MeetingState::Recovering, std::memory_order_release);
         ZoomReconnectManager::instance().trigger(reason);
@@ -568,11 +632,18 @@ void ZoomEngineClient::reader_loop()
 
 void ZoomEngineClient::handle_event(const std::string &line)
 {
+    // Record receipt of any line so monitor_loop() can detect a silent engine.
+    m_last_rx_ms.store(os_gettime_ns() / 1000000ULL, std::memory_order_release);
+
     const QJsonDocument doc = QJsonDocument::fromJson(QByteArray::fromStdString(line));
     if (!doc.isObject()) return;
     const QJsonObject obj = doc.object();
     const QString cmd = obj.value("cmd").toString();
 
+    if (cmd == "ping") {
+        // Heartbeat from the engine — the timestamp update above is all we need.
+        return;
+    }
     if (cmd == "ready") {
         blog(LOG_INFO, "[obs-zoom-plugin] Zoom engine ready");
         return;

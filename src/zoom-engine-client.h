@@ -108,6 +108,9 @@ private:
     std::atomic<bool> m_authenticated{false};
     std::atomic<bool> m_media_active{false};
     std::atomic<MeetingState> m_state{MeetingState::Idle};
+    // Wall-clock ms (os_gettime_ns()/1e6) of the last line received from the
+    // engine. Used by monitor_loop() to detect a hung-but-alive engine.
+    std::atomic<uint64_t> m_last_rx_ms{0};
     uint32_t m_active_speaker_id = 0;
     std::vector<ParticipantInfo> m_roster;
     std::unordered_map<std::string, SourceCallbacks> m_sources;

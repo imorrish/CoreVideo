@@ -39,7 +39,9 @@
 #include <algorithm>
 #include <string>
 #include <atomic>
+#include <chrono>
 #include <mutex>
+#include <thread>
 #include <vector>
 
 static std::string redacted_tail(const std::string &value)
@@ -1133,6 +1135,17 @@ int main()
     std::atomic<bool> running{true};
     std::string line;
 
+    // Heartbeat: emit a ping every ~2s so the plugin can detect a hung-but-alive
+    // engine (process running, pipe silent). Stop the loop if a write fails.
+    std::thread heartbeat([&running]() {
+        while (running.load(std::memory_order_acquire)) {
+            for (int i = 0; i < 20 && running.load(std::memory_order_acquire); ++i)
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (!running.load(std::memory_order_acquire)) break;
+            if (!EngineIpc::write(R"({"cmd":"ping"})")) break;
+        }
+    });
+
     while (running) {
 #if defined(WIN32)
         if (!ipc_read_line_with_message_pump(p2e, line)) break;
@@ -1322,6 +1335,10 @@ int main()
             }
         }
     }
+
+    // Stop the heartbeat before tearing down the SDK / IPC.
+    running.store(false, std::memory_order_release);
+    if (heartbeat.joinable()) heartbeat.join();
 
     if (meeting_svc) meeting_svc->Leave(ZOOMSDK::LEAVE_MEETING);
     share_engine.detach();
