@@ -297,6 +297,15 @@ jobs:
           fi
 
       - name: Configure
+        # Plugin/engine stay OFF in CI. The engine links the Zoom SDK
+        # (ZoomSDK.framework), which is not available without the secret SDK
+        # download, so it genuinely cannot be built here. The plugin itself
+        # does not require the Zoom SDK and links OBS symbols lazily
+        # (-undefined dynamic_lookup), but enabling it would add a Qt6 AUTOMOC
+        # build of the full Qt UI that is not exercised by any packaged macOS
+        # artifact today; turning it on only to discard it would add CI time
+        # and a new failure surface without shipping anything. Left OFF
+        # deliberately; revisit if a macOS plugin artifact is ever released.
         run: |
           QT_PREFIX="$(brew --prefix qt@6)"
           HOST_ARCH="$(uname -m)"
@@ -304,16 +313,6 @@ jobs:
               -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_OSX_ARCHITECTURES="$HOST_ARCH" \
               -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0 \
-              # Plugin/engine stay OFF in CI. The engine links the Zoom SDK
-              # (ZoomSDK.framework), which is not available without the
-              # secret SDK download, so it genuinely cannot be built here.
-              # The plugin itself does not require the Zoom SDK and links OBS
-              # symbols lazily (-undefined dynamic_lookup), but enabling it
-              # would add a Qt6 AUTOMOC build of the full Qt UI that is not
-              # exercised by any packaged macOS artifact today; turning it on
-              # only to discard it would add CI time and a new failure surface
-              # without shipping anything. Left OFF deliberately; revisit if a
-              # macOS plugin artifact is ever released.
               -DCOREVIDEO_BUILD_PLUGIN=OFF \
               -DCOREVIDEO_BUILD_ENGINE=OFF \
               -DZOOM_SDK_DIR=third_party/zoom-sdk \
