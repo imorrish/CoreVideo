@@ -412,6 +412,16 @@ if(BUILD_TESTING)
     add_test(NAME CoreVideoSpeakerDirector
              COMMAND CoreVideoSpeakerDirectorTest)
 
+    add_executable(CoreVideoJoinInputTest
+        tests/join-input-test.cpp
+        src/obs-utils.cpp
+    )
+    target_include_directories(CoreVideoJoinInputTest PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
+    add_test(NAME CoreVideoJoinInput
+             COMMAND CoreVideoJoinInputTest)
+
     # IPC line-I/O framing and write-failure semantics (POSIX socket-based test).
     if(NOT WIN32)
         add_executable(CoreVideoIpcLineIoTest

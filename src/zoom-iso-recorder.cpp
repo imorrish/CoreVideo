@@ -595,7 +595,7 @@ void ZoomIsoRecorder::mark_disk_full_locked(Session &session)
     session.disk_full = true;
     mark_ffmpeg_failure_locked(
         session,
-        QString::fromUtf8("No space left on device \xE2\x80\x94 free disk space."));
+        QStringLiteral("No space left on device - free disk space."));
 }
 
 void ZoomIsoRecorder::close_session_on_disk_full_locked(
