@@ -18,8 +18,6 @@ static constexpr qint64 kIsoMinimumFreeBytes = 2ll * 1024ll * 1024ll * 1024ll;
 static constexpr qint64 kIsoWarningFreeBytes = 10ll * 1024ll * 1024ll * 1024ll;
 static constexpr int kFfmpegOutputTailChars = 2048;
 static constexpr size_t kMaxCompletedIsoSessions = 24;
-static const char *const kIsoDiskFullMessage =
-    "No space left on device \xE2\x80\x94 free disk space.";
 
 static QString default_iso_dir()
 {
@@ -595,8 +593,9 @@ void ZoomIsoRecorder::mark_ffmpeg_failure_locked(Session &session,
 void ZoomIsoRecorder::mark_disk_full_locked(Session &session)
 {
     session.disk_full = true;
-    mark_ffmpeg_failure_locked(session,
-                               QString::fromUtf8(kIsoDiskFullMessage));
+    mark_ffmpeg_failure_locked(
+        session,
+        QString::fromUtf8("No space left on device \xE2\x80\x94 free disk space."));
 }
 
 void ZoomIsoRecorder::close_session_on_disk_full_locked(
