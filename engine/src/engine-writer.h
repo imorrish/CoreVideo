@@ -24,11 +24,13 @@ inline std::mutex &mtx()
 // Call once from main() after e2p is established, before SDK callbacks start.
 inline void init(IpcFd e2p) { fd() = e2p; }
 
-// Serialised write — safe to call from any thread.
-inline void write(const std::string &msg)
+// Serialised write — safe to call from any thread. Returns false if the line
+// could not be fully delivered (closed/broken/full pipe), so callers in the
+// engine can stop emitting into a dead link.
+inline bool write(const std::string &msg)
 {
     std::lock_guard<std::mutex> lk(mtx());
-    ipc_write_line(fd(), msg);
+    return ipc_write_line(fd(), msg);
 }
 
 } // namespace EngineIpc
