@@ -266,6 +266,23 @@ void EngineVideo::subscribe(uint32_t participant_id,
         return;
     }
 
+    // Bound the number of distinct video source UUIDs. Each source backs a
+    // shared-memory region, so without a cap a misbehaving or runaway plugin
+    // could create unbounded SHM regions and exhaust memory. The product
+    // targets up to 8 feeds plus active-speaker/spotlight/screenshare slots;
+    // 32 leaves generous headroom while staying bounded. Re-subscribing an
+    // existing source is always allowed.
+    constexpr size_t kMaxVideoSources = 32;
+    if (m_source_participants.find(source_uuid) == m_source_participants.end() &&
+        m_source_participants.size() >= kMaxVideoSources) {
+        EngineIpc::write(
+            R"({"cmd":"debug","stage":"video_subscribe_rejected_capacity","source_uuid":")" +
+            source_uuid + R"(","participant_id":)" +
+            std::to_string(participant_id) + R"(,"limit":)" +
+            std::to_string(kMaxVideoSources) + "}");
+        return;
+    }
+
     auto existing_source = m_source_participants.find(source_uuid);
     if (existing_source != m_source_participants.end()) {
         if (existing_source->second.participant_id == participant_id) {
