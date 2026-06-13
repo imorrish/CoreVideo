@@ -203,11 +203,14 @@ jobs:
                 -ExpectedOAuthClientId y6sIWSwiTZe1JygMx4C9EQ `
                 -ExpectedMeetingSdkPublicAppKey y6sIWSwiTZe1JygMx4C9EQ
           } else {
-              .\scripts\Test-CoreVideoPackage.ps1 `
-                -PackageRoot install `
-                -ExpectedOAuthClientId y6sIWSwiTZe1JygMx4C9EQ `
-                -ExpectedMeetingSdkPublicAppKey y6sIWSwiTZe1JygMx4C9EQ
-              Write-Warning "Windows artifact is validation-only; it does not include zoom-runtime\sdk.dll."
+              # Without the Zoom SDK secret the plugin is configured
+              # COREVIDEO_BUILD_PLUGIN=OFF (its sources include the Zoom SDK
+              # headers and cannot compile without them), so obs-zoom-plugin.dll
+              # and the OAuth helper are not built. Package validation requires
+              # those artifacts, so skip it here — this no-SDK job validates
+              # compilation and unit tests only. Full package validation runs
+              # on the SDK-present (FullRuntime) build path above.
+              Write-Warning "Skipping package validation: no Zoom SDK, so the plugin is not built. This job validates compilation and unit tests only."
           }
           Compress-Archive -Path install\* -DestinationPath CoreVideo-Windows-x64.zip
           $hash = (Get-FileHash -LiteralPath CoreVideo-Windows-x64.zip -Algorithm SHA256).Hash
