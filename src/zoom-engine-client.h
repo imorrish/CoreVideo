@@ -96,7 +96,8 @@ private:
     void monitor_loop();
     void handle_event(const std::string &line);
     void send_join_locked();
-    void write_json(const std::string &json);
+    // Returns false if the command could not be delivered to the engine.
+    bool write_json(const std::string &json);
 
     mutable std::mutex m_mtx;
     IpcFd m_p2e = kIpcInvalidFd;

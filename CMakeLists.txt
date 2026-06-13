@@ -411,6 +411,18 @@ if(BUILD_TESTING)
     )
     add_test(NAME CoreVideoSpeakerDirector
              COMMAND CoreVideoSpeakerDirectorTest)
+
+    # IPC line-I/O framing and write-failure semantics (POSIX socket-based test).
+    if(NOT WIN32)
+        add_executable(CoreVideoIpcLineIoTest
+            tests/ipc-line-io-test.cpp
+        )
+        target_include_directories(CoreVideoIpcLineIoTest PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        )
+        add_test(NAME CoreVideoIpcLineIo
+                 COMMAND CoreVideoIpcLineIoTest)
+    endif()
 endif()
 
 set(CPACK_GENERATOR                 "ZIP")

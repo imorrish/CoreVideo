@@ -776,7 +776,19 @@ void ZoomEngineClient::send_join_locked()
             json_escape(m_pending_tokens.app_privilege_token) + "\"";
     }
     json += "}";
-    ipc_write_line(m_p2e, json);
+    if (m_p2e == kIpcInvalidFd || !ipc_write_line(m_p2e, json)) {
+        blog(LOG_ERROR,
+             "[obs-zoom-plugin] Failed to send join to engine; link is broken");
+        m_last_error = "Lost connection to Zoom engine";
+        if (m_p2e != kIpcInvalidFd) {
+#if defined(WIN32)
+            CloseHandle(m_p2e); m_p2e = kIpcInvalidFd;
+#else
+            close(m_p2e); m_p2e = kIpcInvalidFd;
+#endif
+        }
+        return;
+    }
     m_join_pending = false;
 }
 
@@ -852,9 +864,22 @@ void ZoomEngineClient::remove_error_callback(void *key)
     m_error_callbacks.erase(key);
 }
 
-void ZoomEngineClient::write_json(const std::string &json)
+bool ZoomEngineClient::write_json(const std::string &json)
 {
     std::lock_guard<std::mutex> lk(m_mtx);
-    if (m_p2e == kIpcInvalidFd) return;
-    ipc_write_line(m_p2e, json);
+    if (m_p2e == kIpcInvalidFd) return false;
+    if (ipc_write_line(m_p2e, json))
+        return true;
+    // The command did not reach the engine — the pipe is broken. Surface it and
+    // close our end so the reader loop unblocks and the monitor/reconnect path
+    // can recover instead of silently desyncing.
+    blog(LOG_ERROR,
+         "[obs-zoom-plugin] IPC write to engine failed; tearing down link for recovery");
+    m_last_error = "Lost connection to Zoom engine";
+#if defined(WIN32)
+    CloseHandle(m_p2e); m_p2e = kIpcInvalidFd;
+#else
+    close(m_p2e); m_p2e = kIpcInvalidFd;
+#endif
+    return false;
 }
