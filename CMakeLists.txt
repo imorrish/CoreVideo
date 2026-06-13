@@ -411,6 +411,28 @@ if(BUILD_TESTING)
     )
     add_test(NAME CoreVideoSpeakerDirector
              COMMAND CoreVideoSpeakerDirectorTest)
+
+    add_executable(CoreVideoJoinInputTest
+        tests/join-input-test.cpp
+        src/obs-utils.cpp
+    )
+    target_include_directories(CoreVideoJoinInputTest PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    )
+    add_test(NAME CoreVideoJoinInput
+             COMMAND CoreVideoJoinInputTest)
+
+    # Line-oriented IPC helpers use POSIX read()/write()/pipe(); skip on Windows.
+    if(NOT WIN32)
+        add_executable(CoreVideoIpcLineIoTest
+            tests/ipc-line-io-test.cpp
+        )
+        target_include_directories(CoreVideoIpcLineIoTest PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/src"
+        )
+        add_test(NAME CoreVideoIpcLineIo
+                 COMMAND CoreVideoIpcLineIoTest)
+    endif()
 endif()
 
 set(CPACK_GENERATOR                 "ZIP")
