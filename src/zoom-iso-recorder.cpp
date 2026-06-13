@@ -11,6 +11,7 @@
 #include <obs-module.h>
 #include <util/platform.h>
 #include <algorithm>
+#include <cerrno>
 #include <cstring>
 
 static constexpr qint64 kIsoMinimumFreeBytes = 2ll * 1024ll * 1024ll * 1024ll;
@@ -114,24 +115,39 @@ bool ZoomIsoRecorder::WavFile::open(const QString &path,
     return true;
 }
 
-void ZoomIsoRecorder::WavFile::write(const uint8_t *pcm, uint32_t byte_len)
+bool ZoomIsoRecorder::WavFile::write(const uint8_t *pcm, uint32_t byte_len,
+                                     bool *out_disk_full)
 {
-    if (!file || !pcm || byte_len == 0) return;
-    fwrite(pcm, 1, byte_len, file);
-    data_bytes += byte_len;
+    if (out_disk_full) *out_disk_full = false;
+    if (!file || !pcm || byte_len == 0) return true;
+    errno = 0;
+    const size_t written = fwrite(pcm, 1, byte_len, file);
+    data_bytes += static_cast<uint32_t>(written);
+    if (written < byte_len) {
+        write_failed = true;
+        if (out_disk_full && (errno == ENOSPC || ferror(file)))
+            *out_disk_full = (errno == ENOSPC);
+        return false;
+    }
+    return true;
 }
 
 void ZoomIsoRecorder::WavFile::close()
 {
     if (!file) return;
+    // Finalize the RIFF/data size fields on every close path (including
+    // when a write failed mid-stream) so the file stays valid and playable.
+    // data_bytes reflects the bytes actually written, so a truncated file
+    // still describes its real payload size.
     const uint32_t riff_size = 36 + data_bytes;
-    fseek(file, 4, SEEK_SET);
-    fwrite(&riff_size, 4, 1, file);
-    fseek(file, 40, SEEK_SET);
-    fwrite(&data_bytes, 4, 1, file);
+    if (fseek(file, 4, SEEK_SET) == 0)
+        fwrite(&riff_size, 4, 1, file);
+    if (fseek(file, 40, SEEK_SET) == 0)
+        fwrite(&data_bytes, 4, 1, file);
     fclose(file);
     file = nullptr;
     data_bytes = 0;
+    write_failed = false;
 }
 
 bool ZoomIsoRecorder::start(const ZoomIsoRecordConfig &config,
@@ -429,10 +445,19 @@ void ZoomIsoRecorder::close_session(Session &session)
     if (session.ffmpeg) {
         refresh_ffmpeg_status_locked(session);
         session.ffmpeg->closeWriteChannel();
-        if (!session.ffmpeg->waitForFinished(5000))
+        if (!session.ffmpeg->waitForFinished(5000)) {
             session.ffmpeg->kill();
-        if (session.ffmpeg->state() != QProcess::NotRunning)
-            session.ffmpeg->waitForFinished(2000);
+            // After kill() we must wait again so QProcess reaps the child
+            // (waitpid on POSIX); otherwise it can linger as a zombie.
+            if (!session.ffmpeg->waitForFinished(2000) &&
+                session.ffmpeg->state() != QProcess::NotRunning) {
+                blog(LOG_WARNING,
+                     "[obs-zoom-plugin] ISO ffmpeg for %s did not exit after "
+                     "kill(); process may not be reaped (pid=%lld)",
+                     session.source_name.c_str(),
+                     static_cast<long long>(session.ffmpeg->processId()));
+            }
+        }
         refresh_ffmpeg_status_locked(session);
     }
     QJsonObject completed = session_status_json_locked(session, true);
@@ -479,6 +504,7 @@ QJsonObject ZoomIsoRecorder::session_status_json_locked(Session &s,
         !completed && s.ffmpeg && s.ffmpeg->state() == QProcess::Running;
     obj["ffmpeg_running"] = ffmpeg_running;
     obj["ffmpeg_error"] = s.ffmpeg_error;
+    obj["disk_full"] = s.disk_full;
     obj["ffmpeg_exit_code"] = s.ffmpeg_exit_code;
     obj["ffmpeg_exit_status"] = s.ffmpeg_exit_status;
     obj["ffmpeg_output_tail"] = s.ffmpeg_output_tail;
@@ -487,7 +513,9 @@ QJsonObject ZoomIsoRecorder::session_status_json_locked(Session &s,
     obj["video_encoder"] = QString::fromStdString(s.video_encoder);
     obj["encoder_fallback"] = s.encoder_fallback;
     QString session_health = QStringLiteral("recording");
-    if (completed) {
+    if (s.disk_full) {
+        session_health = QStringLiteral("disk_full");
+    } else if (completed) {
         session_health = QStringLiteral("completed");
     } else if (!s.ffmpeg_error.isEmpty()) {
         session_health = QStringLiteral("encoder_error");
@@ -562,6 +590,25 @@ void ZoomIsoRecorder::mark_ffmpeg_failure_locked(Session &session,
     session.ffmpeg_error_logged = true;
 }
 
+void ZoomIsoRecorder::mark_disk_full_locked(Session &session)
+{
+    session.disk_full = true;
+    mark_ffmpeg_failure_locked(
+        session,
+        QString::fromUtf8("No space left on device \xE2\x80\x94 free disk space."));
+}
+
+void ZoomIsoRecorder::close_session_on_disk_full_locked(
+    const std::string &source_uuid)
+{
+    auto it = m_sessions.find(source_uuid);
+    if (it == m_sessions.end() || !it->second.disk_full)
+        return;
+    // Disk is full: stop this session cleanly so the partial files are
+    // finalized rather than left growing against a full volume.
+    close_session_locked(source_uuid);
+}
+
 bool ZoomIsoRecorder::write_ffmpeg_locked(Session &session,
                                          const uint8_t *data,
                                          uint32_t byte_len)
@@ -572,12 +619,19 @@ bool ZoomIsoRecorder::write_ffmpeg_locked(Session &session,
     const char *cursor = reinterpret_cast<const char *>(data);
     qint64 remaining = byte_len;
     while (remaining > 0) {
+        errno = 0;
         const qint64 written = session.ffmpeg->write(cursor, remaining);
         if (written <= 0) {
-            mark_ffmpeg_failure_locked(
-                session,
-                QString("FFmpeg pipe write failed: %1")
-                    .arg(session.ffmpeg->errorString()));
+            // Distinguish a full disk (the underlying ::write to FFmpeg's
+            // pipe / its output file reports ENOSPC) from a broken pipe so
+            // the operator sees an actionable message.
+            if (errno == ENOSPC)
+                mark_disk_full_locked(session);
+            else
+                mark_ffmpeg_failure_locked(
+                    session,
+                    QString("FFmpeg pipe write failed: %1")
+                        .arg(session.ffmpeg->errorString()));
             refresh_ffmpeg_status_locked(session);
             return false;
         }
@@ -613,17 +667,18 @@ void ZoomIsoRecorder::record_video_frame(const ZoomOutputInfo &info,
         return;
     }
 
+    const std::string source_uuid = session.source_uuid;
     for (uint32_t row = 0; row < height; ++row) {
         if (!write_ffmpeg_locked(session, y + row * stride_y, width))
-            return;
+            return close_session_on_disk_full_locked(source_uuid);
     }
     for (uint32_t row = 0; row < height / 2; ++row) {
         if (!write_ffmpeg_locked(session, u + row * stride_uv, width / 2))
-            return;
+            return close_session_on_disk_full_locked(source_uuid);
     }
     for (uint32_t row = 0; row < height / 2; ++row) {
         if (!write_ffmpeg_locked(session, v + row * stride_uv, width / 2))
-            return;
+            return close_session_on_disk_full_locked(source_uuid);
     }
     ++session.video_frames;
     session.last_video_ns = timestamp_ns;
@@ -655,7 +710,22 @@ void ZoomIsoRecorder::record_audio_frame(const ZoomOutputInfo &info,
     }
     if (session.wav.sample_rate == sample_rate &&
         session.wav.channels == std::max<uint16_t>(channels, 1)) {
-        session.wav.write(pcm, byte_len);
+        bool disk_full = false;
+        if (!session.wav.write(pcm, byte_len, &disk_full)) {
+            if (disk_full) {
+                mark_disk_full_locked(session);
+            } else if (session.ffmpeg_error.isEmpty()) {
+                mark_ffmpeg_failure_locked(
+                    session,
+                    QStringLiteral("WAV write failed."));
+            }
+            // Finalize and close the WAV so it stays valid/playable, and
+            // stop the rest of this session cleanly. Copy the key first:
+            // close_session_locked erases the Session (and its source_uuid).
+            const std::string source_uuid = session.source_uuid;
+            close_session_locked(source_uuid);
+            return;
+        }
         ++session.audio_chunks;
         session.last_audio_ns = timestamp_ns;
     }

@@ -59,12 +59,15 @@ private:
 
     struct WavFile {
         bool open(const QString &path, uint32_t sample_rate, uint16_t channels);
-        void write(const uint8_t *pcm, uint32_t byte_len);
+        // Returns false if a write failed; sets out_disk_full when the
+        // failure was caused by the disk being full (ENOSPC).
+        bool write(const uint8_t *pcm, uint32_t byte_len, bool *out_disk_full);
         void close();
         FILE *file = nullptr;
         uint32_t data_bytes = 0;
         uint32_t sample_rate = 0;
         uint16_t channels = 0;
+        bool write_failed = false;
     };
 
     struct Session {
@@ -89,6 +92,7 @@ private:
         int ffmpeg_exit_code = -1;
         QString ffmpeg_exit_status;
         bool ffmpeg_error_logged = false;
+        bool disk_full = false;
         std::string requested_video_encoder;
         std::string video_encoder;
         bool encoder_fallback = false;
@@ -106,6 +110,11 @@ private:
     QJsonObject session_status_json_locked(Session &session, bool completed);
     void refresh_ffmpeg_status_locked(Session &session);
     void mark_ffmpeg_failure_locked(Session &session, const QString &message);
+    void mark_disk_full_locked(Session &session);
+    // If the session was flagged disk-full, close it cleanly (finalizing the
+    // WAV header and reaping FFmpeg). No-op otherwise. Note: this may
+    // invalidate any Session reference for source_uuid.
+    void close_session_on_disk_full_locked(const std::string &source_uuid);
     bool write_ffmpeg_locked(Session &session, const uint8_t *data,
                              uint32_t byte_len);
     bool should_record(const ZoomOutputInfo &info,
