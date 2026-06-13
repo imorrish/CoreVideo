@@ -18,9 +18,12 @@
 #include <QPixmap>
 #include <QPointer>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QStringList>
 #include <QTableWidget>
+#include <QTimer>
 #include <QVBoxLayout>
+#include <QVariant>
 #include <QWidget>
 #include <algorithm>
 #include <atomic>
@@ -573,8 +576,87 @@ void ZoomOutputDialog::refresh_now()
     refresh();
 }
 
+bool ZoomOutputDialog::has_open_output_combo_popup() const
+{
+    if (!m_table) return false;
+    for (int row = 0; row < m_table->rowCount(); ++row) {
+        for (const int col : {
+                 ColumnAssignment, ColumnResolution, ColumnAudio, ColumnAudioRole
+             }) {
+            if (auto *combo =
+                    qobject_cast<QComboBox *>(m_table->cellWidget(row, col))) {
+                if (combo->view() && combo->view()->isVisible())
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
+void ZoomOutputDialog::schedule_deferred_refresh()
+{
+    if (m_deferred_refresh_queued)
+        return;
+    m_deferred_refresh_queued = true;
+    QTimer::singleShot(250, this, [this]() {
+        m_deferred_refresh_queued = false;
+        if (has_open_output_combo_popup()) {
+            schedule_deferred_refresh();
+            return;
+        }
+        refresh();
+    });
+}
+
 void ZoomOutputDialog::refresh()
 {
+    if (has_open_output_combo_popup()) {
+        schedule_deferred_refresh();
+        return;
+    }
+
+    const int output_scroll =
+        m_table && m_table->verticalScrollBar()
+        ? m_table->verticalScrollBar()->value()
+        : 0;
+    const int participant_scroll =
+        m_participant_table && m_participant_table->verticalScrollBar()
+        ? m_participant_table->verticalScrollBar()->value()
+        : 0;
+
+    struct PendingPick {
+        QVariant assignment;
+        QVariant resolution;
+        QVariant audio;
+        QVariant audio_role;
+    };
+    std::unordered_map<std::string, PendingPick> pending;
+    if (m_table) {
+        for (int row = 0; row < m_table->rowCount(); ++row) {
+            auto *name_item = m_table->item(row, ColumnName);
+            auto *assignment = qobject_cast<QComboBox *>(
+                m_table->cellWidget(row, ColumnAssignment));
+            auto *resolution = qobject_cast<QComboBox *>(
+                m_table->cellWidget(row, ColumnResolution));
+            auto *audio = qobject_cast<QComboBox *>(
+                m_table->cellWidget(row, ColumnAudio));
+            auto *audio_role = qobject_cast<QComboBox *>(
+                m_table->cellWidget(row, ColumnAudioRole));
+            if (!name_item || !assignment || !resolution || !audio || !audio_role)
+                continue;
+
+            pending[name_item->data(Qt::UserRole).toString().toStdString()] = {
+                assignment->currentData(),
+                resolution->currentData(),
+                audio->currentData(),
+                audio_role->currentData(),
+            };
+        }
+    }
+
+    if (m_table) m_table->setUpdatesEnabled(false);
+    if (m_participant_table) m_participant_table->setUpdatesEnabled(false);
+
     refresh_participants();
 
     // Clear any existing preview callbacks before rebuilding rows.
@@ -717,6 +799,29 @@ void ZoomOutputDialog::refresh()
         if (role_index >= 0)
             audio_role->setCurrentIndex(role_index);
         m_table->setCellWidget(row, ColumnAudioRole, audio_role);
+
+        const auto pit = pending.find(output.source_name);
+        if (pit != pending.end()) {
+            int idx = assignment->findData(pit->second.assignment);
+            if (idx >= 0) assignment->setCurrentIndex(idx);
+            idx = resolution->findData(pit->second.resolution);
+            if (idx >= 0) resolution->setCurrentIndex(idx);
+            idx = audio->findData(pit->second.audio);
+            if (idx >= 0) audio->setCurrentIndex(idx);
+            idx = audio_role->findData(pit->second.audio_role);
+            if (idx >= 0) audio_role->setCurrentIndex(idx);
+        }
+    }
+
+    if (m_table) {
+        m_table->setUpdatesEnabled(true);
+        if (m_table->verticalScrollBar())
+            m_table->verticalScrollBar()->setValue(output_scroll);
+    }
+    if (m_participant_table) {
+        m_participant_table->setUpdatesEnabled(true);
+        if (m_participant_table->verticalScrollBar())
+            m_participant_table->verticalScrollBar()->setValue(participant_scroll);
     }
 }
 
