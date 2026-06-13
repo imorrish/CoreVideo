@@ -518,6 +518,8 @@ bool ZoomEngineClient::launch_engine()
     STARTUPINFOA si = {};
     PROCESS_INFORMATION pi = {};
     si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
     const std::string engine_path = engine_executable_path();
     const std::string engine_dir = parent_directory(engine_path);
     std::string command = "\"" + engine_path + "\"";
@@ -525,7 +527,7 @@ bool ZoomEngineClient::launch_engine()
          engine_path.c_str());
 
     if (!CreateProcessA(nullptr, command.data(), nullptr, nullptr, FALSE,
-                        0, nullptr,
+                        CREATE_NO_WINDOW, nullptr,
                         engine_dir.empty() ? nullptr : engine_dir.c_str(),
                         &si, &pi)) {
         const DWORD code = GetLastError();
