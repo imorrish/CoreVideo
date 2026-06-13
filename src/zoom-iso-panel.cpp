@@ -22,6 +22,9 @@
 #include <QMessageBox>
 #include <QProcess>
 #include <QPushButton>
+#include <QScrollBar>
+#include <QSet>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QTableWidget>
@@ -66,6 +69,90 @@ static QTableWidgetItem *item(const QString &text)
     auto *cell = new QTableWidgetItem(text);
     cell->setFlags(cell->flags() & ~Qt::ItemIsEditable);
     return cell;
+}
+
+static QString session_table_key(const QJsonObject &session)
+{
+    const QString path = session.value("video_path").toString();
+    if (!path.isEmpty())
+        return QString("%1:%2").arg(
+            session.value("completed").toBool() ? QStringLiteral("done")
+                                                : QStringLiteral("live"),
+            path);
+
+    return QString("%1:%2:%3")
+        .arg(session.value("completed").toBool() ? QStringLiteral("done")
+                                                 : QStringLiteral("live"),
+             session.value("source_uuid").toString())
+        .arg(static_cast<int>(
+            session.value("resolved_participant_id").toDouble()));
+}
+
+struct SessionTableViewState {
+    int vertical_scroll = 0;
+    int horizontal_scroll = 0;
+    QString current_key;
+    QSet<QString> selected_keys;
+};
+
+static SessionTableViewState capture_session_table_view_state(
+    const QTableWidget *table)
+{
+    SessionTableViewState state;
+    if (!table)
+        return state;
+
+    if (const QScrollBar *bar = table->verticalScrollBar())
+        state.vertical_scroll = bar->value();
+    if (const QScrollBar *bar = table->horizontalScrollBar())
+        state.horizontal_scroll = bar->value();
+
+    if (const QTableWidgetItem *current = table->item(table->currentRow(), 0))
+        state.current_key = current->data(Qt::UserRole).toString();
+
+    const auto selected_ranges = table->selectedRanges();
+    for (const QTableWidgetSelectionRange &range : selected_ranges) {
+        for (int row = range.topRow(); row <= range.bottomRow(); ++row) {
+            if (const QTableWidgetItem *row_item = table->item(row, 0)) {
+                const QString key = row_item->data(Qt::UserRole).toString();
+                if (!key.isEmpty())
+                    state.selected_keys.insert(key);
+            }
+        }
+    }
+
+    return state;
+}
+
+static void restore_session_table_view_state(
+    QTableWidget *table, const SessionTableViewState &state)
+{
+    if (!table)
+        return;
+
+    table->clearSelection();
+    int current_row = -1;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        const QTableWidgetItem *row_item = table->item(row, 0);
+        if (!row_item)
+            continue;
+
+        const QString key = row_item->data(Qt::UserRole).toString();
+        if (!state.current_key.isEmpty() && key == state.current_key)
+            current_row = row;
+        if (state.selected_keys.contains(key))
+            table->selectRow(row);
+    }
+
+    if (current_row >= 0)
+        table->setCurrentCell(current_row, table->currentColumn() >= 0
+            ? table->currentColumn()
+            : 0);
+
+    if (QScrollBar *bar = table->verticalScrollBar())
+        bar->setValue(state.vertical_scroll);
+    if (QScrollBar *bar = table->horizontalScrollBar())
+        bar->setValue(state.horizontal_scroll);
 }
 
 static QString bytes_text(qint64 bytes)
@@ -538,9 +625,14 @@ void ZoomIsoPanel::refresh_status()
         m_disk_status->setStyleSheet("color: #f0b429; font-weight: 700;");
     }
 
+    const SessionTableViewState table_state =
+        capture_session_table_view_state(m_sessions);
+    const QSignalBlocker table_signal_blocker(m_sessions);
+    m_sessions->setUpdatesEnabled(false);
     m_sessions->setRowCount(sessions.size());
     for (int row = 0; row < sessions.size(); ++row) {
         const QJsonObject s = sessions.at(row).toObject();
+        const QString row_key = session_table_key(s);
         const QString resolution = QString("%1x%2")
             .arg(s.value("width").toInt())
             .arg(s.value("height").toInt());
@@ -578,7 +670,9 @@ void ZoomIsoPanel::refresh_status()
                 ? QString("ID %1").arg(participant_id)
                 : s.value("assignment").toString();
 
-        m_sessions->setItem(row, 0, item(s.value("source").toString()));
+        auto *source_item = item(s.value("source").toString());
+        source_item->setData(Qt::UserRole, row_key);
+        m_sessions->setItem(row, 0, source_item);
         m_sessions->setItem(row, 1, item(participant));
         auto *status_item = item(status);
         QString tooltip = QString("Health: %1\nLast video: %2\nLast audio: %3")
@@ -620,6 +714,8 @@ void ZoomIsoPanel::refresh_status()
         files->setToolTip(files->text());
         m_sessions->setItem(row, 10, files);
     }
+    restore_session_table_view_state(m_sessions, table_state);
+    m_sessions->setUpdatesEnabled(true);
 }
 
 void ZoomIsoPanel::refresh_encoder_guidance()

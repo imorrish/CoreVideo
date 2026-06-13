@@ -38,6 +38,7 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScrollBar>
 #include <QStringList>
 #include <QSpinBox>
 #include <QTableWidget>
@@ -50,6 +51,7 @@
 #include <util/platform.h>
 #include <algorithm>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 #if defined(_WIN32)
 #include <windows.h>
@@ -237,6 +239,79 @@ static QString participant_roster_label(const ParticipantInfo &p)
     if (p.spotlight_index > 0) tags << QString("spotlight %1").arg(p.spotlight_index);
     if (p.is_sharing_screen) tags << QStringLiteral("sharing");
     return QString("%1  -  %2").arg(label, tags.join(" / "));
+}
+
+static QString participant_label_for_id(
+    const std::vector<ParticipantInfo> &roster, uint32_t participant_id)
+{
+    if (participant_id == 0)
+        return QStringLiteral("Select participant");
+    for (const auto &p : roster) {
+        if (p.user_id == participant_id)
+            return participant_label(p);
+    }
+    return QString("ID %1 (not in roster)").arg(participant_id);
+}
+
+static bool combo_popup_open(const QComboBox *combo)
+{
+    return combo && combo->view() && combo->view()->isVisible();
+}
+
+static bool combo_items_match(
+    const QComboBox *combo,
+    const std::vector<std::pair<QString, QVariant>> &items)
+{
+    if (!combo || combo->count() != static_cast<int>(items.size()))
+        return false;
+    for (int i = 0; i < combo->count(); ++i) {
+        if (combo->itemText(i) != items[static_cast<size_t>(i)].first ||
+            combo->itemData(i) != items[static_cast<size_t>(i)].second)
+            return false;
+    }
+    return true;
+}
+
+static void replace_combo_items(
+    QComboBox *combo,
+    const std::vector<std::pair<QString, QVariant>> &items,
+    const QVariant &preferred)
+{
+    if (!combo)
+        return;
+
+    const QVariant current = combo->currentData();
+    const QVariant target = preferred.isValid() ? preferred : current;
+    const bool same_items = combo_items_match(combo, items);
+
+    if (!same_items) {
+        combo->blockSignals(true);
+        combo->clear();
+        for (const auto &item : items)
+            combo->addItem(item.first, item.second);
+        combo->blockSignals(false);
+    }
+
+    const int idx = combo->findData(target);
+    if (idx >= 0 && idx != combo->currentIndex()) {
+        combo->blockSignals(true);
+        combo->setCurrentIndex(idx);
+        combo->blockSignals(false);
+    } else if (idx < 0 && combo->currentIndex() < 0 && combo->count() > 0) {
+        combo->blockSignals(true);
+        combo->setCurrentIndex(0);
+        combo->blockSignals(false);
+    }
+}
+
+static bool item_list_contains_data(
+    const std::vector<std::pair<QString, QVariant>> &items, uint32_t participant_id)
+{
+    for (const auto &item : items) {
+        if (item.second.toUInt() == participant_id)
+            return true;
+    }
+    return false;
 }
 
 static QString screen_share_assignment_label(const std::vector<ParticipantInfo> &roster)
@@ -978,45 +1053,67 @@ void ZoomDock::update_state_indicator()
         m_raw_speaker_label->setText(participant_name(director.raw_speaker_id));
         m_candidate_speaker_label->setText(participant_name(director.candidate_speaker_id));
         m_last_speaker_label->setText(participant_name(director.last_speaker_id));
-        if (m_speaker_override_combo && !m_speaker_override_combo->view()->isVisible()) {
-            const QVariant current = m_speaker_override_combo->currentData();
-            m_speaker_override_combo->blockSignals(true);
-            m_speaker_override_combo->clear();
-            m_speaker_override_combo->addItem("Select participant", 0);
-            for (const auto &p : roster) {
-                if (p.user_id == 0 || p.is_muted || !p.has_video)
-                    continue;
-                m_speaker_override_combo->addItem(participant_label(p), p.user_id);
+        const bool speaker_popup_open =
+            combo_popup_open(m_speaker_preset_combo) ||
+            combo_popup_open(m_speaker_override_combo) ||
+            combo_popup_open(m_speaker_exclude_combo_1) ||
+            combo_popup_open(m_speaker_exclude_combo_2);
+        if (!speaker_popup_open) {
+            if (m_speaker_override_combo) {
+                std::vector<std::pair<QString, QVariant>> items;
+                items.emplace_back(QStringLiteral("Select participant"), 0);
+                for (const auto &p : roster) {
+                    if (p.user_id == 0 || p.is_muted || !p.has_video)
+                        continue;
+                    items.emplace_back(participant_label(p), p.user_id);
+                }
+
+                const uint32_t current_id = static_cast<uint32_t>(
+                    m_speaker_override_combo->currentData().toUInt());
+                if (current_id != 0 && !item_list_contains_data(items, current_id))
+                    items.emplace_back(participant_label_for_id(roster, current_id),
+                                       current_id);
+                if (director.manual_speaker_id != 0 &&
+                    !item_list_contains_data(items, director.manual_speaker_id)) {
+                    items.emplace_back(
+                        participant_label_for_id(roster, director.manual_speaker_id),
+                        director.manual_speaker_id);
+                }
+
+                const uint32_t preferred_id =
+                    current_id != 0 ? current_id : director.manual_speaker_id;
+                replace_combo_items(m_speaker_override_combo, items,
+                                    QVariant(preferred_id));
             }
-            const int idx = m_speaker_override_combo->findData(current);
-            if (idx >= 0)
-                m_speaker_override_combo->setCurrentIndex(idx);
-            else if (director.manual_speaker_id != 0) {
-                const int midx = m_speaker_override_combo->findData(director.manual_speaker_id);
-                if (midx >= 0)
-                    m_speaker_override_combo->setCurrentIndex(midx);
-            }
-            m_speaker_override_combo->blockSignals(false);
+
+            auto refresh_exclude_combo =
+                [&roster](QComboBox *combo, uint32_t selected) {
+                    if (!combo)
+                        return;
+                    std::vector<std::pair<QString, QVariant>> items;
+                    items.emplace_back(QStringLiteral("No exclusion"), 0);
+                    for (const auto &p : roster) {
+                        if (p.user_id == 0)
+                            continue;
+                        items.emplace_back(participant_label(p), p.user_id);
+                    }
+                    const uint32_t current_id = static_cast<uint32_t>(
+                        combo->currentData().toUInt());
+                    const uint32_t preferred_id =
+                        selected != current_id ? selected : current_id;
+                    if (preferred_id != 0 &&
+                        !item_list_contains_data(items, preferred_id)) {
+                        items.emplace_back(
+                            participant_label_for_id(roster, preferred_id),
+                            preferred_id);
+                    }
+                    replace_combo_items(combo, items, QVariant(preferred_id));
+                };
+            refresh_exclude_combo(m_speaker_exclude_combo_1,
+                                  settings.speaker_exclude_participant_1);
+            refresh_exclude_combo(m_speaker_exclude_combo_2,
+                                  settings.speaker_exclude_participant_2);
         }
-        auto refresh_exclude_combo = [&roster](QComboBox *combo, uint32_t selected) {
-            if (!combo || combo->view()->isVisible())
-                return;
-            combo->blockSignals(true);
-            combo->clear();
-            combo->addItem("No exclusion", 0);
-            for (const auto &p : roster) {
-                if (p.user_id == 0)
-                    continue;
-                combo->addItem(participant_label(p), p.user_id);
-            }
-            const int idx = combo->findData(selected);
-            combo->setCurrentIndex(idx >= 0 ? idx : 0);
-            combo->blockSignals(false);
-        };
-        refresh_exclude_combo(m_speaker_exclude_combo_1,
-                              settings.speaker_exclude_participant_1);
-        refresh_exclude_combo(m_speaker_exclude_combo_2,
-                              settings.speaker_exclude_participant_2);
         if (m_speaker_take_btn && m_speaker_override_combo) {
             m_speaker_take_btn->setEnabled(
                 m_speaker_override_combo->currentData().toUInt() != 0);
@@ -1082,6 +1179,12 @@ void ZoomDock::refresh_outputs()
     // before they have a chance to click Apply.
     struct PendingPick { QString assignment; int requested_idx; int audio_idx; bool isolate; };
     std::unordered_map<std::string, PendingPick> pending;
+    const int output_vscroll = m_output_table->verticalScrollBar()
+        ? m_output_table->verticalScrollBar()->value()
+        : 0;
+    const int output_hscroll = m_output_table->horizontalScrollBar()
+        ? m_output_table->horizontalScrollBar()->value()
+        : 0;
     for (int row = 0; row < m_output_table->rowCount(); ++row) {
         auto *name_item = m_output_table->item(row, DColName);
         auto *assign = qobject_cast<QComboBox *>(m_output_table->cellWidget(row, DColAssignment));
@@ -1102,6 +1205,19 @@ void ZoomDock::refresh_outputs()
 
     // Rebuild participant list for drag-and-drop
     if (m_participant_list) {
+        const QString current_participant =
+            m_participant_list->currentItem()
+                ? m_participant_list->currentItem()->data(Qt::UserRole).toString()
+                : QString();
+        QStringList selected_participants;
+        for (auto *item : m_participant_list->selectedItems())
+            selected_participants << item->data(Qt::UserRole).toString();
+        const int participant_vscroll = m_participant_list->verticalScrollBar()
+            ? m_participant_list->verticalScrollBar()->value()
+            : 0;
+        const int participant_hscroll = m_participant_list->horizontalScrollBar()
+            ? m_participant_list->horizontalScrollBar()->value()
+            : 0;
         const QString filter = m_participant_filter
             ? m_participant_filter->text().trimmed().toLower() : QString();
         m_participant_list->clear();
@@ -1114,7 +1230,16 @@ void ZoomDock::refresh_outputs()
             auto *item = new QListWidgetItem(participant_roster_label(p));
             item->setData(Qt::UserRole, QString::number(p.user_id));
             m_participant_list->addItem(item);
+            const QString id = item->data(Qt::UserRole).toString();
+            if (selected_participants.contains(id))
+                item->setSelected(true);
+            if (id == current_participant)
+                m_participant_list->setCurrentItem(item);
         }
+        if (m_participant_list->verticalScrollBar())
+            m_participant_list->verticalScrollBar()->setValue(participant_vscroll);
+        if (m_participant_list->horizontalScrollBar())
+            m_participant_list->horizontalScrollBar()->setValue(participant_hscroll);
     }
 
     // Clear stale preview callbacks before rebuilding rows
@@ -1248,6 +1373,10 @@ void ZoomDock::refresh_outputs()
             isolate->setChecked(pit->second.isolate);
         }
     }
+    if (m_output_table->verticalScrollBar())
+        m_output_table->verticalScrollBar()->setValue(output_vscroll);
+    if (m_output_table->horizontalScrollBar())
+        m_output_table->horizontalScrollBar()->setValue(output_hscroll);
 }
 
 void ZoomDock::open_output_manager()

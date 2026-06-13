@@ -14,6 +14,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHeaderView>
+#include <QItemSelectionModel>
 #include <QLabel>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -22,6 +23,8 @@
 #include <QProcess>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QScrollBar>
+#include <QSignalBlocker>
 #include <QStandardPaths>
 #include <QStorageInfo>
 #include <QStringList>
@@ -152,6 +155,114 @@ static QTableWidgetItem *readonly_item(const QString &text)
     auto *item = new QTableWidgetItem(text);
     item->setFlags(item->flags() & ~Qt::ItemIsEditable);
     return item;
+}
+
+struct TableViewState {
+    int horizontal_scroll = 0;
+    int vertical_scroll = 0;
+    int current_row = -1;
+    int current_column = -1;
+    int selected_row = -1;
+    int selected_column = -1;
+    QString current_key;
+    QString selected_key;
+};
+
+static QString table_row_key(const QTableWidget *table, int row,
+                             const QVector<int> &columns)
+{
+    if (!table || row < 0 || row >= table->rowCount())
+        return {};
+
+    QStringList parts;
+    for (int column : columns) {
+        if (column < 0 || column >= table->columnCount())
+            continue;
+        const auto *item = table->item(row, column);
+        parts << (item ? item->text() : QString{});
+    }
+    return parts.join(QLatin1Char('\x1f'));
+}
+
+static TableViewState capture_table_view_state(const QTableWidget *table,
+                                               const QVector<int> &key_columns)
+{
+    TableViewState state;
+    if (!table)
+        return state;
+
+    state.horizontal_scroll = table->horizontalScrollBar()->value();
+    state.vertical_scroll = table->verticalScrollBar()->value();
+    state.current_row = table->currentRow();
+    state.current_column = table->currentColumn();
+    state.current_key = table_row_key(table, state.current_row, key_columns);
+    const QList<QTableWidgetItem *> selected = table->selectedItems();
+    if (!selected.isEmpty()) {
+        state.selected_row = selected.first()->row();
+        state.selected_column = selected.first()->column();
+        state.selected_key =
+            table_row_key(table, state.selected_row, key_columns);
+    }
+    return state;
+}
+
+static int bounded_table_index(int value, int count)
+{
+    if (value < 0 || count <= 0)
+        return -1;
+    return std::min(value, count - 1);
+}
+
+static int find_table_row_by_key(const QTableWidget *table,
+                                 const QVector<int> &key_columns,
+                                 const QString &key)
+{
+    if (!table || key.isEmpty())
+        return -1;
+
+    for (int row = 0; row < table->rowCount(); ++row) {
+        if (table_row_key(table, row, key_columns) == key)
+            return row;
+    }
+    return -1;
+}
+
+static void restore_table_view_state(QTableWidget *table,
+                                     const TableViewState &state,
+                                     const QVector<int> &key_columns)
+{
+    if (!table)
+        return;
+
+    int current_row = find_table_row_by_key(table, key_columns,
+                                            state.current_key);
+    if (current_row < 0)
+        current_row = bounded_table_index(state.current_row,
+                                          table->rowCount());
+    const int current_column = bounded_table_index(state.current_column,
+                                                  table->columnCount());
+    int selected_row = find_table_row_by_key(table, key_columns,
+                                             state.selected_key);
+    if (selected_row < 0)
+        selected_row = bounded_table_index(state.selected_row,
+                                           table->rowCount());
+    const int selected_column = bounded_table_index(state.selected_column,
+                                                   table->columnCount());
+
+    table->clearSelection();
+    if (current_row >= 0 && current_column >= 0)
+        table->setCurrentCell(current_row, current_column,
+                              QItemSelectionModel::NoUpdate);
+    else
+        table->setCurrentCell(-1, -1);
+
+    if (selected_row >= 0 && selected_column >= 0) {
+        if (auto *item = table->item(selected_row, selected_column))
+            item->setSelected(true);
+    }
+
+    table->horizontalScrollBar()->setValue(state.horizontal_scroll);
+    table->verticalScrollBar()->setValue(state.vertical_scroll);
 }
 
 static QString diagnostics_root_dir()
@@ -904,6 +1015,10 @@ void ZoomDiagnosticsDialog::refresh()
         .arg(roster.size())
         .arg(QString::fromStdString(ZoomEngineClient::instance().last_error())));
 
+    const TableViewState outputs_state =
+        capture_table_view_state(m_outputs, {DiagOutput});
+    const QSignalBlocker outputs_signal_blocker(m_outputs);
+    m_outputs->setUpdatesEnabled(false);
     m_outputs->setRowCount(static_cast<int>(outputs.size()));
     for (int row = 0; row < static_cast<int>(outputs.size()); ++row) {
         const auto &output = outputs[row];
@@ -941,8 +1056,14 @@ void ZoomDiagnosticsDialog::refresh()
             state_item->setForeground(QColor(240, 180, 41));
         m_outputs->setItem(row, DiagState, state_item);
     }
+    restore_table_view_state(m_outputs, outputs_state, {DiagOutput});
+    m_outputs->setUpdatesEnabled(true);
 
     const int max_rows = std::min<int>(static_cast<int>(events.size()), 150);
+    const TableViewState events_state = capture_table_view_state(
+        m_events, {EventTime, EventStage, EventSource, EventMessage});
+    const QSignalBlocker events_signal_blocker(m_events);
+    m_events->setUpdatesEnabled(false);
     m_events->setRowCount(max_rows);
     for (int row = 0; row < max_rows; ++row) {
         const auto &event = events[events.size() - 1 - row];
@@ -960,6 +1081,9 @@ void ZoomDiagnosticsDialog::refresh()
         message->setToolTip(QString::fromStdString(event.message));
         m_events->setItem(row, EventMessage, message);
     }
+    restore_table_view_state(m_events, events_state,
+                             {EventTime, EventStage, EventSource, EventMessage});
+    m_events->setUpdatesEnabled(true);
 }
 
 void ZoomDiagnosticsDialog::export_diagnostics()
