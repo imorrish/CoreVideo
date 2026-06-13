@@ -1,6 +1,8 @@
-import type { SomeCompanionConfigField } from '@companion-module/base'
+import type { JsonValue, SomeCompanionConfigField } from '@companion-module/base'
 
 export interface CoreVideoConfig {
+	// Index signature so the config satisfies the v2 `JsonObject` manifest constraint.
+	[key: string]: JsonValue
 	// CoreVideo OBS plugin
 	pluginHost: string
 	pluginPort: number

@@ -300,6 +300,15 @@ jobs:
           fi
 
       - name: Configure
+        # Plugin/engine stay OFF in CI. The engine links the Zoom SDK
+        # (ZoomSDK.framework), which is not available without the secret SDK
+        # download, so it genuinely cannot be built here. The plugin itself
+        # does not require the Zoom SDK and links OBS symbols lazily
+        # (-undefined dynamic_lookup), but enabling it would add a Qt6 AUTOMOC
+        # build of the full Qt UI that is not exercised by any packaged macOS
+        # artifact today; turning it on only to discard it would add CI time
+        # and a new failure surface without shipping anything. Left OFF
+        # deliberately; revisit if a macOS plugin artifact is ever released.
         run: |
           QT_PREFIX="$(brew --prefix qt@6)"
           HOST_ARCH="$(uname -m)"
@@ -345,6 +354,85 @@ jobs:
           name: CoreVideo-macOS-build-logs
           path: build/
           if-no-files-found: ignore
+
+  # Linux (cross-platform code + unit tests)
+  #
+  # Linux has no shippable CoreVideo artifact: the plugin and engine both
+  # depend on the Zoom SDK / OBS+Qt runtime and are not packaged for Linux.
+  # This job exists to compile the cross-platform C++ and run the standalone
+  # unit tests (BUILD_TESTING) on a second toolchain (GCC), catching
+  # portability regressions that the MSVC/AppleClang jobs miss.
+  #
+  # The plugin, engine and sidecar are kept OFF: plugin/engine require the
+  # Zoom SDK, and the sidecar needs a full Qt6 GUI/OBS dependency stack whose
+  # GUI smoke test (CoreVideoSidecar --version) is brittle on a headless
+  # runner. The standalone tests need only a C++ compiler and the headers in
+  # src/, so this job is fast and reliable.
+  build-linux:
+    name: Linux Tests (GCC)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ ninja-build
+
+      - name: Configure
+        run: |
+          cmake -B build -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCOREVIDEO_BUILD_PLUGIN=OFF \
+              -DCOREVIDEO_BUILD_ENGINE=OFF \
+              -DCOREVIDEO_BUILD_SIDECAR=OFF \
+              -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Upload build logs on failure
+        uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: CoreVideo-Linux-build-logs
+          path: build/
+          if-no-files-found: ignore
+
+  # Companion module (TypeScript) unit tests
+  #
+  # Lightweight Node job that type-checks the build and runs the vitest unit
+  # tests for the Bitfocus Companion module's pure logic (state/variable
+  # mapping). Uses `npm install` rather than `npm ci` because the module does
+  # not commit a package-lock.json.
+  companion-tests:
+    name: Companion Module Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: companion/companion-module-corevideo-obs
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build (type check)
+        run: npm run build
+
+      - name: Test
+        run: npm test
 
   # Release
   release:

@@ -39,7 +39,15 @@ jobs:
             -DCOREVIDEO_BUILD_SIDECAR=OFF
           : > security-reports/cppcheck-generated/overlay-panel.moc
 
-      - name: Run Cppcheck
+      # Full informational scan: collects every severity for the public
+      # code-quality report and the uploaded artifact. This stays
+      # non-blocking (continue-on-error) so the maintainability noise that
+      # already exists does not break CI; the hard-fail gate below is what
+      # blocks regressions.
+      #
+      # Note: tests/ is included in the scan paths (it was previously
+      # missing) so the standalone unit tests are covered too.
+      - name: Run Cppcheck (report, non-blocking)
         continue-on-error: true
         run: |
           mkdir -p security-reports
@@ -54,7 +62,7 @@ jobs:
             --suppress=missingIncludeSystem \
             --checkers-report=security-reports/cppcheck-checkers.txt \
             --xml --xml-version=2 \
-            src engine/src sidecar/src sidecar/tests \
+            src engine/src sidecar/src sidecar/tests tests \
             2> security-reports/cppcheck.xml
           cppcheck \
             --enable=warning,style,performance,portability,information \
@@ -67,17 +75,51 @@ jobs:
             --suppress=missingIncludeSystem \
             --checkers-report=security-reports/cppcheck-checkers.txt \
             --template="{severity}:{id}:{file}:{line}: {message}" \
-            src engine/src sidecar/src sidecar/tests \
+            src engine/src sidecar/src sidecar/tests tests \
             > security-reports/cppcheck.txt 2>&1 || true
+
+      # Hard-fail gate: only error/warning severities block the job (style,
+      # performance, portability, information remain advisory in the report
+      # above). --error-exitcode=2 makes cppcheck exit non-zero on any
+      # surviving finding, so NEW error/warning regressions fail CI.
+      #
+      # The suppressed IDs below are pre-existing false positives that are
+      # not real defects, so blanket-failing on them would break CI on the
+      # very first run:
+      #   - unknownMacro: cppcheck cannot expand Qt (slots/Q_ENUM) and OBS
+      #     (OBS_DECLARE_MODULE) macros without a full build environment.
+      #   - ctuOneDefinitionRuleViolation: false positive from cross-TU
+      #     analysis seeing identically named structs (e.g. ParticipantInfo)
+      #     that are not actually ODR violations.
+      #   - toomanyconfigs: configuration-count advisory, not a code defect.
+      # Keep this list minimal: only add an ID here once confirmed to be a
+      # genuine false positive, never to silence a real regression.
+      - name: Cppcheck hard-fail gate (error/warning severities)
+        run: |
+          cppcheck \
+            --enable=warning \
+            --error-exitcode=2 \
+            --inline-suppr \
+            -Isrc \
+            -Isecurity-reports/cppcheck-build \
+            -Isecurity-reports/cppcheck-generated \
+            -Iengine/src \
+            -Isidecar/src \
+            --suppress=missingIncludeSystem \
+            --suppress=unknownMacro \
+            --suppress=ctuOneDefinitionRuleViolation \
+            --suppress=toomanyconfigs \
+            --template="{severity}:{id}:{file}:{line}: {message}" \
+            src engine/src sidecar/src sidecar/tests tests
 
       - name: Run Flawfinder
         continue-on-error: true
         run: |
           mkdir -p security-reports
-          flawfinder --columns --context --minlevel=1 src engine/src sidecar/src sidecar/tests \
+          flawfinder --columns --context --minlevel=1 src engine/src sidecar/src sidecar/tests tests \
             > security-reports/flawfinder.txt || true
           if flawfinder --help | grep -q -- "--sarif"; then
-            flawfinder --sarif --minlevel=1 src engine/src sidecar/src sidecar/tests \
+            flawfinder --sarif --minlevel=1 src engine/src sidecar/src sidecar/tests tests \
               > security-reports/flawfinder.sarif || true
           fi
 
