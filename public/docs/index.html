@@ -255,7 +255,7 @@
       <div class="card"><div class="card-icon">🖥️</div><h4>Screen Share Capture</h4>
         <p>Source type that follows active screen-share feed via <code>ScreenShare</code> assignment mode.</p></div>
       <div class="card"><div class="card-icon">🎯</div><h4>Spotlight / ZoomISO Modes</h4>
-        <p>Assign a source to Spotlight slot 1…N — exactly like ZoomISO. Engine resolves which participant owns each slot.</p></div>
+        <p>Assign a source to Spotlight 1-8, exactly like ZoomISO. Engine resolves which participant owns each slot.</p></div>
       <div class="card"><div class="card-icon">🔄</div><h4>Active Speaker Mode</h4>
         <p>Sensitivity (ms) + hold-time (ms) debounce with liveness guard, supersede logic, and failover participant.</p></div>
       <div class="card"><div class="card-icon">🔁</div><h4>Failover Participant</h4>
@@ -271,7 +271,7 @@
       <div class="card"><div class="card-icon">🎛️</div><h4>Control Dock</h4>
         <p>Dockable Qt panel with join/leave, state indicator, Active Speaker Director controls, recovery countdown, and Output Manager launch.</p></div>
       <div class="card"><div class="card-icon">DIAG</div><h4>Diagnostics</h4>
-        <p>The dockable Zoom Diagnostics panel shows requested versus observed resolution, FPS, frame age, retry counters, and recent engine debug events.</p></div>
+        <p>The dockable Zoom Diagnostics panel shows requested versus observed resolution, FPS, frame age, retry counters, recent engine debug events, ISO/FFmpeg recorder status, and redacted support bundle export.</p></div>
       <div class="card"><div class="card-icon">OUT</div><h4>Dockable Output Manager</h4>
         <p>Zoom Output Manager is now a persistent OBS dock for source assignments, live preview thumbnails, feed health, profile save/load, and manual recovery actions.</p></div>
       <div class="card"><div class="card-icon">🌐</div><h4>TCP Control API</h4>
@@ -986,9 +986,35 @@ sequenceDiagram
       <tr><th>Mode</th><th>Enum value</th><th>Behaviour</th></tr>
       <tr><td><strong>Participant</strong></td><td><code>AssignmentMode::Participant</code></td><td>Subscribe to a fixed <code>participant_id</code>. If a <code>failover_participant_id</code> is set and the primary participant leaves, the source automatically re-subscribes to the failover.</td></tr>
       <tr><td><strong>Active Speaker</strong></td><td><code>AssignmentMode::ActiveSpeaker</code></td><td>Follow whoever is currently speaking. Uses the two-timer debounce (sensitivity + hold). See Active Speaker Mode section for details.</td></tr>
-      <tr><td><strong>Spotlight Slot</strong></td><td><code>AssignmentMode::SpotlightIndex</code></td><td>Subscribe to Spotlight slot N (1-based). The engine tracks which participant is in each spotlight position and sends <code>subscribe_spotlight</code> subscriptions automatically when the slot changes.</td></tr>
+      <tr><td><strong>Spotlight Slot</strong></td><td><code>AssignmentMode::SpotlightIndex</code></td><td>Subscribe to Spotlight 1-8. The engine tracks which participant is in each spotlight position and sends <code>subscribe_spotlight</code> subscriptions automatically when the slot changes.</td></tr>
       <tr><td><strong>Screen Share</strong></td><td><code>AssignmentMode::ScreenShare</code></td><td>Subscribe to the active screen-share feed. Uses <code>subscribe_screenshare(uuid)</code> on the engine. The source shows a placeholder when no share is active.</td></tr>
     </table>
+
+    <h3>Screen Share Workflow</h3>
+    <p>
+      To capture slides, demos, or a shared desktop, add a
+      <strong>CoreVideo Screen Share</strong> source or set any
+      <strong>CoreVideo Participant</strong> source to
+      <strong>Assignment &gt; Active screen share</strong>. The source follows
+      Zoom's active share feed and shows a placeholder when no participant is
+      sharing.
+    </p>
+    <p>
+      The Zoom Output Manager assignment menu also includes
+      <strong>Screen share</strong>. When a share is active, the menu label
+      includes the sharing participant name. The TCP
+      <code>list_outputs</code> response for screen-share outputs includes the
+      current sharing participant ID and display name.
+    </p>
+    <pre><code>{
+  "assignment_mode": "screen_share",
+  "screen_share_available": true,
+  "screen_share_participant_id": 123456,
+  "screen_share_participant_name": "Alex Rivera",
+  "observed_width": 1920,
+  "observed_height": 1080,
+  "observed_fps": 30.0
+}</code></pre>
 
     <h3>Failover Participant</h3>
     <p>
@@ -1014,7 +1040,7 @@ flowchart LR
     subgraph Source["ZoomSource (AssignmentMode)"]
         P["Participant\nfixed pid + failover"]
         AS["ActiveSpeaker\ndebounce + liveness"]
-        SP["SpotlightIndex\nslot 1…N"]
+        SP["SpotlightIndex\nslot 1-8"]
         SS["ScreenShare\nactive share feed"]
     end
 
@@ -1048,6 +1074,8 @@ flowchart LR
       in the Zoom Control dock and a dedicated <strong>CoreVideo Active Speaker</strong>
       OBS source. The director tracks the raw Zoom speaker, candidate speaker,
       directed speaker, last directed speaker, and manual take/release state.
+      The dock also shows a plain-language status line for waiting, holding,
+      candidate evaluation, and manual supersede states.
       The dedicated source follows the directed speaker and uses a two-slot handoff:
       the current participant stays visible while the next participant warms on a
       hidden slot, then the source cuts only after a valid frame is available.
@@ -1201,6 +1229,17 @@ sequenceDiagram
       <tr><td><code>speaker_director_take</code></td><td><code>{"cmd":"speaker_director_take","participant_id":123}</code></td><td>Manually holds a participant as the directed speaker</td></tr>
       <tr><td><code>speaker_director_release</code></td><td><code>{"cmd":"speaker_director_release"}</code></td><td>Returns to automatic speaker direction</td></tr>
     </table>
+    <p>
+      The status payload includes numeric IDs and resolved participant objects
+      for <code>directed_speaker</code>, <code>raw_speaker</code>,
+      <code>candidate_speaker</code>, <code>last_speaker</code>,
+      <code>manual_speaker</code>, and <code>excluded_participants</code>, plus a
+      <code>status</code> value such as <code>holding</code>,
+      <code>candidate_pending</code>, <code>manual_supersede</code>, or
+      <code>waiting_for_speaker</code>. TCP subscribers receive
+      <code>speaker_director_changed</code> when the directed, candidate, or
+      manual speaker changes.
+    </p>
   </section>
 
   <!-- ══ AUTO-RECONNECT ═══════════════════════════════════════ -->
@@ -1242,8 +1281,11 @@ sequenceDiagram
     <p>
       A monotonically increasing generation counter ensures stale timer wakeups
       never fire a retry that was already cancelled or superseded. Calling
-      <code>cancel()</code> (via the dock or API) bumps the generation; the timer
-      thread sees the mismatch and discards the pending retry.
+      <code>cancel()</code> bumps the generation; the timer thread sees the
+      mismatch and discards the pending retry. The dock, TCP
+      <code>recovery_cancel</code>, and OSC <code>/zoom/recovery/cancel</code>
+      entry points also stop the engine and clear the stored join session so a
+      canceled retry loop cannot resurrect itself.
     </p>
     <p>
       Explicit <code>leave()</code> calls set the <code>m_user_leaving</code> flag
@@ -1300,7 +1342,7 @@ sequenceDiagram
     <ul>
       <li>Recovery status message with attempt count</li>
       <li>Live countdown timer to next retry (refreshes every second)</li>
-      <li><strong>Cancel Recovery</strong> button — calls <code>ZoomReconnectManager::cancel()</code></li>
+      <li><strong>Cancel Recovery</strong> button — stops the engine, clears the stored join session, and cancels pending reconnect timers</li>
     </ul>
 
     <h3>Routing Section</h3>
@@ -1495,7 +1537,7 @@ sequenceDiagram
       <tr><td><code>join</code></td><td><code>{"cmd":"join","meeting_id":"…","passcode":"…","display_name":"OBS","kind":"meeting|webinar","user_zak":"…","on_behalf_token":"…"}</code></td><td>Join meeting or webinar. Published broker-backed joins authenticate the SDK during <code>init</code>; <code>user_zak</code> and <code>on_behalf_token</code> remain developer/manual fallback fields.</td></tr>
       <tr><td><code>leave</code></td><td><code>{"cmd":"leave"}</code></td><td>Leave meeting</td></tr>
       <tr><td><code>subscribe</code></td><td><code>{"cmd":"subscribe","source_uuid":"…","participant_id":N,"isolate_audio":bool}</code></td><td>Subscribe to fixed participant frames</td></tr>
-      <tr><td><code>subscribe_spotlight</code></td><td><code>{"cmd":"subscribe_spotlight","source_uuid":"…","slot":N}</code></td><td>Subscribe to spotlight slot N (1-based)</td></tr>
+      <tr><td><code>subscribe_spotlight</code></td><td><code>{"cmd":"subscribe_spotlight","source_uuid":"…","slot":N}</code></td><td>Subscribe to Spotlight 1-8</td></tr>
       <tr><td><code>subscribe_screenshare</code></td><td><code>{"cmd":"subscribe_screenshare","source_uuid":"…"}</code></td><td>Subscribe to active screen-share feed</td></tr>
       <tr><td><code>unsubscribe</code></td><td><code>{"cmd":"unsubscribe","source_uuid":"…"}</code></td><td>Stop frame delivery for this source</td></tr>
       <tr><td><code>quit</code></td><td><code>{"cmd":"quit"}</code></td><td>Shut down engine process</td></tr>
@@ -1520,7 +1562,7 @@ sequenceDiagram
     <h2>Installation</h2>
     <div class="callout info">
       <div class="callout-title">ℹ️ Pre-built releases</div>
-      Download the Windows installer or ZIP from <a href="https://github.com/iamfatness/CoreVideo/releases">GitHub Releases</a>. Published Windows releases include the OBS plugin, ZoomObsEngine, the OAuth callback helper, Qt TLS plugins, and the required Zoom SDK runtime DLLs. Each downloadable release asset includes a matching <code>.sha256</code> checksum file.
+      Download the Windows installer or ZIP from <a href="https://github.com/iamfatness/CoreVideo/releases">GitHub Releases</a>. Published Windows releases include the OBS plugin, ZoomObsEngine, the OAuth callback helper, Qt TLS plugins, and the required Zoom SDK runtime DLLs. Each downloadable release asset includes a matching <code>.sha256</code> checksum file. Operators should use the <a href="/core-plugin/OPERATOR_QUICKSTART.md">Operator Quickstart</a>; publishers should use the <a href="/core-plugin/RELEASE_CHECKLIST.md">Release Checklist</a> before shipping.
     </div>
     <div class="steps">
       <div class="step"><div class="step-body">
@@ -1726,12 +1768,17 @@ sequenceDiagram
       set or test the FFmpeg executable, choose whether to also control OBS
       program recording, start/stop ISO recording, and monitor active ISO
       sessions with source, participant, resolution, frame counts, audio chunk
-      counts, and output file paths.
+      counts, and output file paths. Recently completed sessions remain visible
+      after stop so operators can confirm completed MP4/WAV outputs before
+      opening the folder.
     </p>
     <p>
       The panel uses the same <code>ZoomIsoRecorder</code> backend as the TCP and
       OSC APIs and persists its folder, FFmpeg path, and program-recording toggle
-      in OBS global settings.
+      in OBS global settings. If a selected hardware encoder is unavailable in
+      the FFmpeg build, CoreVideo falls back to <code>libx264</code> when
+      available and reports the requested encoder, actual encoder, and fallback
+      state in the panel and TCP status payload.
     </p>
 
     <div class="diagram-wrap">
