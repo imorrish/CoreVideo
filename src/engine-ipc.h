@@ -176,20 +176,24 @@ static inline bool ipc_read_line(IpcFd fd, std::string &out,
 #endif
 }
 
-static inline void ipc_write_line(IpcFd fd, const std::string &msg)
+// Returns false on I/O error or short write.
+static inline bool ipc_write_line(IpcFd fd, const std::string &msg)
 {
     std::string out = msg + "\n";
 #if defined(WIN32)
-    DWORD written;
-    WriteFile(fd, out.c_str(), static_cast<DWORD>(out.size()), &written, nullptr);
+    DWORD written = 0;
+    if (!WriteFile(fd, out.c_str(), static_cast<DWORD>(out.size()), &written, nullptr))
+        return false;
+    return written == out.size();
 #else
     const char *p   = out.c_str();
     size_t      rem = out.size();
     while (rem > 0) {
         ssize_t n = write(fd, p, rem);
-        if (n <= 0) break;
+        if (n <= 0) return false;
         p   += static_cast<size_t>(n);
         rem -= static_cast<size_t>(n);
     }
+    return true;
 #endif
 }

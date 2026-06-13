@@ -25,10 +25,11 @@ inline std::mutex &mtx()
 inline void init(IpcFd e2p) { fd() = e2p; }
 
 // Serialised write — safe to call from any thread.
-inline void write(const std::string &msg)
+// Returns false on I/O error or short write.
+inline bool write(const std::string &msg)
 {
     std::lock_guard<std::mutex> lk(mtx());
-    ipc_write_line(fd(), msg);
+    return ipc_write_line(fd(), msg);
 }
 
 } // namespace EngineIpc
