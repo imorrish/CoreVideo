@@ -5,6 +5,7 @@
 #include "zoom-settings.h"
 #include <obs-module.h>
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 ZoomReconnectManager &ZoomReconnectManager::instance()
@@ -14,6 +15,8 @@ ZoomReconnectManager &ZoomReconnectManager::instance()
 }
 
 ZoomReconnectManager::ZoomReconnectManager()
+    : m_rng(static_cast<std::mt19937::result_type>(
+          std::chrono::steady_clock::now().time_since_epoch().count()))
 {
     m_timer = std::thread([this]() { timer_loop(); });
 }
@@ -85,7 +88,14 @@ int ZoomReconnectManager::compute_delay_locked(int attempt) const
 {
     double delay = m_policy.base_delay_ms *
                    std::pow(static_cast<double>(m_policy.backoff_multiplier), attempt);
-    return static_cast<int>(std::min(delay, static_cast<double>(m_policy.max_delay_ms)));
+    delay = std::min(delay, static_cast<double>(m_policy.max_delay_ms));
+    // Apply randomized jitter in [0.8, 1.2] so simultaneous recoveries do not
+    // thunder against the broker/SDK at the same instant. The cap is applied
+    // before jitter; clamp again afterwards so the result never exceeds it.
+    std::uniform_real_distribution<double> jitter(0.8, 1.2);
+    delay *= jitter(m_rng);
+    delay = std::min(delay, static_cast<double>(m_policy.max_delay_ms));
+    return static_cast<int>(delay);
 }
 
 int ZoomReconnectManager::next_retry_ms() const

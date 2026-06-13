@@ -894,14 +894,27 @@ public:
         case ZOOMSDK::MEETING_STATUS_INMEETING:
             EngineIpc::write( R"({"cmd":"joined"})");
             if (m_participants && m_meeting_svc && *m_meeting_svc) {
+                auto *part_ctrl = (*m_meeting_svc)->GetMeetingParticipantsController();
+                if (!part_ctrl) {
+                    // Without the participants controller we cannot build a
+                    // roster (GetParticipantsList/GetUserByUserID live on it);
+                    // surface it rather than silently attaching null.
+                    EngineIpc::write(
+                        R"({"cmd":"debug","stage":"participants_controller","code":-1})");
+                }
                 m_participants->attach(
-                    (*m_meeting_svc)->GetMeetingParticipantsController(),
+                    part_ctrl,
                     (*m_meeting_svc)->GetMeetingAudioController(),
                     (*m_meeting_svc)->GetMeetingVideoController());
             }
-            if (m_share_engine && m_meeting_svc && *m_meeting_svc)
-                m_share_engine->attach(
-                    (*m_meeting_svc)->GetMeetingShareController());
+            if (m_share_engine && m_meeting_svc && *m_meeting_svc) {
+                auto *share_ctrl = (*m_meeting_svc)->GetMeetingShareController();
+                if (!share_ctrl) {
+                    EngineIpc::write(
+                        R"({"cmd":"debug","stage":"share_controller","code":-1})");
+                }
+                m_share_engine->attach(share_ctrl);
+            }
             break;
         case ZOOMSDK::MEETING_STATUS_DISCONNECTING:
         case ZOOMSDK::MEETING_STATUS_ENDED:

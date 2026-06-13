@@ -6,6 +6,7 @@
 #include <condition_variable>
 #include <cstdint>
 #include <mutex>
+#include <random>
 #include <string>
 #include <thread>
 
@@ -79,6 +80,10 @@ private:
     std::string                 m_display_name;
     MeetingKind                 m_kind = MeetingKind::Meeting;
     ZoomJoinAuthTokens          m_tokens;
+
+    // Seeded once at construction; only touched under m_mtx (via
+    // compute_delay_locked), so a single non-atomic generator is sufficient.
+    mutable std::mt19937        m_rng;
 
     std::atomic<bool>           m_recovering{false};
     std::atomic<int>            m_attempt{0};
