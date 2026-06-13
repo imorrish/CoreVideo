@@ -185,6 +185,15 @@ Templates scale to eight slots out of the box. Beyond that, the Zoom
 SDK's raw-data callback patterns deserve real stress tests and a
 documented capacity envelope.
 
+**Exploratory:** Investigate GPU texture sharing frameworks (Spout on Windows,
+Syphon on macOS) as an optional alternative transport for video frames.
+Current design relies on CPU I420 shared memory + per-subscription copies,
+which creates significant memory bandwidth pressure at 8+ 1080p feeds.
+A Spout-based path could allow the engine to upload frames once and let
+OBS consume them as native GPU textures, dramatically lowering CPU cost
+for high-density productions (at the cost of added platform-specific code
+and a new optional dependency).
+
 ---
 
 ## Non-goals
