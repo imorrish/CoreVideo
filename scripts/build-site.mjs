@@ -11,7 +11,7 @@ const pages = [
   {
     source: "Home.md",
     title: "CoreVideo",
-    description: "CoreVideo documentation, policies, support, and Zoom Marketplace resources.",
+    description: "CoreVideo: the OBS plugin for live Zoom video, and CoreVideo Pro, a standalone app for producing online conversations.",
     output: "index.html",
   },
   {
@@ -46,7 +46,7 @@ const markdownPages = [
   },
   {
     source: path.join(docsDir, "CORE_PLUGIN_FUNCTIONALITY.md"),
-    title: "Core Plugin Functionality",
+    title: "CoreVideo (OBS Plugin)",
     description: "CoreVideo OBS plugin workflows, control examples, and ISO recording.",
     output: "core-plugin/index.html",
   },
@@ -107,10 +107,10 @@ function resolveHref(href) {
 
 function normalizeText(value) {
   return value
-    .replaceAll("â€”", "-")
-    .replaceAll("â†’", "->")
+    .replaceAll("â€"", "-")
+    .replaceAll("â†'", "->")
     .replaceAll("â€¦", "...")
-    .replaceAll("ðŸ“–", "")
+    .replaceAll("ðŸ"–", "")
     .replaceAll("behaviour", "behavior")
     .replaceAll("https://corevideo.iamfatness.us/documentation/", "/documentation/")
     .replaceAll("https://iamfatness.github.io/CoreVideo/", "/documentation/")
@@ -133,12 +133,51 @@ function homeContent() {
     </div>
   </div>
 </section>
+<section class="link-grid products" aria-label="CoreVideo products">
+  <a href="/core-plugin/"><strong>CoreVideo (OBS Plugin)</strong><span>OBS Studio plugin for live Zoom video, audio, screen share, and ISO recording.</span></a>
+  <a href="/pro/"><strong>CoreVideo Pro (Standalone App)</strong><span>A standalone Windows app for producing high-quality online conversations &mdash; multi-scene production, participant management, streaming, recording, and AI auto-direct. No OBS required.</span></a>
+</section>
 <section class="link-grid" aria-label="CoreVideo resources">
   <a href="/documentation/"><strong>Documentation</strong><span>Architecture, setup, control APIs, and operating notes.</span></a>
   <a href="/core-plugin/"><strong>Core Plugin Guide</strong><span>OBS workflows, participant routing, isolated audio, and ISO recording.</span></a>
+  <a href="/pro/"><strong>CoreVideo Pro</strong><span>Standalone production app for live and recorded conversations.</span></a>
   <a href="/terms/"><strong>Terms of Use</strong><span>Marketplace-ready usage terms and license requirements.</span></a>
   <a href="/privacy/"><strong>Privacy Policy</strong><span>Data processing, local storage, and third-party service details.</span></a>
   <a href="/support/"><strong>Support</strong><span>Issue reporting, troubleshooting, and common fixes.</span></a>
+</section>`;
+}
+
+function proPageContent() {
+  return `<section class="hero">
+  <figure class="hero-media">
+    <img class="hero-logo" src="/pro/images/corevideo-pro-studio.svg" alt="CoreVideo Pro production console with scene list, program preview, and participant roster">
+  </figure>
+  <div class="hero-copy">
+    <p class="eyebrow">Standalone app for online conversation production</p>
+    <h1>Produce polished live conversations, no OBS required.</h1>
+    <p class="lede">CoreVideo Pro is a standalone Windows app that turns a Zoom call into a multi-scene, multi-camera production &mdash; with participant management, streaming and recording outputs, and an AI auto-director that keeps the show moving.</p>
+    <div class="hero-actions">
+      <a class="button primary" href="https://github.com/iamfatness/CoreVideoPro">View on GitHub</a>
+      <a class="button" href="/core-plugin/">Compare with CoreVideo (OBS Plugin)</a>
+    </div>
+  </div>
+</section>
+<section class="link-grid" aria-label="CoreVideo Pro features">
+  <a href="https://github.com/iamfatness/CoreVideoPro#current-slice"><strong>Multi-Scene Production</strong><span>Intro, interview, speaker-plus-slides, panel, and closing scene templates with Cut/Fade/Slide transitions and Take.</span></a>
+  <a href="https://github.com/iamfatness/CoreVideoPro#current-slice"><strong>Participant Management</strong><span>Live Zoom roster with Host, Presenter, Panelist, and Guest roles, manual scene-slot assignment, and per-participant audio and video controls.</span></a>
+  <a href="https://github.com/iamfatness/CoreVideoPro#current-slice"><strong>Streaming &amp; Recording</strong><span>Program and ISO recording, 1080p/4K output profiles, and multi-destination RTMP/NDI/SRT streaming with preflight checks.</span></a>
+  <a href="https://github.com/iamfatness/CoreVideoPro#current-slice"><strong>AI Auto-Direct</strong><span>Magic Scene and Set &amp; Forget automatically recommend and take scene layouts from live Zoom activity, so a show can run itself.</span></a>
+</section>
+<section>
+  <h2>How it fits with CoreVideo</h2>
+  <p>CoreVideo Pro is a separate, standalone product from the <a href="/core-plugin/">CoreVideo OBS plugin</a>. Both connect to Zoom for raw participant media, but they&apos;re built for different workflows:</p>
+  <table>
+    <thead><tr><th>Product</th><th>Form factor</th><th>Best for</th></tr></thead>
+    <tbody>
+      <tr><td><strong>CoreVideo</strong> (OBS Plugin)</td><td>Plugin inside OBS Studio</td><td>Operators who already run shows in OBS and want Zoom participants as native sources, ISO recording, and an Active Speaker Director.</td></tr>
+      <tr><td><strong>CoreVideo Pro</strong> (Standalone App)</td><td>Standalone Windows app</td><td>Producers who want a dedicated, ready-to-go console for online conversations &mdash; scenes, participants, outputs, and AI auto-direct in one app, without configuring OBS.</td></tr>
+    </tbody>
+  </table>
 </section>`;
 }
 
@@ -160,7 +199,7 @@ function renderTable(lines) {
 }
 
 function markdownToHtml(markdown) {
-  const lines = markdown.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n").split("\n");
+  const lines = markdown.replace(/^﻿/, "").replace(/\r\n/g, "\n").split("\n");
   const html = [];
   let list = [];
   let listTag = "ul";
@@ -299,6 +338,7 @@ function markdownToHtml(markdown) {
 function layout(page, content, options = {}) {
   const nav = [
     ["Home", "/"],
+    ["CoreVideo Pro", "/pro/"],
     ["Documentation", "/documentation/"],
     ["Core Plugin", "/core-plugin/"],
     ["OAuth", "/oauth/"],
@@ -307,6 +347,9 @@ function layout(page, content, options = {}) {
     ["Support", "/support/"],
     ["GitHub", "https://github.com/iamfatness/CoreVideo"],
   ];
+
+  const footerText = options.footerText ??
+    "CoreVideo is an independent open-source project and is not affiliated with Zoom Video Communications, Inc.";
 
   return `<!doctype html>
 <html lang="en">
@@ -326,7 +369,7 @@ function layout(page, content, options = {}) {
     ${content}
   </main>
   <footer class="site-footer">
-    <span>CoreVideo is an independent open-source project and is not affiliated with Zoom Video Communications, Inc.</span>
+    <span>${footerText}</span>
   </footer>
 </body>
 </html>
@@ -360,6 +403,107 @@ for (const page of markdownPages) {
   const html = layout(page, markdownToHtml(markdown));
   writeText(page.output, html);
 }
+
+// CoreVideo Pro landing page
+writeText(
+  "pro/index.html",
+  layout(
+    {
+      title: "CoreVideo Pro",
+      description:
+        "CoreVideo Pro: a standalone Windows app for producing high-quality online conversations with multi-scene production, participant management, streaming, recording, and AI auto-direct.",
+    },
+    proPageContent(),
+    {
+      home: true,
+      footerText:
+        "CoreVideo and CoreVideo Pro are independent open-source projects and are not affiliated with Zoom Video Communications, Inc.",
+    },
+  ),
+);
+
+// CoreVideo Pro studio illustration
+writeText(
+  "pro/images/corevideo-pro-studio.svg",
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1024" viewBox="0 0 1536 1024" role="img" aria-labelledby="title desc">
+  <title id="title">CoreVideo Pro studio layout</title>
+  <desc id="desc">Illustration of the CoreVideo Pro production console with scene list, program preview, participant roster, and Take/Record/Stream controls.</desc>
+  <defs>
+    <style>
+      .bg{fill:#070914}.panel{fill:#10141d;stroke:#2b3345}.row{fill:#171c28}.row2{fill:#121722}.header{fill:#1a2030}.text{fill:#f7faff;font-family:Segoe UI,Arial,sans-serif}.muted{fill:#9daac2}.cyan{fill:#22e7e8}.red{fill:#ff5c67}.label{font-size:22px;font-weight:700}.small{font-size:17px}.tiny{font-size:14px}.button{fill:#1c2333;stroke:#3a4358}.live{fill:#ff5c67}
+    </style>
+  </defs>
+  <rect class="bg" width="1536" height="1024"/>
+  <rect class="header" x="32" y="32" width="1472" height="64" rx="8"/>
+  <circle class="cyan" cx="64" cy="64" r="14"/>
+  <text class="text label" x="92" y="72">CoreVideo Pro</text>
+  <text class="muted small" x="1180" y="72">Zoom Connected</text>
+  <circle class="cyan" cx="1160" cy="64" r="7"/>
+  <rect class="panel" x="32" y="112" width="260" height="660" rx="8"/>
+  <text class="muted tiny" x="52" y="146">SCENES</text>
+  <rect class="row" x="48" y="160" width="228" height="56" rx="6" stroke="#22e7e8"/>
+  <text class="text small" x="64" y="194">1  Intro</text>
+  <rect class="row2" x="48" y="224" width="228" height="56" rx="6"/>
+  <text class="text small" x="64" y="258">2  Interview</text>
+  <rect class="row" x="48" y="288" width="228" height="56" rx="6"/>
+  <text class="text small" x="64" y="322">3  Speaker + Slides</text>
+  <rect class="row2" x="48" y="352" width="228" height="56" rx="6"/>
+  <text class="text small" x="64" y="386">4  Panel</text>
+  <rect class="row" x="48" y="416" width="228" height="56" rx="6"/>
+  <text class="text small" x="64" y="450">5  Closing</text>
+  <rect class="panel" x="312" y="112" width="844" height="528" rx="8"/>
+  <rect class="live" x="332" y="132" width="60" height="28" rx="4"/>
+  <text class="text tiny" x="345" y="151">LIVE</text>
+  <text class="muted small" x="1080" y="151">1080p60</text>
+  <rect class="row" x="332" y="172" width="404" height="220" rx="6"/>
+  <text class="text small" x="350" y="380">Sophia Martinez &#xB7; HOST</text>
+  <rect class="row2" x="744" y="172" width="392" height="220" rx="6"/>
+  <text class="text small" x="762" y="380">David Chen &#xB7; SPEAKER</text>
+  <rect class="row" x="332" y="404" width="404" height="216" rx="6"/>
+  <text class="text small" x="350" y="608">Jeremy Collins &#xB7; PANELIST</text>
+  <rect class="row2" x="744" y="404" width="392" height="216" rx="6"/>
+  <text class="cyan small" x="762" y="436">Building what matters next</text>
+  <text class="muted tiny" x="762" y="470">CoreVideo Pro</text>
+  <rect class="panel" x="1180" y="112" width="324" height="528" rx="8"/>
+  <text class="muted tiny" x="1200" y="146">PARTICIPANTS (7)</text>
+  <rect class="row" x="1196" y="160" width="292" height="64" rx="6" stroke="#22e7e8"/>
+  <text class="text small" x="1212" y="186">David Chen</text>
+  <text class="cyan tiny" x="1212" y="208">SPEAKER &#xB7; Talking</text>
+  <rect class="row2" x="1196" y="232" width="292" height="64" rx="6"/>
+  <text class="text small" x="1212" y="258">Sophia Martinez</text>
+  <text class="muted tiny" x="1212" y="280">HOST</text>
+  <rect class="row" x="1196" y="304" width="292" height="64" rx="6"/>
+  <text class="text small" x="1212" y="330">Jeremy Collins</text>
+  <text class="muted tiny" x="1212" y="352">PANELIST</text>
+  <rect class="row2" x="1196" y="376" width="292" height="64" rx="6"/>
+  <text class="text small" x="1212" y="402">Ava Patel</text>
+  <text class="muted tiny" x="1212" y="424">PANELIST</text>
+  <rect class="row" x="1196" y="448" width="292" height="64" rx="6"/>
+  <text class="text small" x="1212" y="474">Michael Thompson</text>
+  <text class="muted tiny" x="1212" y="496">ATTENDEE</text>
+  <rect class="row2" x="332" y="660" width="1172" height="56" rx="6"/>
+  <text class="muted small" x="352" y="694">&#x201C;...thank you for being here.&#x201D; &#x2014; CC</text>
+  <rect class="panel" x="32" y="744" width="1472" height="120" rx="8"/>
+  <rect class="button" x="56" y="772" width="220" height="64" rx="8" stroke="#22e7e8"/>
+  <text class="cyan small" x="84" y="798">Magic Scene</text>
+  <text class="muted tiny" x="84" y="820">AI auto-direct</text>
+  <rect class="button" x="296" y="772" width="240" height="64" rx="8"/>
+  <text class="text small" x="324" y="798">Set &amp; Forget</text>
+  <text class="cyan tiny" x="324" y="820">Automation On</text>
+  <rect class="button" x="900" y="772" width="160" height="64" rx="8"/>
+  <text class="text small" x="950" y="810">TAKE</text>
+  <rect class="button" x="1076" y="772" width="180" height="64" rx="8" stroke="#ff5c67"/>
+  <text class="text small" x="1110" y="810">RECORD</text>
+  <rect class="button" x="1272" y="772" width="180" height="64" rx="8" stroke="#22e7e8"/>
+  <text class="cyan small" x="1308" y="810">STREAM</text>
+  <rect class="row2" x="56" y="884" width="1452" height="100" rx="8"/>
+  <text class="muted small" x="80" y="918">Program 1080p60 &#xB7; Good</text>
+  <text class="muted small" x="420" y="918">Stream 1080p60 &#xB7; 6.0 Mbps &#xB7; Good</text>
+  <text class="muted small" x="780" y="918">Record 1080p60 &#xB7; Good</text>
+  <text class="muted small" x="1080" y="918">CPU 18%   Mem 42%   Drops 0 (0.0%)</text>
+  <text class="muted small" x="80" y="954">Live 00:28:47</text>
+</svg>`,
+);
 
 const logoSource = path.join(siteAssetsDir, "corevideo-logo.jpg");
 if (fs.existsSync(logoSource)) {
@@ -588,6 +732,12 @@ nav a:hover { color: var(--text); }
   gap: 14px;
   margin-top: 18px;
 }
+.link-grid.products {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.link-grid.products a {
+  min-height: 180px;
+}
 .link-grid a {
   min-height: 160px;
   padding: 20px;
@@ -680,6 +830,7 @@ hr {
   }
   .hero-media { order: -1; }
   .link-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .link-grid.products { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
   .site-header { align-items: flex-start; flex-direction: column; }
