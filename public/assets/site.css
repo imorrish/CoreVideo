@@ -225,6 +225,27 @@ nav a:hover { color: var(--text); }
   margin-bottom: 8px;
 }
 .link-grid span { color: var(--muted); }
+.link-grid a.featured {
+  border-color: rgba(125, 239, 255, 0.34);
+  background: #131a30;
+}
+.link-grid .tier {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.link-grid .tier-premium {
+  color: #06111a;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+}
 h1, h2, h3, h4 { line-height: 1.2; margin: 1.6em 0 0.55em; letter-spacing: 0; }
 h1 { margin-top: 0; font-size: clamp(34px, 5vw, 52px); }
 h2 { font-size: 26px; border-top: 1px solid var(--line); padding-top: 28px; }

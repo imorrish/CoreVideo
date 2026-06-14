@@ -125,19 +125,19 @@ function homeContent() {
     <img class="hero-logo" src="/assets/corevideo-logo.jpg" alt="CoreVideo">
   </figure>
   <div class="hero-copy">
-    <p class="eyebrow">Live Zoom production for broadcast and recording teams</p>
-    <h1>Broadcast-grade Zoom production, right inside OBS.</h1>
-    <p class="lede">CoreVideo turns Zoom participants into clean, isolated video and audio sources for live shows, recordings, and ISO-style production &mdash; so your team delivers a polished result while every frame stays on the operator&apos;s own machine.</p>
+    <p class="eyebrow">Live Zoom production &mdash; from free plugin to full studio</p>
+    <h1>Produce broadcast-grade Zoom shows in one studio app.</h1>
+    <p class="lede">CoreVideo Pro is the complete standalone production studio for live Zoom conversations &mdash; scenes, participants, AI direction, recording, and streaming in a single premium app. Already working in OBS? The free CoreVideo plugin brings the same clean participant capture to your existing rig.</p>
     <div class="hero-actions">
-      <a class="button primary" href="/core-plugin/">See how it works</a>
-      <a class="button" href="/pro/">Meet CoreVideo Pro</a>
+      <a class="button primary" href="/pro/">Explore CoreVideo Pro</a>
+      <a class="button" href="/core-plugin/">Free OBS plugin</a>
       <a class="button" href="/documentation/">Documentation</a>
     </div>
   </div>
 </section>
 <section class="link-grid products" aria-label="CoreVideo products">
-  <a href="/core-plugin/"><strong>CoreVideo (OBS Plugin)</strong><span>OBS Studio plugin for live Zoom video, audio, screen share, and ISO recording.</span></a>
-  <a href="/pro/"><strong>CoreVideo Pro (Standalone App)</strong><span>A standalone Windows app for producing high-quality online conversations &mdash; multi-scene production, participant management, streaming, recording, and AI auto-direct. No OBS required.</span></a>
+  <a class="featured" href="/pro/"><span class="tier tier-premium">Premium &middot; Standalone app</span><strong>CoreVideo Pro</strong><span>The complete production studio for live Zoom conversations: multi-scene production, participant management, AI auto-direct, recording, and multi-destination streaming in one app &mdash; no OBS required.</span></a>
+  <a href="/core-plugin/"><span class="tier">Free &middot; OBS plugin</span><strong>CoreVideo (OBS Plugin)</strong><span>The free building block: clean Zoom participant video, audio, screen share, and ISO recording as native sources inside OBS Studio.</span></a>
 </section>
 <section class="link-grid" aria-label="CoreVideo resources">
   <a href="/documentation/"><strong>Documentation</strong><span>Architecture, setup, control APIs, and operating notes.</span></a>
@@ -155,9 +155,9 @@ function proPageContent() {
     <img class="hero-logo" src="/pro/images/corevideo-pro-studio.svg" alt="CoreVideo Pro production console with scene list, program preview, and participant roster">
   </figure>
   <div class="hero-copy">
-    <p class="eyebrow">Standalone app for online conversation production</p>
+    <p class="eyebrow">The complete CoreVideo production studio</p>
     <h1>Produce polished live conversations, no OBS required.</h1>
-    <p class="lede">CoreVideo Pro is a standalone Windows app that turns a Zoom call into a multi-scene, multi-camera production &mdash; with participant management, streaming and recording outputs, and an AI auto-director that keeps the show moving, so your team can focus on the conversation instead of the controls.</p>
+    <p class="lede">CoreVideo Pro is the premium, all-in-one studio for live Zoom production: everything the CoreVideo plugin captures, plus multi-scene production, participant management, recording and multi-destination streaming, and an AI auto-director &mdash; in one standalone app, with no OBS to wire up.</p>
     <div class="hero-actions">
       <a class="button primary" href="/documentation/">See what it does</a>
       <a class="button" href="/core-plugin/">Compare with CoreVideo (OBS Plugin)</a>
@@ -171,13 +171,13 @@ function proPageContent() {
   <div><strong>AI Auto-Direct</strong><span>Magic Scene and Set &amp; Forget automatically recommend and take scene layouts from live Zoom activity, so a show can run itself.</span></div>
 </section>
 <section>
-  <h2>How it fits with CoreVideo</h2>
-  <p>CoreVideo Pro is a separate, standalone product from the <a href="/core-plugin/">CoreVideo OBS plugin</a>. Both connect to Zoom for raw participant media, but they&apos;re built for different workflows:</p>
+  <h2>Free plugin or full studio?</h2>
+  <p>CoreVideo comes in two tiers. The free <a href="/core-plugin/">OBS plugin</a> is the building block; CoreVideo Pro is the premium studio that includes that same Zoom capture and adds the full production layer in one standalone app.</p>
   <table>
-    <thead><tr><th>Product</th><th>Form factor</th><th>Best for</th></tr></thead>
+    <thead><tr><th>Tier</th><th>Form factor</th><th>Best for</th></tr></thead>
     <tbody>
-      <tr><td><strong>CoreVideo</strong> (OBS Plugin)</td><td>Plugin inside OBS Studio</td><td>Operators who already run shows in OBS and want Zoom participants as native sources, ISO recording, and an Active Speaker Director.</td></tr>
-      <tr><td><strong>CoreVideo Pro</strong> (Standalone App)</td><td>Standalone Windows app</td><td>Producers who want a dedicated, ready-to-go console for online conversations &mdash; scenes, participants, outputs, and AI auto-direct in one app, without configuring OBS.</td></tr>
+      <tr><td><strong>CoreVideo Pro</strong> &mdash; Premium</td><td>Standalone app</td><td>Producers who want a dedicated, ready-to-go studio &mdash; scenes, participants, outputs, recording, and AI auto-direct in one app, with no OBS to configure.</td></tr>
+      <tr><td><strong>CoreVideo</strong> &mdash; Free</td><td>OBS Studio plugin</td><td>Operators already running shows in OBS who want clean Zoom participants as native sources, ISO recording, and an Active Speaker Director.</td></tr>
     </tbody>
   </table>
 </section>`;
@@ -756,6 +756,27 @@ nav a:hover { color: var(--text); }
   margin-bottom: 8px;
 }
 .link-grid span { color: var(--muted); }
+.link-grid a.featured {
+  border-color: rgba(125, 239, 255, 0.34);
+  background: #131a30;
+}
+.link-grid .tier {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 3px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.link-grid .tier-premium {
+  color: #06111a;
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--cyan), var(--blue));
+}
 h1, h2, h3, h4 { line-height: 1.2; margin: 1.6em 0 0.55em; letter-spacing: 0; }
 h1 { margin-top: 0; font-size: clamp(34px, 5vw, 52px); }
 h2 { font-size: 26px; border-top: 1px solid var(--line); padding-top: 28px; }
