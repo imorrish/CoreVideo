@@ -107,10 +107,10 @@ function resolveHref(href) {
 
 function normalizeText(value) {
   return value
-    .replaceAll("â€"", "-")
-    .replaceAll("â†'", "->")
+    .replaceAll("â€”", "-")
+    .replaceAll("â†’", "->")
     .replaceAll("â€¦", "...")
-    .replaceAll("ðŸ"–", "")
+    .replaceAll("ðŸ“–", "")
     .replaceAll("behaviour", "behavior")
     .replaceAll("https://corevideo.iamfatness.us/documentation/", "/documentation/")
     .replaceAll("https://iamfatness.github.io/CoreVideo/", "/documentation/")
