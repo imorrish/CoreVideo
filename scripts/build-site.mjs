@@ -136,7 +136,7 @@ function homeContent() {
   </div>
 </section>
 <section class="link-grid products" aria-label="CoreVideo products">
-  <a class="featured" href="/pro/"><span class="tier tier-premium">Premium &middot; Standalone app</span><strong>CoreVideo Pro</strong><span>The complete production studio for live Zoom conversations: multi-scene production, participant management, AI auto-direct, recording, and multi-destination streaming in one app &mdash; no OBS required.</span></a>
+  <a class="featured" href="/pro/"><span class="tier tier-premium">Premium &middot; Standalone app</span><strong>CoreVideo Pro</strong><span>The complete production studio for live Zoom conversations: multi-scene production, participant management, AI auto-direct, recording, and multi-destination streaming in one polished app.</span></a>
   <a href="/core-plugin/"><span class="tier">Free &middot; OBS plugin</span><strong>CoreVideo (OBS Plugin)</strong><span>The free building block: clean Zoom participant video, audio, screen share, and ISO recording as native sources inside OBS Studio.</span></a>
 </section>
 <section class="link-grid" aria-label="CoreVideo resources">
@@ -157,8 +157,8 @@ function proPageContent() {
   </figure>
   <div class="hero-copy">
     <p class="eyebrow">The complete CoreVideo production studio</p>
-    <h1>Produce polished live conversations, no OBS required.</h1>
-    <p class="lede">CoreVideo Pro is the premium, all-in-one studio for live Zoom production: everything the CoreVideo plugin captures, plus multi-scene production, participant management, recording and multi-destination streaming, and an AI auto-director &mdash; in one standalone app, with no OBS to wire up.</p>
+    <h1>Produce polished live conversations from your Zoom calls.</h1>
+    <p class="lede">CoreVideo Pro is the premium, all-in-one studio for live Zoom production: everything the CoreVideo plugin captures, plus multi-scene production, participant management, recording and multi-destination streaming, and an AI auto-director &mdash; in one standalone app for producers who want a dedicated, ready-to-go console.</p>
     <div class="hero-actions">
       <a class="button primary" href="/pro/documentation/">Read the architecture docs</a>
       <a class="button" href="/core-plugin/">Compare with the OBS plugin</a>
@@ -251,11 +251,11 @@ function proPageContent() {
 </section>
 <section>
   <h2>Free plugin or full studio?</h2>
-  <p>CoreVideo comes in two tiers. The free <a href="/core-plugin/">OBS plugin</a> is the building block; CoreVideo Pro is the premium studio that includes that same Zoom capture and adds the full production layer in one standalone app.</p>
+  <p>CoreVideo fits both workflows. Already run your shows in OBS? The free <a href="/core-plugin/">OBS plugin</a> brings clean Zoom participants in as native sources. Want a more polished, dedicated way to produce a show? CoreVideo Pro is the premium standalone studio that includes that same Zoom capture and adds the full production layer.</p>
   <table>
     <thead><tr><th>Tier</th><th>Form factor</th><th>Best for</th></tr></thead>
     <tbody>
-      <tr><td><strong>CoreVideo Pro</strong> &mdash; Premium</td><td>Standalone app</td><td>Producers who want a dedicated, ready-to-go studio &mdash; scenes, participants, outputs, recording, and AI auto-direct in one app, with no OBS to configure.</td></tr>
+      <tr><td><strong>CoreVideo Pro</strong> &mdash; Premium</td><td>Standalone app</td><td>Producers who want a dedicated, ready-to-go studio &mdash; scenes, participants, outputs, recording, and AI auto-direct in one polished app.</td></tr>
       <tr><td><strong>CoreVideo</strong> &mdash; Free</td><td>OBS Studio plugin</td><td>Operators already running shows in OBS who want clean Zoom participants as native sources, ISO recording, and an Active Speaker Director.</td></tr>
     </tbody>
   </table>
