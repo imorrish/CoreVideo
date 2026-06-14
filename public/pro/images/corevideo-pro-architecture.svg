@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="640" viewBox="0 0 1160 640" role="img" aria-labelledby="cvpa-t cvpa-d">
+  <title id="cvpa-t">CoreVideo Pro system architecture</title>
+  <desc id="cvpa-d">The React/Vite operator renderer drives a native C++ media core over typed IPC. An isolated Zoom Meeting SDK process and local Blackmagic/AJA capture feed raw frames into the core, which composites on the GPU and produces program recording, per-guest ISO, and RTMP/NDI/SRT streaming outputs.</desc>
+  <defs>
+    <style>
+      .bg{fill:#07101c}.panel{fill:#111827;stroke:#2dd4bf;stroke-width:2}.sub{fill:#0b1220;stroke:#334155;stroke-width:1.5}.text{font-family:Segoe UI,Arial,sans-serif;fill:#f8fafc}.muted{font-family:Segoe UI,Arial,sans-serif;fill:#94a3b8}.accent{font-family:Segoe UI,Arial,sans-serif;fill:#67e8f9}.arrow{stroke:#67e8f9;stroke-width:3;fill:none;marker-end:url(#cvpa-arr)}
+    </style>
+    <marker id="cvpa-arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#67e8f9"/></marker>
+  </defs>
+  <rect class="bg" width="1160" height="640"/>
+  <rect class="panel" x="40" y="40" width="1080" height="124" rx="14"/>
+  <text class="text" x="70" y="78" font-size="24" font-weight="700">Operator Renderer &#x2014; React / Vite</text>
+  <text class="muted" x="70" y="102" font-size="14">renders the UI only &#x2014; never owns media; swappable Electron / Tauri / native shell</text>
+  <rect class="sub" x="70" y="114" width="232" height="36" rx="8"/><text class="text" x="86" y="138" font-size="14">Production Console</text>
+  <rect class="sub" x="318" y="114" width="232" height="36" rx="8"/><text class="text" x="334" y="138" font-size="14">Scenes &amp; Templates</text>
+  <rect class="sub" x="566" y="114" width="256" height="36" rx="8"/><text class="text" x="582" y="138" font-size="14">Source &amp; Audio Panels</text>
+  <rect class="sub" x="838" y="114" width="252" height="36" rx="8"/><text class="text" x="854" y="138" font-size="14">Keyboard Command Layer</text>
+  <path class="arrow" d="M580 164 L580 214"/>
+  <text class="accent" x="592" y="194" font-size="14">typed IPC &#xB7; commands + state</text>
+  <rect class="panel" x="40" y="224" width="300" height="384" rx="14"/>
+  <text class="text" x="68" y="262" font-size="20" font-weight="700">Capture</text>
+  <rect class="sub" x="68" y="282" width="244" height="118" rx="10"/>
+  <text class="text" x="86" y="312" font-size="16">Zoom Meeting SDK</text>
+  <text class="muted" x="86" y="336" font-size="13">isolated process &#xB7; raw video,</text>
+  <text class="muted" x="86" y="356" font-size="13">audio, and screen share</text>
+  <text class="muted" x="86" y="382" font-size="13">auto-reconnect &#xB7; webinar mode</text>
+  <rect class="sub" x="68" y="416" width="244" height="106" rx="10"/>
+  <text class="text" x="86" y="446" font-size="16">Local Capture</text>
+  <text class="muted" x="86" y="470" font-size="13">Blackmagic DeckLink /</text>
+  <text class="muted" x="86" y="490" font-size="13">UltraStudio &#xB7; AJA Io / Kona</text>
+  <rect class="panel" x="420" y="224" width="320" height="384" rx="14"/>
+  <text class="text" x="448" y="262" font-size="20" font-weight="700">Native Media Core &#x2014; C++</text>
+  <rect class="sub" x="448" y="282" width="264" height="40" rx="8"/><text class="text" x="464" y="308" font-size="15">GPU Compositor &#xB7; D3D 11/12 &#xB7; Metal</text>
+  <rect class="sub" x="448" y="330" width="264" height="40" rx="8"/><text class="text" x="464" y="356" font-size="15">Scene Graph Engine</text>
+  <rect class="sub" x="448" y="378" width="264" height="40" rx="8"/><text class="text" x="464" y="404" font-size="15">Smart Audio Mixer</text>
+  <rect class="sub" x="448" y="426" width="264" height="40" rx="8"/><text class="text" x="464" y="452" font-size="15">Graphics &#xB7; Lower-thirds &#xB7; Captions</text>
+  <rect class="sub" x="448" y="474" width="264" height="48" rx="8"/><text class="text" x="464" y="498" font-size="15">AI Director</text><text class="muted" x="464" y="516" font-size="12">Magic Scene &#xB7; Set &amp; Forget</text>
+  <rect class="sub" x="448" y="530" width="264" height="40" rx="8"/><text class="text" x="464" y="556" font-size="15">Hardware Encoder</text>
+  <rect class="panel" x="820" y="224" width="300" height="384" rx="14"/>
+  <text class="text" x="848" y="262" font-size="20" font-weight="700">Outputs</text>
+  <rect class="sub" x="848" y="282" width="244" height="46" rx="8"/><text class="text" x="866" y="310" font-size="15">Program Record &#xB7; MP4 / MOV</text>
+  <rect class="sub" x="848" y="338" width="244" height="46" rx="8"/><text class="text" x="866" y="366" font-size="15">Per-guest ISO Record</text>
+  <rect class="sub" x="848" y="394" width="244" height="46" rx="8"/><text class="text" x="866" y="422" font-size="15">RTMP / NDI / SRT Stream</text>
+  <rect class="sub" x="848" y="450" width="244" height="46" rx="8"/><text class="text" x="866" y="478" font-size="15">WebRTC Monitor</text>
+  <path class="arrow" d="M340 414 L420 414"/>
+  <text class="accent" x="344" y="402" font-size="12">raw frames &#xB7; media bus</text>
+  <path class="arrow" d="M740 414 L820 414"/>
+  <text class="accent" x="744" y="402" font-size="12">encoded program + ISO</text>
+</svg>

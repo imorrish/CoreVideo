@@ -143,6 +143,7 @@ function homeContent() {
   <a href="/documentation/"><strong>Documentation</strong><span>Architecture, setup, control APIs, and operating notes.</span></a>
   <a href="/core-plugin/"><strong>Core Plugin Guide</strong><span>OBS workflows, participant routing, isolated audio, and ISO recording.</span></a>
   <a href="/pro/"><strong>CoreVideo Pro</strong><span>Standalone production app for live and recorded conversations.</span></a>
+  <a href="/pro/documentation/"><strong>CoreVideo Pro Architecture</strong><span>Native media core, typed IPC, capture, AI direction, and outputs &mdash; with diagrams.</span></a>
   <a href="/terms/"><strong>Terms of Use</strong><span>Marketplace-ready usage terms and license requirements.</span></a>
   <a href="/privacy/"><strong>Privacy Policy</strong><span>Data processing, local storage, and third-party service details.</span></a>
   <a href="/support/"><strong>Support</strong><span>Issue reporting, troubleshooting, and common fixes.</span></a>
@@ -159,8 +160,8 @@ function proPageContent() {
     <h1>Produce polished live conversations, no OBS required.</h1>
     <p class="lede">CoreVideo Pro is the premium, all-in-one studio for live Zoom production: everything the CoreVideo plugin captures, plus multi-scene production, participant management, recording and multi-destination streaming, and an AI auto-director &mdash; in one standalone app, with no OBS to wire up.</p>
     <div class="hero-actions">
-      <a class="button primary" href="/documentation/">See what it does</a>
-      <a class="button" href="/core-plugin/">Compare with CoreVideo (OBS Plugin)</a>
+      <a class="button primary" href="/pro/documentation/">Read the architecture docs</a>
+      <a class="button" href="/core-plugin/">Compare with the OBS plugin</a>
     </div>
   </div>
 </section>
@@ -259,6 +260,39 @@ function proPageContent() {
     </tbody>
   </table>
 </section>`;
+}
+
+function proDocsContent() {
+  return `<h1>CoreVideo Pro Architecture</h1>
+<p>CoreVideo Pro is a cross-platform (macOS and Windows) live-production studio built around a native media core. This guide describes how the product is architected end to end &mdash; how Zoom participants and local cameras are captured, how frames are composited and directed, and how program, ISO, and streaming outputs are produced. For the OBS plugin&apos;s internals, see the <a href="/core-plugin/">Core Plugin guide</a>.</p>
+<h2>Design principles</h2>
+<ul>
+<li><strong>Native media core, web renderer.</strong> A C++ media core owns the real-time pipeline; the React/Vite renderer drives the UI and never touches media frames directly.</li>
+<li><strong>Typed IPC contracts.</strong> The renderer and core talk over typed command/state contracts, so the host shell (Electron, Tauri, or a custom native shell) stays replaceable.</li>
+<li><strong>Process isolation.</strong> The Zoom Meeting SDK runs in its own process, so an SDK crash cannot take down the operator console.</li>
+<li><strong>Local-first.</strong> Capture, compositing, recording, and streaming all run on the operator&apos;s machine; nothing is routed through a third-party cloud.</li>
+</ul>
+<h2>System architecture</h2>
+<figure class="doc-image"><img src="/pro/images/corevideo-pro-architecture.svg" alt="CoreVideo Pro system architecture: the React/Vite renderer over typed IPC, a native C++ media core, an isolated Zoom capture process plus local Blackmagic/AJA capture, and recording, ISO, and streaming outputs."></figure>
+<p>The <strong>operator renderer</strong> presents the production console, scene and template editor, source and audio panels, and a keyboard command layer. It issues typed commands (assign slot, take, arm record, start stream) and receives typed state snapshots (feed health, output status, levels). It renders no media itself.</p>
+<p>The <strong>native media core</strong> receives raw frames over a shared media bus, composites the active scene graph on the GPU, mixes audio, draws graphics and captions, and hands a program feed to the hardware encoder. The <strong>outputs</strong> stage records the program and per-guest ISOs and streams to one or more destinations.</p>
+<h2>Capture and the media core</h2>
+<p>Zoom media is captured through the Zoom Meeting SDK&apos;s raw video and audio APIs in a dedicated capture process &mdash; no window grabbing, virtual cameras, or display capture. Each participant becomes a clean video, audio, and screen-share source with a full data model: name, role, talking/mute/video state, spotlight, breakout room, and feed quality.</p>
+<p>Local cameras from Blackmagic (DeckLink, UltraStudio) and AJA (Io, Kona) devices are detected on launch and on hot-plug, and appear as first-class sources alongside Zoom participants. Frames move from the capture process to the core over a shared media bus as GPU textures, so large frames are never copied through the IPC pipe. The GPU compositor renders with Direct3D 11/12 on Windows and Metal on macOS.</p>
+<h2>Production pipeline</h2>
+<figure class="doc-image"><img src="/pro/images/corevideo-pro-pipeline.svg" alt="CoreVideo Pro production pipeline: sources flow through capture and sync into a GPU scene-graph compositor fed by the AI director and audio mixer, producing a program feed that is encoded to recording, ISO, and streaming outputs."></figure>
+<p>Sources are captured and synchronised, then routed into the scene-graph compositor. A scene is a template with typed slots (fixed, host, presenter, active speaker, screen share, gallery, fallback), assignment rules, and safe regions for lower-thirds and captions. Producers work in a program/preview model: stage a layout, then <strong>Take</strong> it to program with a Cut, Fade, or Slide transition.</p>
+<p>The <strong>AI director</strong> watches the live call and feeds scene decisions into the compositor; the <strong>audio mixer</strong> levels every source and supplies the mixed bus to the program feed. The program feed is encoded once on hardware and fanned out to recording, ISO, and streaming.</p>
+<h2>AI direction</h2>
+<p><strong>Magic Scene</strong> inspects participant count, roles, screen-share, and the active speaker, picks a template, fills the slots, adds lower-thirds and captions, applies the brand kit, and produces a ready-to-stream scene set you can accept, regenerate, or edit. <strong>Set &amp; Forget</strong> then runs the show: it switches on active speaker and screen share, holds shots to avoid rapid cutting, reveals lower-thirds, and returns to the host or panel. Manual overrides always win, with one click back to automatic.</p>
+<h2>Audio</h2>
+<p>Each Zoom participant and local source has independent gain with smart auto-leveling and a manual trim on top, per-source noise suppression, and mute/solo. A master meter provides a limiter and clipping warnings, and an A/V sync offset aligns local capture with Zoom audio.</p>
+<h2>Graphics, captions and branding</h2>
+<p>Lower-thirds are generated automatically from each participant&apos;s Zoom name and role and can be overridden; they reveal and hide on cue and reposition to avoid collisions. Real-time program captions carry speaker attribution. A brand kit (logo, color, font, background) is applied automatically, alongside a brand bug, banners, call-to-action overlays, and per-source chroma key.</p>
+<h2>Outputs</h2>
+<p>CoreVideo Pro records the program to MP4/MOV (up to 4K, 30/60fps) and captures per-guest ISO feeds for clean re-edits. Streaming targets RTMP, NDI, and SRT with YouTube, Twitch, and custom presets and a multi-destination model that tracks armed/live state, bitrate, latency, and health per destination. Hardware encoders (NVENC, Quick Sync, AMF on Windows; VideoToolbox on macOS) keep CPU load low, and an output preflight blocks streaming when a destination is missing an endpoint, key, or compatible URL.</p>
+<h2>Platform and shell</h2>
+<p>The renderer is shell-agnostic: it runs inside whatever native host is present (Electron, Tauri, or a custom shell) and falls back to mock engines only for local development. Engine bundles are injected, so the UI swaps simulated engines for the native Zoom, media, and output implementations without importing mock singletons. The native media core stays the durable part of the product; the shell and renderer can evolve independently behind the typed IPC contracts.</p>`;
 }
 
 function renderTable(lines) {
@@ -419,6 +453,7 @@ function layout(page, content, options = {}) {
   const nav = [
     ["Home", "/"],
     ["CoreVideo Pro", "/pro/"],
+    ["Pro Docs", "/pro/documentation/"],
     ["Documentation", "/documentation/"],
     ["Core Plugin", "/core-plugin/"],
     ["OAuth", "/oauth/"],
@@ -495,6 +530,23 @@ writeText(
     proPageContent(),
     {
       home: true,
+      footerText:
+        "CoreVideo and CoreVideo Pro are independent products and are not affiliated with Zoom Video Communications, Inc.",
+    },
+  ),
+);
+
+// CoreVideo Pro documentation page
+writeText(
+  "pro/documentation/index.html",
+  layout(
+    {
+      title: "CoreVideo Pro Architecture",
+      description:
+        "CoreVideo Pro architecture: native media core, typed IPC renderer, isolated Zoom capture, local Blackmagic/AJA capture, GPU compositing, AI direction, and recording/ISO/streaming outputs.",
+    },
+    proDocsContent(),
+    {
       footerText:
         "CoreVideo and CoreVideo Pro are independent products and are not affiliated with Zoom Video Communications, Inc.",
     },
@@ -581,6 +633,112 @@ writeText(
   <text class="muted small" x="780" y="918">Record 1080p60 &#xB7; Good</text>
   <text class="muted small" x="1080" y="918">CPU 18%   Mem 42%   Drops 0 (0.0%)</text>
   <text class="muted small" x="80" y="954">Live 00:28:47</text>
+</svg>`,
+);
+
+// CoreVideo Pro system architecture diagram
+writeText(
+  "pro/images/corevideo-pro-architecture.svg",
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="640" viewBox="0 0 1160 640" role="img" aria-labelledby="cvpa-t cvpa-d">
+  <title id="cvpa-t">CoreVideo Pro system architecture</title>
+  <desc id="cvpa-d">The React/Vite operator renderer drives a native C++ media core over typed IPC. An isolated Zoom Meeting SDK process and local Blackmagic/AJA capture feed raw frames into the core, which composites on the GPU and produces program recording, per-guest ISO, and RTMP/NDI/SRT streaming outputs.</desc>
+  <defs>
+    <style>
+      .bg{fill:#07101c}.panel{fill:#111827;stroke:#2dd4bf;stroke-width:2}.sub{fill:#0b1220;stroke:#334155;stroke-width:1.5}.text{font-family:Segoe UI,Arial,sans-serif;fill:#f8fafc}.muted{font-family:Segoe UI,Arial,sans-serif;fill:#94a3b8}.accent{font-family:Segoe UI,Arial,sans-serif;fill:#67e8f9}.arrow{stroke:#67e8f9;stroke-width:3;fill:none;marker-end:url(#cvpa-arr)}
+    </style>
+    <marker id="cvpa-arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#67e8f9"/></marker>
+  </defs>
+  <rect class="bg" width="1160" height="640"/>
+  <rect class="panel" x="40" y="40" width="1080" height="124" rx="14"/>
+  <text class="text" x="70" y="78" font-size="24" font-weight="700">Operator Renderer &#x2014; React / Vite</text>
+  <text class="muted" x="70" y="102" font-size="14">renders the UI only &#x2014; never owns media; swappable Electron / Tauri / native shell</text>
+  <rect class="sub" x="70" y="114" width="232" height="36" rx="8"/><text class="text" x="86" y="138" font-size="14">Production Console</text>
+  <rect class="sub" x="318" y="114" width="232" height="36" rx="8"/><text class="text" x="334" y="138" font-size="14">Scenes &amp; Templates</text>
+  <rect class="sub" x="566" y="114" width="256" height="36" rx="8"/><text class="text" x="582" y="138" font-size="14">Source &amp; Audio Panels</text>
+  <rect class="sub" x="838" y="114" width="252" height="36" rx="8"/><text class="text" x="854" y="138" font-size="14">Keyboard Command Layer</text>
+  <path class="arrow" d="M580 164 L580 214"/>
+  <text class="accent" x="592" y="194" font-size="14">typed IPC &#xB7; commands + state</text>
+  <rect class="panel" x="40" y="224" width="300" height="384" rx="14"/>
+  <text class="text" x="68" y="262" font-size="20" font-weight="700">Capture</text>
+  <rect class="sub" x="68" y="282" width="244" height="118" rx="10"/>
+  <text class="text" x="86" y="312" font-size="16">Zoom Meeting SDK</text>
+  <text class="muted" x="86" y="336" font-size="13">isolated process &#xB7; raw video,</text>
+  <text class="muted" x="86" y="356" font-size="13">audio, and screen share</text>
+  <text class="muted" x="86" y="382" font-size="13">auto-reconnect &#xB7; webinar mode</text>
+  <rect class="sub" x="68" y="416" width="244" height="106" rx="10"/>
+  <text class="text" x="86" y="446" font-size="16">Local Capture</text>
+  <text class="muted" x="86" y="470" font-size="13">Blackmagic DeckLink /</text>
+  <text class="muted" x="86" y="490" font-size="13">UltraStudio &#xB7; AJA Io / Kona</text>
+  <rect class="panel" x="420" y="224" width="320" height="384" rx="14"/>
+  <text class="text" x="448" y="262" font-size="20" font-weight="700">Native Media Core &#x2014; C++</text>
+  <rect class="sub" x="448" y="282" width="264" height="40" rx="8"/><text class="text" x="464" y="308" font-size="15">GPU Compositor &#xB7; D3D 11/12 &#xB7; Metal</text>
+  <rect class="sub" x="448" y="330" width="264" height="40" rx="8"/><text class="text" x="464" y="356" font-size="15">Scene Graph Engine</text>
+  <rect class="sub" x="448" y="378" width="264" height="40" rx="8"/><text class="text" x="464" y="404" font-size="15">Smart Audio Mixer</text>
+  <rect class="sub" x="448" y="426" width="264" height="40" rx="8"/><text class="text" x="464" y="452" font-size="15">Graphics &#xB7; Lower-thirds &#xB7; Captions</text>
+  <rect class="sub" x="448" y="474" width="264" height="48" rx="8"/><text class="text" x="464" y="498" font-size="15">AI Director</text><text class="muted" x="464" y="516" font-size="12">Magic Scene &#xB7; Set &amp; Forget</text>
+  <rect class="sub" x="448" y="530" width="264" height="40" rx="8"/><text class="text" x="464" y="556" font-size="15">Hardware Encoder</text>
+  <rect class="panel" x="820" y="224" width="300" height="384" rx="14"/>
+  <text class="text" x="848" y="262" font-size="20" font-weight="700">Outputs</text>
+  <rect class="sub" x="848" y="282" width="244" height="46" rx="8"/><text class="text" x="866" y="310" font-size="15">Program Record &#xB7; MP4 / MOV</text>
+  <rect class="sub" x="848" y="338" width="244" height="46" rx="8"/><text class="text" x="866" y="366" font-size="15">Per-guest ISO Record</text>
+  <rect class="sub" x="848" y="394" width="244" height="46" rx="8"/><text class="text" x="866" y="422" font-size="15">RTMP / NDI / SRT Stream</text>
+  <rect class="sub" x="848" y="450" width="244" height="46" rx="8"/><text class="text" x="866" y="478" font-size="15">WebRTC Monitor</text>
+  <path class="arrow" d="M340 414 L420 414"/>
+  <text class="accent" x="344" y="402" font-size="12">raw frames &#xB7; media bus</text>
+  <path class="arrow" d="M740 414 L820 414"/>
+  <text class="accent" x="744" y="402" font-size="12">encoded program + ISO</text>
+</svg>`,
+);
+
+// CoreVideo Pro production pipeline diagram
+writeText(
+  "pro/images/corevideo-pro-pipeline.svg",
+  `<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="460" viewBox="0 0 1160 460" role="img" aria-labelledby="cvpp-t cvpp-d">
+  <title id="cvpp-t">CoreVideo Pro production pipeline</title>
+  <desc id="cvpp-d">Zoom participants and local cameras are captured and synchronised, composited by the GPU scene-graph engine under direction from the AI director and audio mixer, and produced as a program feed that is encoded to recording, ISO, and streaming outputs.</desc>
+  <defs>
+    <style>
+      .bg{fill:#07101c}.stage{fill:#111827;stroke:#2dd4bf;stroke-width:2}.aux{fill:#0b1220;stroke:#334155;stroke-width:1.5}.text{font-family:Segoe UI,Arial,sans-serif;fill:#f8fafc}.muted{font-family:Segoe UI,Arial,sans-serif;fill:#94a3b8}.accent{font-family:Segoe UI,Arial,sans-serif;fill:#67e8f9}.flow{stroke:#67e8f9;stroke-width:3;fill:none;marker-end:url(#cvpp-arr)}
+    </style>
+    <marker id="cvpp-arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#67e8f9"/></marker>
+  </defs>
+  <rect class="bg" width="1160" height="460"/>
+  <rect class="stage" x="30" y="180" width="180" height="100" rx="12"/>
+  <text class="text" x="50" y="214" font-size="16" font-weight="700">Sources</text>
+  <text class="muted" x="50" y="240" font-size="13">Zoom participants</text>
+  <text class="muted" x="50" y="260" font-size="13">+ local cameras</text>
+  <rect class="stage" x="270" y="180" width="180" height="100" rx="12"/>
+  <text class="text" x="290" y="214" font-size="16" font-weight="700">Capture &amp; Sync</text>
+  <text class="muted" x="290" y="240" font-size="13">SDK + SDI/HDMI</text>
+  <text class="muted" x="290" y="260" font-size="13">A/V alignment</text>
+  <rect class="stage" x="510" y="160" width="190" height="140" rx="12"/>
+  <text class="text" x="530" y="194" font-size="16" font-weight="700">Scene Graph</text>
+  <text class="text" x="530" y="214" font-size="16" font-weight="700">Compositor</text>
+  <text class="muted" x="530" y="240" font-size="13">GPU &#xB7; slots,</text>
+  <text class="muted" x="530" y="260" font-size="13">transitions,</text>
+  <text class="muted" x="530" y="280" font-size="13">graphics &amp; captions</text>
+  <rect class="stage" x="760" y="180" width="160" height="100" rx="12"/>
+  <text class="text" x="780" y="214" font-size="16" font-weight="700">Program</text>
+  <text class="muted" x="780" y="240" font-size="13">Take &#xB7; Cut /</text>
+  <text class="muted" x="780" y="260" font-size="13">Fade / Slide</text>
+  <rect class="stage" x="980" y="180" width="150" height="100" rx="12"/>
+  <text class="text" x="1000" y="214" font-size="16" font-weight="700">Encode</text>
+  <text class="muted" x="1000" y="240" font-size="13">Record &#xB7; ISO</text>
+  <text class="muted" x="1000" y="260" font-size="13">RTMP/NDI/SRT</text>
+  <rect class="aux" x="510" y="40" width="190" height="70" rx="10"/>
+  <text class="text" x="530" y="70" font-size="15" font-weight="700">AI Director</text>
+  <text class="muted" x="530" y="92" font-size="12">Magic Scene &#xB7; Set &amp; Forget</text>
+  <rect class="aux" x="270" y="350" width="430" height="70" rx="10"/>
+  <text class="text" x="290" y="380" font-size="15" font-weight="700">Smart Audio Mixer</text>
+  <text class="muted" x="290" y="402" font-size="12">per-source gain, leveling, limiter &#x2192; mixed program bus</text>
+  <path class="flow" d="M210 230 L270 230"/>
+  <path class="flow" d="M450 230 L510 230"/>
+  <path class="flow" d="M700 230 L760 230"/>
+  <path class="flow" d="M920 230 L980 230"/>
+  <path class="flow" d="M605 110 L605 160"/>
+  <text class="accent" x="616" y="140" font-size="12">scene decisions</text>
+  <path class="flow" d="M700 360 C760 360 800 300 810 282"/>
+  <text class="accent" x="708" y="338" font-size="12">mixed audio</text>
 </svg>`,
 );
 

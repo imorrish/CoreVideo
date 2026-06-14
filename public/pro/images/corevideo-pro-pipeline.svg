@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="460" viewBox="0 0 1160 460" role="img" aria-labelledby="cvpp-t cvpp-d">
+  <title id="cvpp-t">CoreVideo Pro production pipeline</title>
+  <desc id="cvpp-d">Zoom participants and local cameras are captured and synchronised, composited by the GPU scene-graph engine under direction from the AI director and audio mixer, and produced as a program feed that is encoded to recording, ISO, and streaming outputs.</desc>
+  <defs>
+    <style>
+      .bg{fill:#07101c}.stage{fill:#111827;stroke:#2dd4bf;stroke-width:2}.aux{fill:#0b1220;stroke:#334155;stroke-width:1.5}.text{font-family:Segoe UI,Arial,sans-serif;fill:#f8fafc}.muted{font-family:Segoe UI,Arial,sans-serif;fill:#94a3b8}.accent{font-family:Segoe UI,Arial,sans-serif;fill:#67e8f9}.flow{stroke:#67e8f9;stroke-width:3;fill:none;marker-end:url(#cvpp-arr)}
+    </style>
+    <marker id="cvpp-arr" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#67e8f9"/></marker>
+  </defs>
+  <rect class="bg" width="1160" height="460"/>
+  <rect class="stage" x="30" y="180" width="180" height="100" rx="12"/>
+  <text class="text" x="50" y="214" font-size="16" font-weight="700">Sources</text>
+  <text class="muted" x="50" y="240" font-size="13">Zoom participants</text>
+  <text class="muted" x="50" y="260" font-size="13">+ local cameras</text>
+  <rect class="stage" x="270" y="180" width="180" height="100" rx="12"/>
+  <text class="text" x="290" y="214" font-size="16" font-weight="700">Capture &amp; Sync</text>
+  <text class="muted" x="290" y="240" font-size="13">SDK + SDI/HDMI</text>
+  <text class="muted" x="290" y="260" font-size="13">A/V alignment</text>
+  <rect class="stage" x="510" y="160" width="190" height="140" rx="12"/>
+  <text class="text" x="530" y="194" font-size="16" font-weight="700">Scene Graph</text>
+  <text class="text" x="530" y="214" font-size="16" font-weight="700">Compositor</text>
+  <text class="muted" x="530" y="240" font-size="13">GPU &#xB7; slots,</text>
+  <text class="muted" x="530" y="260" font-size="13">transitions,</text>
+  <text class="muted" x="530" y="280" font-size="13">graphics &amp; captions</text>
+  <rect class="stage" x="760" y="180" width="160" height="100" rx="12"/>
+  <text class="text" x="780" y="214" font-size="16" font-weight="700">Program</text>
+  <text class="muted" x="780" y="240" font-size="13">Take &#xB7; Cut /</text>
+  <text class="muted" x="780" y="260" font-size="13">Fade / Slide</text>
+  <rect class="stage" x="980" y="180" width="150" height="100" rx="12"/>
+  <text class="text" x="1000" y="214" font-size="16" font-weight="700">Encode</text>
+  <text class="muted" x="1000" y="240" font-size="13">Record &#xB7; ISO</text>
+  <text class="muted" x="1000" y="260" font-size="13">RTMP/NDI/SRT</text>
+  <rect class="aux" x="510" y="40" width="190" height="70" rx="10"/>
+  <text class="text" x="530" y="70" font-size="15" font-weight="700">AI Director</text>
+  <text class="muted" x="530" y="92" font-size="12">Magic Scene &#xB7; Set &amp; Forget</text>
+  <rect class="aux" x="270" y="350" width="430" height="70" rx="10"/>
+  <text class="text" x="290" y="380" font-size="15" font-weight="700">Smart Audio Mixer</text>
+  <text class="muted" x="290" y="402" font-size="12">per-source gain, leveling, limiter &#x2192; mixed program bus</text>
+  <path class="flow" d="M210 230 L270 230"/>
+  <path class="flow" d="M450 230 L510 230"/>
+  <path class="flow" d="M700 230 L760 230"/>
+  <path class="flow" d="M920 230 L980 230"/>
+  <path class="flow" d="M605 110 L605 160"/>
+  <text class="accent" x="616" y="140" font-size="12">scene decisions</text>
+  <path class="flow" d="M700 360 C760 360 800 300 810 282"/>
+  <text class="accent" x="708" y="338" font-size="12">mixed audio</text>
+</svg>
