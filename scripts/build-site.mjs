@@ -171,6 +171,84 @@ function proPageContent() {
   <div><strong>AI Auto-Direct</strong><span>Magic Scene and Set &amp; Forget automatically recommend and take scene layouts from live Zoom activity, so a show can run itself.</span></div>
 </section>
 <section>
+  <h2>The complete production studio</h2>
+  <p>CoreVideo Pro is a cross-platform (macOS and Windows) Zoom-native studio. Here is the full capability set the product is built toward &mdash; everything you need to take a Zoom call to a finished, broadcast-quality show:</p>
+  <div class="feature-set">
+    <div>
+      <h3>Zoom capture &amp; media core</h3>
+      <ul>
+        <li>True Zoom Meeting SDK raw video and audio &mdash; no window or virtual-camera hacks</li>
+        <li>Clean per-participant video, audio, and screen-share capture</li>
+        <li>GPU compositor (Direct3D on Windows, Metal on macOS)</li>
+        <li>Isolated capture process, automatic reconnect, and webinar mode</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Scenes, templates &amp; switching</h3>
+      <ul>
+        <li>One-click professional templates: solo, interview, panel, screen-share, webinar</li>
+        <li>Grid, speaker-focus, and picture-in-picture layouts with slot rules</li>
+        <li>Program/preview workflow with explicit Take and Cut/Fade/Slide transitions</li>
+        <li>Save and reload complete show presets</li>
+      </ul>
+    </div>
+    <div>
+      <h3>AI direction</h3>
+      <ul>
+        <li>Magic Scene builds a ready-to-stream show from the live call</li>
+        <li>Set &amp; Forget auto-director switches on active speaker and screen share</li>
+        <li>Role-aware logic &mdash; host for intros, presenter for shares, speaker for discussion</li>
+        <li>Manual overrides always win, with one click back to auto</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Participants &amp; framing</h3>
+      <ul>
+        <li>Every participant treated as a production-ready source, not a raw feed</li>
+        <li>Face-aware auto-crop, centering, and manual zoom override</li>
+        <li>Speaker holds to prevent rapid cutting, with graceful video-drop fallback</li>
+        <li>Stable Host / Presenter / Panelist / Guest role overrides</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Audio</h3>
+      <ul>
+        <li>Per-participant gain with smart auto-leveling and manual trim</li>
+        <li>Per-source noise suppression, mute, and solo</li>
+        <li>Master meter with limiter and clipping warnings</li>
+        <li>A/V sync offset for local capture sources</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Graphics, captions &amp; branding</h3>
+      <ul>
+        <li>Auto lower-thirds from Zoom name and role, with manual override</li>
+        <li>Real-time program captions with speaker-name attribution</li>
+        <li>Brand kit &mdash; logo, color, font, background &mdash; applied automatically</li>
+        <li>Brand bug, banners, call-to-action overlays, and per-source chroma key</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Local cameras (Blackmagic &amp; AJA)</h3>
+      <ul>
+        <li>Auto-detect DeckLink/UltraStudio and AJA Io/Kona, with hot-plug</li>
+        <li>SDI/HDMI input selection with embedded or separate audio</li>
+        <li>Local cameras as first-class sources, fillable into any slot</li>
+        <li>Sub-100ms preview latency with signal-health monitoring</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Recording &amp; streaming</h3>
+      <ul>
+        <li>Local MP4/MOV recording up to 4K at 30/60fps</li>
+        <li>Multi-destination RTMP/NDI/SRT with YouTube, Twitch, and custom presets</li>
+        <li>Per-participant ISO recording for clean guest capture</li>
+        <li>Hardware encoding (NVENC, Quick Sync, AMF, VideoToolbox) with output preflight</li>
+      </ul>
+    </div>
+  </div>
+</section>
+<section>
   <h2>Free plugin or full studio?</h2>
   <p>CoreVideo comes in two tiers. The free <a href="/core-plugin/">OBS plugin</a> is the building block; CoreVideo Pro is the premium studio that includes that same Zoom capture and adds the full production layer in one standalone app.</p>
   <table>
@@ -412,7 +490,7 @@ writeText(
     {
       title: "CoreVideo Pro",
       description:
-        "CoreVideo Pro: a standalone Windows app for producing high-quality online conversations with multi-scene production, participant management, streaming, recording, and AI auto-direct.",
+        "CoreVideo Pro: a cross-platform (macOS and Windows) standalone app for producing high-quality online conversations with multi-scene production, participant management, streaming, recording, and AI auto-direct.",
     },
     proPageContent(),
     {
@@ -777,6 +855,27 @@ nav a:hover { color: var(--text); }
   border-color: transparent;
   background: linear-gradient(135deg, var(--cyan), var(--blue));
 }
+.feature-set {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 8px;
+}
+.feature-set > div {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong);
+  padding: 20px 22px;
+}
+.feature-set h3 {
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 16px;
+  color: var(--text);
+}
+.feature-set ul { margin: 0; padding-left: 18px; }
+.feature-set li { margin-bottom: 7px; font-size: 14px; color: var(--muted); }
+.feature-set li:last-child { margin-bottom: 0; }
 h1, h2, h3, h4 { line-height: 1.2; margin: 1.6em 0 0.55em; letter-spacing: 0; }
 h1 { margin-top: 0; font-size: clamp(34px, 5vw, 52px); }
 h2 { font-size: 26px; border-top: 1px solid var(--line); padding-top: 28px; }

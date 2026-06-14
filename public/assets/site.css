@@ -246,6 +246,27 @@ nav a:hover { color: var(--text); }
   border-color: transparent;
   background: linear-gradient(135deg, var(--cyan), var(--blue));
 }
+.feature-set {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 18px;
+  margin-top: 8px;
+}
+.feature-set > div {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong);
+  padding: 20px 22px;
+}
+.feature-set h3 {
+  margin: 0 0 12px;
+  padding: 0;
+  font-size: 16px;
+  color: var(--text);
+}
+.feature-set ul { margin: 0; padding-left: 18px; }
+.feature-set li { margin-bottom: 7px; font-size: 14px; color: var(--muted); }
+.feature-set li:last-child { margin-bottom: 0; }
 h1, h2, h3, h4 { line-height: 1.2; margin: 1.6em 0 0.55em; letter-spacing: 0; }
 h1 { margin-top: 0; font-size: clamp(34px, 5vw, 52px); }
 h2 { font-size: 26px; border-top: 1px solid var(--line); padding-top: 28px; }
