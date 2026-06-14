@@ -125,13 +125,13 @@ function homeContent() {
     <img class="hero-logo" src="/assets/corevideo-logo.jpg" alt="CoreVideo">
   </figure>
   <div class="hero-copy">
-    <p class="eyebrow">OBS Studio plugin for Zoom Meeting SDK production workflows</p>
-    <h1>Live Zoom video, audio, screen share, and interpretation inside OBS.</h1>
-    <p class="lede">CoreVideo provides raw participant media routing for broadcast, recording, and ISO-style production workflows while keeping processing local to the operator machine.</p>
+    <p class="eyebrow">Live Zoom production for broadcast and recording teams</p>
+    <h1>Broadcast-grade Zoom production, right inside OBS.</h1>
+    <p class="lede">CoreVideo turns Zoom participants into clean, isolated video and audio sources for live shows, recordings, and ISO-style production &mdash; so your team delivers a polished result while every frame stays on the operator&apos;s own machine.</p>
     <div class="hero-actions">
-      <a class="button primary" href="/documentation/">Read documentation</a>
-      <a class="button" href="/core-plugin/">Core plugin guide</a>
-      <a class="button" href="https://github.com/iamfatness/CoreVideo">View source</a>
+      <a class="button primary" href="/core-plugin/">See how it works</a>
+      <a class="button" href="/pro/">Meet CoreVideo Pro</a>
+      <a class="button" href="/documentation/">Documentation</a>
     </div>
   </div>
 </section>
@@ -157,18 +157,18 @@ function proPageContent() {
   <div class="hero-copy">
     <p class="eyebrow">Standalone app for online conversation production</p>
     <h1>Produce polished live conversations, no OBS required.</h1>
-    <p class="lede">CoreVideo Pro is a standalone Windows app that turns a Zoom call into a multi-scene, multi-camera production &mdash; with participant management, streaming and recording outputs, and an AI auto-director that keeps the show moving.</p>
+    <p class="lede">CoreVideo Pro is a standalone Windows app that turns a Zoom call into a multi-scene, multi-camera production &mdash; with participant management, streaming and recording outputs, and an AI auto-director that keeps the show moving, so your team can focus on the conversation instead of the controls.</p>
     <div class="hero-actions">
-      <a class="button primary" href="https://github.com/iamfatness/CoreVideoPro">View on GitHub</a>
+      <a class="button primary" href="/documentation/">See what it does</a>
       <a class="button" href="/core-plugin/">Compare with CoreVideo (OBS Plugin)</a>
     </div>
   </div>
 </section>
 <section class="link-grid" aria-label="CoreVideo Pro features">
-  <a href="https://github.com/iamfatness/CoreVideoPro#current-slice"><strong>Multi-Scene Production</strong><span>Intro, interview, speaker-plus-slides, panel, and closing scene templates with Cut/Fade/Slide transitions and Take.</span></a>
-  <a href="https://github.com/iamfatness/CoreVideoPro#current-slice"><strong>Participant Management</strong><span>Live Zoom roster with Host, Presenter, Panelist, and Guest roles, manual scene-slot assignment, and per-participant audio and video controls.</span></a>
-  <a href="https://github.com/iamfatness/CoreVideoPro#current-slice"><strong>Streaming &amp; Recording</strong><span>Program and ISO recording, 1080p/4K output profiles, and multi-destination RTMP/NDI/SRT streaming with preflight checks.</span></a>
-  <a href="https://github.com/iamfatness/CoreVideoPro#current-slice"><strong>AI Auto-Direct</strong><span>Magic Scene and Set &amp; Forget automatically recommend and take scene layouts from live Zoom activity, so a show can run itself.</span></a>
+  <div><strong>Multi-Scene Production</strong><span>Intro, interview, speaker-plus-slides, panel, and closing scene templates with Cut/Fade/Slide transitions and Take.</span></div>
+  <div><strong>Participant Management</strong><span>Live Zoom roster with Host, Presenter, Panelist, and Guest roles, manual scene-slot assignment, and per-participant audio and video controls.</span></div>
+  <div><strong>Streaming &amp; Recording</strong><span>Program and ISO recording, 1080p/4K output profiles, and multi-destination RTMP/NDI/SRT streaming with preflight checks.</span></div>
+  <div><strong>AI Auto-Direct</strong><span>Magic Scene and Set &amp; Forget automatically recommend and take scene layouts from live Zoom activity, so a show can run itself.</span></div>
 </section>
 <section>
   <h2>How it fits with CoreVideo</h2>
@@ -347,11 +347,10 @@ function layout(page, content, options = {}) {
     ["Terms", "/terms/"],
     ["Privacy", "/privacy/"],
     ["Support", "/support/"],
-    ["GitHub", "https://github.com/iamfatness/CoreVideo"],
   ];
 
   const footerText = options.footerText ??
-    "CoreVideo is an independent open-source project and is not affiliated with Zoom Video Communications, Inc.";
+    "CoreVideo is an independent product and is not affiliated with Zoom Video Communications, Inc.";
 
   return `<!doctype html>
 <html lang="en">
@@ -419,7 +418,7 @@ writeText(
     {
       home: true,
       footerText:
-        "CoreVideo and CoreVideo Pro are independent open-source projects and are not affiliated with Zoom Video Communications, Inc.",
+        "CoreVideo and CoreVideo Pro are independent products and are not affiliated with Zoom Video Communications, Inc.",
     },
   ),
 );
@@ -550,22 +549,13 @@ body {
   min-height: 100%;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   background:
-    radial-gradient(circle at 28% 18%, rgba(34, 231, 232, 0.16), transparent 26rem),
-    radial-gradient(circle at 82% 72%, rgba(42, 168, 255, 0.12), transparent 30rem),
-    linear-gradient(145deg, var(--bg), var(--bg-2));
+    radial-gradient(1100px 620px at 50% -10%, rgba(42, 168, 255, 0.10), transparent 60%),
+    radial-gradient(900px 600px at 88% 0%, rgba(34, 231, 232, 0.07), transparent 55%),
+    linear-gradient(180deg, var(--bg-2), var(--bg) 42%);
+  background-attachment: fixed;
   color: var(--text);
   line-height: 1.6;
-}
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background:
-    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
-  background-size: 42px 42px;
-  mask-image: linear-gradient(to bottom, black, transparent 78%);
+  -webkit-font-smoothing: antialiased;
 }
 a { color: var(--cyan); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .site-header {
@@ -715,19 +705,23 @@ nav a:hover { color: var(--text); }
   display: inline-flex;
   align-items: center;
   min-height: 44px;
-  padding: 10px 18px;
+  padding: 10px 20px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text);
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.04);
+  font-weight: 600;
   text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease, filter 0.15s ease;
 }
+.button:hover { background: rgba(255,255,255,0.09); transform: translateY(-1px); }
 .button.primary {
   color: #06111a;
   border-color: transparent;
   background: linear-gradient(135deg, var(--cyan), var(--blue));
   font-weight: 750;
 }
+.button.primary:hover { filter: brightness(1.05); }
 .link-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -740,13 +734,20 @@ nav a:hover { color: var(--text); }
 .link-grid.products a {
   min-height: 180px;
 }
-.link-grid a {
+.link-grid a,
+.link-grid > div {
   min-height: 160px;
-  padding: 20px;
+  padding: 22px;
   border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(17, 23, 44, 0.86);
+  border-radius: 12px;
+  background: var(--panel-strong);
   text-decoration: none;
+  transition: border-color 0.18s ease, background 0.18s ease, transform 0.18s ease;
+}
+.link-grid a:hover {
+  border-color: rgba(125, 239, 255, 0.34);
+  background: #141a30;
+  transform: translateY(-2px);
 }
 .link-grid strong {
   display: block;
