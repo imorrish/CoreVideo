@@ -105,6 +105,8 @@ function resolveHref(href) {
   return href;
 }
 
+// Replaces Windows-1252 mojibake sequences that appear when UTF-8 wiki content
+// is accidentally re-encoded. Using \u escapes to prevent corruption in transit.
 function normalizeText(value) {
   return value
     .replaceAll("â€”", "-")
