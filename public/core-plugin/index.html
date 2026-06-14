@@ -10,11 +10,11 @@
 <body class="document-page">
   <header class="site-header">
     <a class="brand" href="/"><span class="brand-mark" aria-hidden="true"></span><span>CoreVideo</span></a>
-    <nav><a href="/">Home</a><a href="/pro/">CoreVideo Pro</a><a href="/documentation/">Documentation</a><a href="/core-plugin/">Core Plugin</a><a href="/oauth/">OAuth</a><a href="/terms/">Terms</a><a href="/privacy/">Privacy</a><a href="/support/">Support</a><a href="https://github.com/iamfatness/CoreVideo">GitHub</a></nav>
+    <nav><a href="/">Home</a><a href="/pro/">CoreVideo Pro</a><a href="/documentation/">Documentation</a><a href="/core-plugin/">Core Plugin</a><a href="/oauth/">OAuth</a><a href="/terms/">Terms</a><a href="/privacy/">Privacy</a><a href="/support/">Support</a></nav>
   </header>
   <main class="content">
     <h1>Core Plugin Functionality</h1>
-<p>This guide covers the main <strong>CoreVideo (OBS Plugin)</strong> workflows. It intentionally focuses on the OBS plugin, <code>ZoomObsEngine</code>, Zoom source assignment, control APIs, audio routing, and ISO recording. Looking for the standalone production app instead? See <a href="/pro/">CoreVideo Pro</a>.</p>
+<p>This guide covers the main CoreVideo OBS plugin workflows. It intentionally focuses on the OBS plugin, <code>ZoomObsEngine</code>, Zoom source assignment, control APIs, audio routing, and ISO recording.</p>
 <h2>Media Architecture</h2>
 <figure class="doc-image"><img src="images/core-plugin-pipeline.svg" alt="CoreVideo plugin media pipeline"></figure>
 <p>CoreVideo keeps all Zoom Meeting SDK access inside the lightweight <code>ZoomObsEngine</code> helper process. The OBS plugin starts the engine, joins the meeting, and sends subscription requests over JSON IPC. Video and audio payloads move through named shared memory so large frames are not copied through the IPC pipe.</p>
@@ -142,7 +142,7 @@
 <table><thead><tr><th>Symptom</th><th>Check</th></tr></thead><tbody><tr><td>Color bars only</td><td>Confirm the meeting is joined, raw media is started, and the source has a participant/role assignment.</td></tr><tr><td>No isolated audio</td><td>Confirm the source is assigned to a real participant and <code>isolate_audio</code> is true.</td></tr><tr><td>ISO recording does not start</td><td>Confirm <code>ffmpeg</code> is on PATH or provide <code>ffmpeg_path</code>.</td></tr><tr><td>External meeting rejected</td><td>Confirm the Meeting SDK app/client ID is approved or published for external meeting joins.</td></tr><tr><td>Plugin cannot launch engine</td><td>Confirm <code>ZoomObsEngine.exe</code> and Zoom SDK runtime DLLs are installed under <code>obs-plugins/64bit/zoom-runtime</code>.</td></tr></tbody></table>
   </main>
   <footer class="site-footer">
-    <span>CoreVideo is an independent open-source project and is not affiliated with Zoom Video Communications, Inc.</span>
+    <span>CoreVideo is an independent product and is not affiliated with Zoom Video Communications, Inc.</span>
   </footer>
 </body>
 </html>
