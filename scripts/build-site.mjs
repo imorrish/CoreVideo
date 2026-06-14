@@ -131,7 +131,7 @@ function homeContent() {
     <div class="hero-actions">
       <a class="button primary" href="/pro/">Explore CoreVideo Pro</a>
       <a class="button" href="/core-plugin/">Free OBS plugin</a>
-      <a class="button" href="/documentation/">Documentation</a>
+      <a class="button" href="/documentation/">Plugin Docs</a>
     </div>
   </div>
 </section>
@@ -140,7 +140,7 @@ function homeContent() {
   <a href="/core-plugin/"><span class="tier">Free &middot; OBS plugin</span><strong>CoreVideo (OBS Plugin)</strong><span>The free building block: clean Zoom participant video, audio, screen share, and ISO recording as native sources inside OBS Studio.</span></a>
 </section>
 <section class="link-grid" aria-label="CoreVideo resources">
-  <a href="/documentation/"><strong>Documentation</strong><span>Architecture, setup, control APIs, and operating notes.</span></a>
+  <a href="/documentation/"><strong>Plugin Docs</strong><span>Architecture, setup, control APIs, and operating notes.</span></a>
   <a href="/core-plugin/"><strong>Core Plugin Guide</strong><span>OBS workflows, participant routing, isolated audio, and ISO recording.</span></a>
   <a href="/pro/"><strong>CoreVideo Pro</strong><span>Standalone production app for live and recorded conversations.</span></a>
   <a href="/pro/documentation/"><strong>CoreVideo Pro Architecture</strong><span>Native media core, typed IPC, capture, AI direction, and outputs &mdash; with diagrams.</span></a>
@@ -454,7 +454,7 @@ function layout(page, content, options = {}) {
     ["Home", "/"],
     ["CoreVideo Pro", "/pro/"],
     ["Pro Docs", "/pro/documentation/"],
-    ["Documentation", "/documentation/"],
+    ["Plugin Docs", "/documentation/"],
     ["Core Plugin", "/core-plugin/"],
     ["OAuth", "/oauth/"],
     ["Terms", "/terms/"],
